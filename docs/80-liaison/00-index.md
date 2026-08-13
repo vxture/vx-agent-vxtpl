@@ -14,3 +14,4 @@ guardrail still passes).
 | `50-2608130250-vxtpl-edge-502-after-port-cutover.md` | 2608130250 | platform line | edge `vxtpl.vxture.com` returns 502 after template-side 3210 cutover verified healthy | open |
 | `60-2608130300-vxtpl-atlas-chat-request.md` | 2608130300 | platform line | scope decision + S2S credential request so vxtpl chat can consume Atlas (mock resolver ships now regardless) | open |
 | `70-2608131500-vxtpl-runos-capability-check-request.md` | 2608131500 | platform line | scope decision + S2S credential request so vxtpl can verify Runos discovery (agent-facing, read-only) | open |
+| `80-2608131530-vxtpl-repo-renamed.md` | 2608131530 | platform line | repo renamed vxture-template -> vxture-vxtpl (informational) | closed |
