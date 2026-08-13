@@ -123,6 +123,15 @@ export default function StatusPage() {
           </section>
 
           <section style={card}>
+            <h3 style={{ margin: "0 0 8px" }}>
+              {status.chat.resolver === "atlas" ? badge("ok") : badge("warn")} Chat - Atlas
+            </h3>
+            <Field k="resolver" v={status.chat.resolver} />
+            <Field k="atlas API" v={`${boolBadge(status.chat.atlasApiConfigured)} configured`} />
+            <Field k="S2S token" v={`${boolBadge(status.chat.atlasTokenConfigured)} configured`} />
+          </section>
+
+          <section style={card}>
             <h3 style={{ margin: "0 0 8px" }}>Data plane</h3>
             <Field
               k="database"
@@ -149,6 +158,8 @@ export default function StatusPage() {
 
       <p>
         <a href="/entitlement-matrix">-&gt; tier x status gating matrix</a>
+        {" | "}
+        <a href="/chat">-&gt; chat capability verification</a>
       </p>
     </main>
   );

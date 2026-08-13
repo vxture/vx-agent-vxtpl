@@ -67,6 +67,10 @@ template deploys as its demo code without in-place instantiation.
       secrets). Generate the skeleton with
       `node scripts/init/instantiate.mjs vxtpl --dry-run`.
 - [ ] SSH `vx-worker-02` once: create `/srv/md0/vxtpl`, confirm GHCR/ACR login.
+- [ ] `ATLAS_API_URL` + `ATLAS_S2S_TOKEN` (optional - chat capability
+      verification ships with an offline Mock resolver either way; see
+      `docs/80-liaison/60-2608130300-vxtpl-atlas-chat-request.md` for the
+      pending platform-line scope decision + credential request).
 - [ ] Release: `git tag vX.Y.Z && git push origin vX.Y.Z` -> approve the pending
       `production` deployment. DB structure via `db-init.yml` (`confirm=yes` +
       `expected_sha`), never the deploy chain.

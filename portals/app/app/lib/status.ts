@@ -54,6 +54,11 @@ export interface IntegrationStatus {
     webhookRotationConfigured: boolean;
     internalJobTokenConfigured: boolean;
   };
+  chat: {
+    resolver: "atlas" | "mock";
+    atlasApiConfigured: boolean;
+    atlasTokenConfigured: boolean;
+  };
   data: { database: DbInfo; redis: RedisInfo };
   showInfra: boolean;
 }
@@ -112,6 +117,11 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
       webhookSecretConfigured: Boolean(env.PROVISION_WEBHOOK_SECRET),
       webhookRotationConfigured: Boolean(env.PROVISION_WEBHOOK_SECRET_NEXT),
       internalJobTokenConfigured: Boolean(env.INTERNAL_JOB_TOKEN),
+    },
+    chat: {
+      resolver: env.ATLAS_API_URL && env.ATLAS_S2S_TOKEN ? "atlas" : "mock",
+      atlasApiConfigured: Boolean(env.ATLAS_API_URL),
+      atlasTokenConfigured: Boolean(env.ATLAS_S2S_TOKEN),
     },
     data: {
       database: {
