@@ -110,7 +110,7 @@ export default function ChatPage() {
 
   return (
     <main className="page">
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
           <h1 style={{ fontSize: "1.6rem" }}>Chat</h1>
           <span className={tierBadgeClass(ctx?.tier ?? null)}>
@@ -168,7 +168,7 @@ export default function ChatPage() {
                   border: m.role === "assistant" ? "1px solid var(--border)" : "none",
                   borderRadius: 12,
                   padding: "0.55rem 0.85rem",
-                  maxWidth: "78%",
+                  maxWidth: "min(78%, 640px)",
                   whiteSpace: "pre-wrap",
                   fontSize: "0.92rem",
                   lineHeight: 1.5,
