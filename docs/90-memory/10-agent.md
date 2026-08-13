@@ -4,7 +4,7 @@ Start here if you are an AI agent working in this repo.
 
 ## What this repo is
 
-A Vxture product repository (or the `vxture-template` itself). It carries the org
+A Vxture product repository (or the `vxture-vxtpl` template itself). It carries the org
 governance base, the platform integration contract surface, and the engineering
 shell - but no product domain logic in the template. A concrete product repo is
 produced by `scripts/init/instantiate.mjs <product_code>`, which replaces the

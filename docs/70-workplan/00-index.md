@@ -1,6 +1,6 @@
 # 70-workplan - Build plan and batch tracker
 
-This repo is built incrementally from `vxture-template`. Each batch is one PR with
+This repo is built incrementally from `vxture-vxtpl`. Each batch is one PR with
 machine-checked acceptance (self-rectify runbook batches A-G). Authority for the
 plan: platform repo `docs/30-design/product_240_repo-template.md` section 7.
 

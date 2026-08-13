@@ -1,4 +1,4 @@
-# vxture-template
+# vxture-vxtpl
 
 A governance-first template for building a Vxture product repository. It ships
 the org governance base (trunk-based branching, branch-protection ruleset,

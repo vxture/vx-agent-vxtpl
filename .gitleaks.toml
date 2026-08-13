@@ -5,7 +5,7 @@
 # *.pem, *.key). New finding -> add a rule or a narrow allowlist entry, never
 # widen the gate. Keep the allowlist minimal; do not copy another repo's
 # repo-specific fixtures.
-title = "vxture-template secret-scan"
+title = "vxture-vxtpl secret-scan"
 
 [extend]
 # Inherit all built-in rules (AWS/GCP/Anthropic/OpenAI/private-key/
