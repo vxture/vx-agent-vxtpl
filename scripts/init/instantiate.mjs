@@ -172,6 +172,10 @@ NEXT_PUBLIC_CONSOLE_URL=https://console.vxture.com
 PROVISION_WEBHOOK_SECRET=               # procure: ${upper}_PROVISION_WEBHOOK_SECRET (platform key)
 PROVISION_WEBHOOK_SECRET_NEXT=          # optional, rotation overlap
 INTERNAL_JOB_TOKEN=                     # procure: gates POST /api/usage/flush
+
+# --- Chat / Atlas model gateway (optional; unset -> offline Mock resolver) ---
+ATLAS_API_URL=                          # internal-network base; unset -> Mock resolver
+ATLAS_S2S_TOKEN=                        # procure: Atlas S2S token (aud=atlas)
 `;
 
 const ENV_PATH = ".env.example";
