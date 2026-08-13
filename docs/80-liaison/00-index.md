@@ -15,3 +15,4 @@ guardrail still passes).
 | `60-2608130300-vxtpl-atlas-chat-request.md` | 2608130300 | platform line | scope decision + S2S credential request so vxtpl chat can consume Atlas (mock resolver ships now regardless) | open |
 | `70-2608131500-vxtpl-runos-capability-check-request.md` | 2608131500 | platform line | scope decision + S2S credential request so vxtpl can verify Runos discovery (agent-facing, read-only) | open |
 | `80-2608131530-vxtpl-repo-renamed.md` | 2608131530 | platform line | repo renamed vxture-template -> vxture-vxtpl (informational) | closed |
+| `90-2608131600-vxtpl-c3-webhook-secret-received.md` | 2608131600 | platform line | C3 provisioning webhook secret set on worker02, verified live | closed |
