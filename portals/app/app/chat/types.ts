@@ -11,9 +11,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatOptions {
+  modelCode?: string;
+  skillCode?: string;
+}
+
 export interface ChatReply {
   message: ChatMessage;
   mode: "atlas" | "mock";
+  modelCode: string;
+  skillCode: string | null;
 }
 
 export const MAX_HISTORY_MESSAGES = 20;
