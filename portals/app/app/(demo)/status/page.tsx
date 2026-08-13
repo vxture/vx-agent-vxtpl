@@ -19,30 +19,24 @@ const CHANNELS: Omit<Probe, "status">[] = [
   { name: "C2 entitlement", endpoint: "/api/entitlement" },
 ];
 
-const card: React.CSSProperties = {
-  border: "1px solid #d0d0d0",
-  borderRadius: 8,
-  padding: "12px 16px",
-  margin: "0 0 12px",
-  maxWidth: 760,
-};
-const row: React.CSSProperties = { display: "flex", justifyContent: "space-between", padding: "2px 0", gap: 16 };
-const key: React.CSSProperties = { color: "#555" };
-const mono: React.CSSProperties = { fontFamily: "ui-monospace, monospace", wordBreak: "break-all", textAlign: "right" };
-
-function badge(state: "ok" | "warn" | "bad" | "na"): string {
-  return { ok: "\u{1F7E2}", warn: "\u{1F7E1}", bad: "\u{1F534}", na: "➖" }[state];
+function badgeClass(state: "ok" | "warn" | "bad" | "na"): string {
+  return { ok: "badge badge-ok", warn: "badge badge-warn", bad: "badge badge-bad", na: "badge badge-neutral" }[state];
 }
-function boolBadge(b: boolean | null | undefined): string {
-  if (b === null || b === undefined) return badge("na");
-  return b ? badge("ok") : badge("bad");
+function boolBadge(b: boolean | null | undefined) {
+  const state = b === null || b === undefined ? "na" : b ? "ok" : "bad";
+  return (
+    <span className={badgeClass(state)}>
+      <span className="dot" />
+      {b === null || b === undefined ? "n/a" : b ? "configured" : "not configured"}
+    </span>
+  );
 }
 
 function Field({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div style={row}>
-      <span style={key}>{k}</span>
-      <span style={mono}>{v}</span>
+    <div className="field-row">
+      <span className="k">{k}</span>
+      <span className="v">{v}</span>
     </div>
   );
 }
@@ -78,91 +72,110 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", lineHeight: 1.5 }}>
-      <h1>Integration status</h1>
-      {gate && <p>{gate}</p>}
+    <main className="page">
+      <div className="eyebrow">Verification surface</div>
+      <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Integration status</h1>
+      <p className="lede">Non-secret config presence + live channel probes across every platform-integration surface.</p>
+      {gate && <p style={{ color: "var(--slate)", marginTop: "1rem" }}>{gate}</p>}
 
       {status && (
-        <>
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>Identity</h3>
+        <div style={{ marginTop: "1.6rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "0.9rem" }}>
+          <div className="card">
+            <h3>Identity</h3>
             <Field k="product" v={status.identity.productCode} />
             <Field k="build" v={status.identity.gitSha} />
             <Field k="env" v={status.identity.appEnv} />
-          </section>
+          </div>
 
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>
-              {status.c1.enabled ? badge("ok") : badge("warn")} C1 - OIDC RP
+          <div className="card">
+            <h3>
+              <span className={badgeClass(status.c1.enabled ? "ok" : "warn")}>
+                <span className="dot" />
+                {status.c1.enabled ? "on" : "off"}
+              </span>
+              C1 - OIDC RP
             </h3>
-            <Field k="RP enabled" v={status.c1.enabled ? "on" : "off"} />
             <Field k="issuer" v={status.c1.issuer ?? "-"} />
             <Field k="client_id" v={status.c1.clientId ?? "-"} />
             <Field k="redirect_uri" v={status.c1.redirectUri ?? "-"} />
             <Field k="scopes" v={status.c1.scopes ?? "-"} />
             <Field k="cookie" v={status.c1.cookieName ?? "-"} />
-            <Field k="client secret" v={`${boolBadge(status.c1.clientSecretConfigured)} configured`} />
-          </section>
+            <Field k="client secret" v={boolBadge(status.c1.clientSecretConfigured)} />
+          </div>
 
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>
-              {status.c2.resolver === "platform" ? badge("ok") : badge("warn")} C2 - entitlement
+          <div className="card">
+            <h3>
+              <span className={badgeClass(status.c2.resolver === "platform" ? "ok" : "warn")}>
+                <span className="dot" />
+                {status.c2.resolver}
+              </span>
+              C2 - entitlement
             </h3>
-            <Field k="resolver" v={status.c2.resolver} />
-            <Field k="platform API" v={`${boolBadge(status.c2.platformApiConfigured)} configured`} />
-            <Field k="internal-auth token" v={`${boolBadge(status.c2.authTokenConfigured)} configured`} />
+            <Field k="platform API" v={boolBadge(status.c2.platformApiConfigured)} />
+            <Field k="internal-auth token" v={boolBadge(status.c2.authTokenConfigured)} />
             <Field k="console URL" v={status.c2.consoleUrl ?? "-"} />
             <Field k="cache TTL (ms)" v={status.c2.cacheTtlMs} />
-          </section>
+          </div>
 
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>C3 - provisioning + usage</h3>
-            <Field k="webhook secret" v={`${boolBadge(status.c3.webhookSecretConfigured)} configured`} />
-            <Field k="webhook rotation (_NEXT)" v={`${boolBadge(status.c3.webhookRotationConfigured)} configured`} />
-            <Field k="internal job token" v={`${boolBadge(status.c3.internalJobTokenConfigured)} configured`} />
-          </section>
+          <div className="card">
+            <h3>C3 - provisioning + usage</h3>
+            <Field k="webhook secret" v={boolBadge(status.c3.webhookSecretConfigured)} />
+            <Field k="webhook rotation (_NEXT)" v={boolBadge(status.c3.webhookRotationConfigured)} />
+            <Field k="internal job token" v={boolBadge(status.c3.internalJobTokenConfigured)} />
+          </div>
 
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>
-              {status.chat.resolver === "atlas" ? badge("ok") : badge("warn")} Chat - Atlas
+          <div className="card">
+            <h3>
+              <span className={badgeClass(status.chat.resolver === "atlas" ? "ok" : "warn")}>
+                <span className="dot" />
+                {status.chat.resolver}
+              </span>
+              Chat - Atlas
             </h3>
-            <Field k="resolver" v={status.chat.resolver} />
-            <Field k="atlas API" v={`${boolBadge(status.chat.atlasApiConfigured)} configured`} />
-            <Field k="S2S token" v={`${boolBadge(status.chat.atlasTokenConfigured)} configured`} />
-          </section>
+            <Field k="atlas API" v={boolBadge(status.chat.atlasApiConfigured)} />
+            <Field k="S2S token" v={boolBadge(status.chat.atlasTokenConfigured)} />
+          </div>
 
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>Data plane</h3>
+          <div className="card">
+            <h3>Data plane</h3>
             <Field
               k="database"
-              v={`${boolBadge(status.data.database.reachable)} ${status.data.database.configured ? "configured" : "not configured"}${status.data.database.reachable === null ? " (not probed)" : status.data.database.reachable ? ", reachable" : ", unreachable"}`}
+              v={
+                <>
+                  {boolBadge(status.data.database.reachable)}{" "}
+                  {status.data.database.configured ? "configured" : "not configured"}
+                </>
+              }
             />
             {status.showInfra && status.data.database.host && (
-              <Field k="  db" v={`${status.data.database.role}@${status.data.database.host}/${status.data.database.db}`} />
+              <Field k="db" v={`${status.data.database.role}@${status.data.database.host}/${status.data.database.db}`} />
             )}
             <Field
               k="redis"
-              v={`${boolBadge(status.data.redis.reachable)} ${status.data.redis.configured ? "configured" : "not configured"}${status.data.redis.reachable === null ? " (not probed)" : status.data.redis.reachable ? ", reachable" : ", unreachable"}`}
+              v={
+                <>
+                  {boolBadge(status.data.redis.reachable)}{" "}
+                  {status.data.redis.configured ? "configured" : "not configured"}
+                </>
+              }
             />
-            {status.showInfra && status.data.redis.host && <Field k="  host" v={status.data.redis.host} />}
-          </section>
-        </>
+            {status.showInfra && status.data.redis.host && <Field k="host" v={status.data.redis.host} />}
+          </div>
+        </div>
       )}
 
-      <section style={card}>
-        <h3 style={{ margin: "0 0 8px" }}>Live channel probes</h3>
+      <div className="card" style={{ marginTop: "1.6rem" }}>
+        <h3>Live channel probes</h3>
         {probes.map((p) => (
           <Field key={p.endpoint} k={`${p.name} (${p.endpoint})`} v={p.status} />
         ))}
-      </section>
+      </div>
 
-      <p>
+      <footer className="page-links">
         <a href="/entitlement-matrix">-&gt; tier x status gating matrix</a>
-        {" | "}
         <a href="/chat">-&gt; chat capability verification</a>
-        {" | "}
         <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
-      </p>
+      </footer>
     </main>
   );
 }
