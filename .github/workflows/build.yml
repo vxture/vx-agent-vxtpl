@@ -183,6 +183,13 @@ jobs:
           context: ${{ env.IMAGE_CONTEXT }}
           file: ${{ env.IMAGE_DOCKERFILE }}
           push: true
+          # Buildx defaults to emitting a provenance attestation manifest
+          # (media type application/vnd.oci.empty.v1+json for its placeholder
+          # layer). Aliyun ACR rejects that media type with "unknown manifest
+          # class", failing the push - GHCR tolerates it fine. Disabling both
+          # attestation types keeps the image itself unchanged.
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # @vxture/* needs a PAT (GITHUB_TOKEN lacks read_package for the
