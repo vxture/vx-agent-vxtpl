@@ -175,7 +175,11 @@ INTERNAL_JOB_TOKEN=                     # procure: gates POST /api/usage/flush
 
 # --- Chat / Atlas model gateway (optional; unset -> offline Mock resolver) ---
 ATLAS_API_URL=                          # internal-network base; unset -> Mock resolver
-ATLAS_S2S_TOKEN=                        # procure: Atlas S2S token (aud=atlas)
+ATLAS_S2S_TOKEN=                        # procure: already-issued bearer JWT (aud=atlas, scope=tool:atlas)
+
+# --- Runos capability plane (optional; unset -> /platform-check reports not configured) ---
+RUNOS_API_URL=                          # internal-network base
+RUNOS_S2S_TOKEN=                        # procure: already-issued bearer JWT (aud=runos, scope=tool:runos)
 `;
 
 const ENV_PATH = ".env.example";
