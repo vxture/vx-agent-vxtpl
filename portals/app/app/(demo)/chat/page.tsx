@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../chat/types";
 import type { GatedOption } from "../../chat/catalog";
 
@@ -17,47 +17,39 @@ interface ChatContext {
   skills: GatedOption[];
 }
 
-const main: React.CSSProperties = { fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 };
-const log: React.CSSProperties = {
-  border: "1px solid #d0d0d0",
-  borderRadius: 8,
-  padding: "12px 16px",
-  minHeight: 200,
-  marginBottom: 12,
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
-const bubble = (role: ChatMessage["role"]): React.CSSProperties => ({
-  alignSelf: role === "user" ? "flex-end" : "flex-start",
-  background: role === "user" ? "#e6f0ff" : "#f0f0f0",
-  borderRadius: 8,
-  padding: "6px 10px",
-  maxWidth: "85%",
-  whiteSpace: "pre-wrap",
-});
-const selectRow: React.CSSProperties = { display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" };
-const selectLabel: React.CSSProperties = { display: "flex", flexDirection: "column", fontSize: "0.85rem", gap: 4 };
-
 function tierLabel(tier: string | null): string {
   return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "No subscription";
+}
+
+function tierBadgeClass(tier: string | null): string {
+  if (!tier) return "badge badge-neutral";
+  if (tier === "free" || tier === "starter") return "badge badge-warn";
+  return "badge badge-accent";
 }
 
 function OptionSelect({
   options,
   value,
   onChange,
+  disabled,
 }: {
   options: GatedOption[];
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ padding: "4px 6px" }}>
+    <select
+      className="select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      style={{ minWidth: 170 }}
+    >
       {options.map((o) => (
         <option key={o.code} value={o.code} disabled={!o.allowed}>
           {o.label}
-          {!o.allowed ? ` (requires ${o.requiredTier ?? "?"})` : ""}
+          {!o.allowed ? ` \u{1F512} requires ${o.requiredTier ?? "?"}` : ""}
         </option>
       ))}
     </select>
@@ -73,6 +65,7 @@ export default function ChatPage() {
   const [mode, setMode] = useState<"atlas" | "mock" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/chat", { cache: "no-store" })
@@ -84,6 +77,10 @@ export default function ChatPage() {
       })
       .catch(() => setError("failed to load model/skill catalog"));
   }, []);
+
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
 
   async function send() {
     const text = input.trim();
@@ -111,50 +108,111 @@ export default function ChatPage() {
   }
 
   return (
-    <main style={main}>
-      <h1>
-        Chat capability verification - <span style={{ color: "#0b6e76" }}>{tierLabel(ctx?.tier ?? null)}</span>
-      </h1>
-      <p>
-        Mode: <code>{mode ?? "unknown until first reply"}</code>
-        {mode === "mock" && " (Atlas not connected - see docs/80-liaison)"}
-      </p>
+    <main className="page narrow">
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
+        <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
+        <span className={tierBadgeClass(ctx?.tier ?? null)}>
+          <span className="dot" />
+          {ctx ? tierLabel(ctx.tier) : "..."}
+        </span>
+        {mode && (
+          <span className={mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}>
+            <span className="dot" />
+            {mode === "atlas" ? "Atlas connected" : "Mock mode"}
+          </span>
+        )}
+      </div>
+      <p className="lede">Capability verification for the platform's model gateway - selection below is entitlement-gated.</p>
 
-      {ctx && (
-        <div style={selectRow}>
-          <label style={selectLabel}>
-            Model
+      <div
+        className="card"
+        style={{ marginTop: "1.4rem", display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end" }}
+      >
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem", color: "var(--slate)" }}>
+          Model
+          {ctx ? (
             <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
-          </label>
-          <label style={selectLabel}>
-            Skill
+          ) : (
+            <span className="select" style={{ color: "var(--slate-faint)" }}>
+              loading...
+            </span>
+          )}
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem", color: "var(--slate)" }}>
+          Skill
+          {ctx ? (
             <OptionSelect options={ctx.skills} value={skillCode} onChange={setSkillCode} />
-          </label>
+          ) : (
+            <span className="select" style={{ color: "var(--slate-faint)" }}>
+              loading...
+            </span>
+          )}
+        </label>
+      </div>
+
+      <div
+        className="card"
+        style={{
+          marginTop: "0.9rem",
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: 440,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          ref={logRef}
+          style={{ flex: 1, overflowY: "auto", padding: "1.1rem 1.3rem", display: "flex", flexDirection: "column", gap: 10 }}
+        >
+          {messages.length === 0 && (
+            <span style={{ color: "var(--slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
+          )}
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              style={{
+                alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                background: m.role === "user" ? "var(--accent-soft)" : "var(--paper)",
+                color: m.role === "user" ? "var(--accent-ink)" : "var(--ink-soft)",
+                border: m.role === "assistant" ? "1px solid var(--border)" : "none",
+                borderRadius: 12,
+                padding: "0.55rem 0.85rem",
+                maxWidth: "82%",
+                whiteSpace: "pre-wrap",
+                fontSize: "0.92rem",
+                lineHeight: 1.5,
+              }}
+            >
+              {m.content}
+            </div>
+          ))}
+          {busy && <span style={{ color: "var(--slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
         </div>
+        <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            style={{ flex: 1 }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="Type a message"
+            disabled={busy}
+          />
+          <button className="btn btn-primary" onClick={send} disabled={busy || !input.trim()}>
+            {busy ? "..." : "Send"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>
       )}
 
-      <div style={log}>
-        {messages.length === 0 && <span style={{ color: "#888" }}>Say something to verify the round trip.</span>}
-        {messages.map((m, i) => (
-          <div key={i} style={bubble(m.role)}>
-            {m.content}
-          </div>
-        ))}
-      </div>
-      {error && <p style={{ color: "#b00" }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          style={{ flex: 1, padding: "8px 10px" }}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Type a message"
-          disabled={busy}
-        />
-        <button onClick={send} disabled={busy || !input.trim()}>
-          {busy ? "..." : "Send"}
-        </button>
-      </div>
+      <footer className="page-links">
+        <a href="/status">-&gt; integration status</a>
+        <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
+      </footer>
     </main>
   );
 }

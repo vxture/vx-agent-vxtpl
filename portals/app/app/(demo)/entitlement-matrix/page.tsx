@@ -26,7 +26,14 @@ function rows(): Row[] {
   return out;
 }
 
-const cellStyle: React.CSSProperties = { border: "1px solid #ccc", padding: "4px 8px", textAlign: "left" };
+function yesNo(b: boolean) {
+  return (
+    <span className={b ? "badge badge-ok" : "badge badge-neutral"}>
+      <span className="dot" />
+      {b ? "yes" : "no"}
+    </span>
+  );
+}
 
 export default function EntitlementMatrixPage() {
   const data = rows().map((r) => {
@@ -34,36 +41,45 @@ export default function EntitlementMatrixPage() {
     return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
   });
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem" }}>
-      <h1>Entitlement gating matrix</h1>
-      <p>
-        Offline demonstration of the C2 gating and CTA rules (product_220 section
-        3). UI gate = <code>tier != null</code>; data gate ={" "}
-        <code>tier != null || bundled</code>.
+    <main className="page">
+      <div className="eyebrow">Verification surface</div>
+      <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Entitlement gating matrix</h1>
+      <p className="lede">
+        Offline demonstration of the C2 gating and CTA rules (product_220 section 3). UI gate ={" "}
+        <code>tier != null</code>; data gate = <code>tier != null || bundled</code>.
       </p>
-      <table style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={cellStyle}>tier / status (bundled)</th>
-            <th style={cellStyle}>UI access</th>
-            <th style={cellStyle}>data access</th>
-            <th style={cellStyle}>CTA</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((r) => (
-            <tr key={r.label}>
-              <td style={cellStyle}>
-                {r.label}
-                {r.bundled ? " [bundled]" : ""}
-              </td>
-              <td style={cellStyle}>{r.productAccess ? "yes" : "no"}</td>
-              <td style={cellStyle}>{r.dataAccess ? "yes" : "no"}</td>
-              <td style={cellStyle}>{r.cta}</td>
+      <div className="table-wrap" style={{ marginTop: "1.4rem" }}>
+        <table className="ref">
+          <thead>
+            <tr>
+              <th>tier / status (bundled)</th>
+              <th>UI access</th>
+              <th>data access</th>
+              <th>CTA</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((r) => (
+              <tr key={r.label}>
+                <td>
+                  {r.label}
+                  {r.bundled ? " [bundled]" : ""}
+                </td>
+                <td>{yesNo(r.productAccess)}</td>
+                <td>{yesNo(r.dataAccess)}</td>
+                <td>
+                  <span className="mono">{r.cta}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <footer className="page-links">
+        <a href="/status">-&gt; integration status</a>
+        <a href="/chat">-&gt; chat capability verification</a>
+      </footer>
     </main>
   );
 }

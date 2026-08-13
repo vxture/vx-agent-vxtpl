@@ -17,20 +17,13 @@ interface CheckResponse {
   runos: ProbeResult;
 }
 
-const card: React.CSSProperties = {
-  border: "1px solid #d0d0d0",
-  borderRadius: 8,
-  padding: "12px 16px",
-  margin: "0 0 12px",
-  maxWidth: 720,
-};
-
-function Badge({ p }: { p: ProbeResult }) {
+function badgeFor(p: ProbeResult) {
+  const cls = !p.configured ? "badge badge-neutral" : p.ok ? "badge badge-ok" : "badge badge-bad";
   const label = !p.configured ? "not configured" : p.ok ? "ok" : "failed";
-  const emoji = !p.configured ? "➖" : p.ok ? "\u{1F7E2}" : "\u{1F534}";
   return (
-    <span>
-      {emoji} {label}
+    <span className={cls}>
+      <span className="dot" />
+      {label}
     </span>
   );
 }
@@ -46,34 +39,41 @@ export default function PlatformCheckPage() {
   }, []);
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", lineHeight: 1.5 }}>
-      <h1>Platform capability verification</h1>
-      <p>
+    <main className="page narrow">
+      <div className="eyebrow">Verification surface</div>
+      <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Platform capability check</h1>
+      <p className="lede">
         Read-only, agent-usage-perspective checks against Atlas (model gateway) and Runos (commercial capability
         plane). Neither probe spends model tokens or capability quota.
       </p>
-      {error && <p style={{ color: "#b00" }}>{error}</p>}
+      {error && <p style={{ color: "var(--danger)", marginTop: "1rem" }}>{error}</p>}
       {data && (
-        <>
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>
-              Atlas - <Badge p={data.atlas} />
+        <div style={{ marginTop: "1.6rem" }}>
+          <div className="card">
+            <h3>
+              {badgeFor(data.atlas)}
+              Atlas
             </h3>
-            <p style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.85rem" }}>{data.atlas.detail}</p>
-          </section>
-          <section style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>
-              Runos - <Badge p={data.runos} />
+            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--ink-soft)" }}>
+              {data.atlas.detail}
+            </p>
+          </div>
+          <div className="card">
+            <h3>
+              {badgeFor(data.runos)}
+              Runos
             </h3>
-            <p style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.85rem" }}>{data.runos.detail}</p>
-          </section>
-        </>
+            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--ink-soft)" }}>
+              {data.runos.detail}
+            </p>
+          </div>
+        </div>
       )}
-      <p>
+
+      <footer className="page-links">
         <a href="/chat">-&gt; chat capability verification</a>
-        {" | "}
         <a href="/status">-&gt; integration status</a>
-      </p>
+      </footer>
     </main>
   );
 }
