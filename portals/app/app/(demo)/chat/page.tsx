@@ -44,7 +44,7 @@ function OptionSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      style={{ minWidth: 170 }}
+      style={{ width: "100%" }}
     >
       {options.map((o) => (
         <option key={o.code} value={o.code} disabled={!o.allowed}>
@@ -108,7 +108,7 @@ export default function ChatPage() {
   }
 
   return (
-    <main className="page narrow">
+    <main className="page">
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
         <span className={tierBadgeClass(ctx?.tier ?? null)}>
@@ -122,92 +122,88 @@ export default function ChatPage() {
           </span>
         )}
       </div>
-      <p className="lede">Capability verification for the platform's model gateway - selection below is entitlement-gated.</p>
+      <p className="lede">Capability verification for the platform's model gateway - selection is entitlement-gated.</p>
 
-      <div
-        className="card"
-        style={{ marginTop: "1.4rem", display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end" }}
-      >
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem", color: "var(--slate)" }}>
-          Model
-          {ctx ? (
-            <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
-          ) : (
-            <span className="select" style={{ color: "var(--slate-faint)" }}>
-              loading...
-            </span>
-          )}
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem", color: "var(--slate)" }}>
-          Skill
-          {ctx ? (
-            <OptionSelect options={ctx.skills} value={skillCode} onChange={setSkillCode} />
-          ) : (
-            <span className="select" style={{ color: "var(--slate-faint)" }}>
-              loading...
-            </span>
-          )}
-        </label>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          marginTop: "0.9rem",
-          padding: 0,
-          display: "flex",
-          flexDirection: "column",
-          height: 440,
-          overflow: "hidden",
-        }}
-      >
+      <div className="split" style={{ marginTop: "1.4rem" }}>
         <div
-          ref={logRef}
-          style={{ flex: 1, overflowY: "auto", padding: "1.1rem 1.3rem", display: "flex", flexDirection: "column", gap: 10 }}
+          className="card"
+          style={{
+            padding: 0,
+            display: "flex",
+            flexDirection: "column",
+            height: 560,
+            overflow: "hidden",
+          }}
         >
-          {messages.length === 0 && (
-            <span style={{ color: "var(--slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
-          )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              style={{
-                alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                background: m.role === "user" ? "var(--accent-soft)" : "var(--paper)",
-                color: m.role === "user" ? "var(--accent-ink)" : "var(--ink-soft)",
-                border: m.role === "assistant" ? "1px solid var(--border)" : "none",
-                borderRadius: 12,
-                padding: "0.55rem 0.85rem",
-                maxWidth: "82%",
-                whiteSpace: "pre-wrap",
-                fontSize: "0.92rem",
-                lineHeight: 1.5,
-              }}
-            >
-              {m.content}
-            </div>
-          ))}
-          {busy && <span style={{ color: "var(--slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
+          <div
+            ref={logRef}
+            style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            {messages.length === 0 && (
+              <span style={{ color: "var(--slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
+            )}
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  background: m.role === "user" ? "var(--accent-soft)" : "var(--paper)",
+                  color: m.role === "user" ? "var(--accent-ink)" : "var(--ink-soft)",
+                  border: m.role === "assistant" ? "1px solid var(--border)" : "none",
+                  borderRadius: 12,
+                  padding: "0.55rem 0.85rem",
+                  maxWidth: "70%",
+                  whiteSpace: "pre-wrap",
+                  fontSize: "0.92rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                {m.content}
+              </div>
+            ))}
+            {busy && <span style={{ color: "var(--slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
+          </div>
+          <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              placeholder="Type a message"
+              disabled={busy}
+            />
+            <button className="btn btn-primary" onClick={send} disabled={busy || !input.trim()}>
+              {busy ? "..." : "Send"}
+            </button>
+          </div>
         </div>
-        <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
-          <input
-            className="input"
-            style={{ flex: 1 }}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Type a message"
-            disabled={busy}
-          />
-          <button className="btn btn-primary" onClick={send} disabled={busy || !input.trim()}>
-            {busy ? "..." : "Send"}
-          </button>
+
+        <div>
+          <div className="card">
+            <h3>Model</h3>
+            {ctx ? (
+              <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
+            ) : (
+              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
+                loading...
+              </span>
+            )}
+          </div>
+          <div className="card">
+            <h3>Skill</h3>
+            {ctx ? (
+              <OptionSelect options={ctx.skills} value={skillCode} onChange={setSkillCode} />
+            ) : (
+              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
+                loading...
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {error && (
-        <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>
-      )}
+      {error && <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
 
       <footer className="page-links">
         <a href="/status">-&gt; integration status</a>
