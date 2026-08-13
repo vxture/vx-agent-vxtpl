@@ -1,13 +1,29 @@
 import { NextResponse } from "next/server";
+import { getEntitlementResolver } from "../../entitlement/resolver";
+import { canUseFeature } from "../../entitlement/capability";
+import { findModel, findSkill, gatedModels, gatedSkills } from "../../chat/catalog";
 import { getChatResolver, validateHistory } from "../../chat/resolver";
 
-// POST /api/chat - capability-verification chat endpoint. Resolves through
-// the Atlas resolver when ATLAS_API_URL + ATLAS_S2S_TOKEN are configured,
-// otherwise the offline Mock (see chat/resolver.ts). No auth gate: this is a
-// demo surface, not a data-plane feature - do not add real user data here
-// before it goes through the same session/entitlement gates as the rest of
-// the app.
+// GET/POST /api/chat - capability-verification chat endpoint, now with
+// entitlement-gated model + skill selection (chat/catalog.ts,
+// entitlement/capability.ts). No real login (C1) is live yet, so - exactly
+// like the /entitlement-matrix and /platform-check demo surfaces - both
+// verbs resolve entitlement for a fixed demo workspace rather than a real
+// session. Once C1 is live, swap DEMO_WORKSPACE_ID for the authenticated
+// user's workspace (see api/entitlement/route.ts for that pattern).
 export const dynamic = "force-dynamic";
+
+const DEMO_WORKSPACE_ID = "ws_demo";
+
+export async function GET(): Promise<Response> {
+  const entitlement = await getEntitlementResolver().resolve(DEMO_WORKSPACE_ID);
+  return NextResponse.json({
+    tier: entitlement.tier,
+    productAccess: entitlement.tier != null,
+    models: gatedModels(entitlement),
+    skills: gatedSkills(entitlement),
+  });
+}
 
 export async function POST(req: Request): Promise<Response> {
   let body: unknown;
@@ -17,10 +33,10 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid json body" }, { status: 400 });
   }
 
-  const history = (body as Record<string, unknown> | null)?.history;
+  const raw = body as Record<string, unknown> | null;
   let messages;
   try {
-    messages = validateHistory(history);
+    messages = validateHistory(raw?.history);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "invalid history" }, { status: 400 });
   }
@@ -28,8 +44,34 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "history must end with a user message" }, { status: 400 });
   }
 
+  const modelCode = typeof raw?.modelCode === "string" ? raw.modelCode : undefined;
+  const skillCode = typeof raw?.skillCode === "string" ? raw.skillCode : undefined;
+
+  const entitlement = await getEntitlementResolver().resolve(DEMO_WORKSPACE_ID);
+
+  if (modelCode !== undefined) {
+    const model = findModel(modelCode);
+    if (!model) return NextResponse.json({ error: `unknown model '${modelCode}'` }, { status: 400 });
+    if (!canUseFeature(entitlement, model.featureKey)) {
+      return NextResponse.json(
+        { error: `model '${modelCode}' not entitled at tier '${entitlement.tier ?? "none"}'` },
+        { status: 403 },
+      );
+    }
+  }
+  if (skillCode !== undefined) {
+    const skill = findSkill(skillCode);
+    if (!skill) return NextResponse.json({ error: `unknown skill '${skillCode}'` }, { status: 400 });
+    if (!canUseFeature(entitlement, skill.featureKey)) {
+      return NextResponse.json(
+        { error: `skill '${skillCode}' not entitled at tier '${entitlement.tier ?? "none"}'` },
+        { status: 403 },
+      );
+    }
+  }
+
   try {
-    const reply = await getChatResolver().reply(messages);
+    const reply = await getChatResolver().reply(messages, { modelCode, skillCode });
     return NextResponse.json(reply);
   } catch (err) {
     return NextResponse.json(

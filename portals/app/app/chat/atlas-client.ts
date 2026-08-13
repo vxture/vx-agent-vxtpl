@@ -65,7 +65,7 @@ async function throwAtlasError(res: Response): Promise<never> {
 // endpointCode (routing section: modelCode > endpointCode > taskProfile
 // priority). We have no per-model grant and no per-tenant taskProfile, so we
 // route by endpointCode - the same choice /v1/embed · /v1/rerank would make.
-const DEFAULT_ENDPOINT_CODE = "chat/default";
+export const DEFAULT_ENDPOINT_CODE = "chat/default";
 
 interface ChatCompletionResponse {
   id: string;
@@ -76,12 +76,16 @@ interface ChatCompletionResponse {
   finishReason?: string;
 }
 
-export async function fetchChatCompletion(cfg: AtlasClientConfig, messages: ChatMessage[]): Promise<ChatMessage> {
+export async function fetchChatCompletion(
+  cfg: AtlasClientConfig,
+  messages: ChatMessage[],
+  endpointCode: string = DEFAULT_ENDPOINT_CODE,
+): Promise<ChatMessage> {
   const url = assertInternalTarget(`${cfg.baseUrl.replace(/\/$/, "")}/v1/chat`);
   const res = await fetch(url, {
     method: "POST",
     headers: { ...authHeaders(cfg), "content-type": "application/json" },
-    body: JSON.stringify({ endpointCode: DEFAULT_ENDPOINT_CODE, messages, tenantId: cfg.tenantId }),
+    body: JSON.stringify({ endpointCode, messages, tenantId: cfg.tenantId }),
     cache: "no-store",
   });
   if (!res.ok) await throwAtlasError(res);

@@ -44,3 +44,22 @@ test("MockChatResolver echoes the last user message and reports mode=mock", asyn
   assert.equal(reply.message.role, "assistant");
   assert.match(reply.message.content, /ping/);
 });
+
+test("MockChatResolver defaults to chat/default with no skill selected", async () => {
+  const r = new MockChatResolver();
+  const reply = await r.reply([{ role: "user", content: "hi" }]);
+  assert.equal(reply.modelCode, "chat/default");
+  assert.equal(reply.skillCode, null);
+});
+
+test("MockChatResolver echoes the selected model and skill", async () => {
+  const r = new MockChatResolver();
+  const reply = await r.reply([{ role: "user", content: "hi" }], {
+    modelCode: "chat/reasoning",
+    skillCode: "web-search",
+  });
+  assert.equal(reply.modelCode, "chat/reasoning");
+  assert.equal(reply.skillCode, "web-search");
+  assert.match(reply.message.content, /chat\/reasoning/);
+  assert.match(reply.message.content, /web-search/);
+});
