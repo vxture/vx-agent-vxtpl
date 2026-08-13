@@ -160,6 +160,8 @@ export default function StatusPage() {
         <a href="/entitlement-matrix">-&gt; tier x status gating matrix</a>
         {" | "}
         <a href="/chat">-&gt; chat capability verification</a>
+        {" | "}
+        <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
       </p>
     </main>
   );

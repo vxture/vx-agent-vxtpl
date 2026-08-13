@@ -26,11 +26,13 @@ Investigation found:
 - No Atlas S2S credential exists or has been requested before now
   (`gh secret list` for this repo is empty; even the C1/C2/C3 credentials
   from letter `20` are still open).
-- The exact Atlas request/response schema is owned by
-  `vxture-atlas/docs/30-design/200-s2s-provider-surface.md`, not available in
-  this environment, so the template-side client currently targets a
-  best-effort placeholder endpoint (`POST {ATLAS_API_URL}/v1/chat`) pending
-  confirmation.
+- **Update 2026-08-13:** the platform line shared the Atlas interface
+  reference directly (main@3b5ba2f), so the contract question below is
+  resolved - the template-side client now targets the confirmed
+  `POST /v1/chat` (bearer auth, `aud=atlas`/`scope=tool:atlas`, routes via
+  `endpointCode: "chat/default"`) and `GET /v1/models` for a lightweight
+  connectivity probe. Only the scope decision + credential issuance remain
+  open.
 
 ## What the template line has built already (no platform action needed for this part)
 
@@ -46,6 +48,9 @@ verifiable today with zero platform dependency:
 - `/api/status` `chat` block reports `resolver: "atlas" | "mock"` plus
   presence booleans for the two env vars (no secret values, same
   no-leak-invariant pattern as the rest of `/api/status`).
+- `GET /api/platform-check` and the `/platform-check` demo page: a read-only,
+  token-free connectivity probe (`GET /v1/models`) that can verify the
+  credential works before spending it on real chat traffic.
 
 ## Request (platform line) - two things
 
@@ -65,8 +70,7 @@ it.
 | Field | Value |
 |---|---|
 | Consumes | `ATLAS_API_URL` (internal-network base, e.g. `http://worker-02:3100` or its tailnet name - not secret) |
-| Consumes | `ATLAS_S2S_TOKEN` (S2S auth token scoped to `aud=atlas`, per `product_210_tool-protocol.md`) |
-| Also needed | confirmation of the actual chat endpoint path/envelope (`vxture-atlas` `200-s2s-provider-surface.md`), since the template-side client currently guesses `POST {base}/v1/chat` with `{product, messages}` -> `{reply}` |
+| Consumes | `ATLAS_S2S_TOKEN` (an already-issued bearer JWT scoped `aud=atlas`, `scope=tool:atlas` - not a shared secret this client exchanges itself) |
 
 Deliver: the base URL (can go in this doc/PR - not secret) + the S2S token
 (out-of-band, e.g. secrets manager or private channel - never in this doc, a
