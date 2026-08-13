@@ -11,3 +11,4 @@ guardrail still passes).
 | `20-2607211320-vxtpl-platform-credential-request.md` | 2607211320 | platform line | issue C1 OIDC client secret + C2 platform API/S2S token + C3 webhook signing secret so vxtpl login/subscription/provisioning go live | open |
 | `30-2607211500-vxtpl_301-shared-health-recovery-reply.md` | 2607211500 | platform line | reply to `vxtpl_301`: `@vxture/shared` wired, vendored health-identity deviation (TD-002) recovered and closed | closed |
 | `40-2607241900-vxtpl-port-reassignment.md` | 2607241900 | platform line | vxtpl app port reassigned 3232 -> 3210 (platform edge vhost updated, template host/docs follow) | closed |
+| `50-2608130250-vxtpl-edge-502-after-port-cutover.md` | 2608130250 | platform line | edge `vxtpl.vxture.com` returns 502 after template-side 3210 cutover verified healthy | open |
