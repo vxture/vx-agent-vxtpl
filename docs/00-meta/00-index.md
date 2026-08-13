@@ -22,7 +22,7 @@ The `lint:docs-numbering --strict` guardrail enforces this on every push.
 
 ## Authority
 
-This repo is instantiated from `vxture-template`. The governing standards are
+This repo is instantiated from `vxture-vxtpl`. The governing standards are
 NOT copied here; they live in the platform repo (`D:\MyWebSite\vxture`):
 
 - `docs/10-standards/140-repo-governance-standard.md` - governance base (WHAT)
