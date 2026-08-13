@@ -9,6 +9,10 @@ import type { GatedOption } from "../../chat/catalog";
 // offline Mock. Model/skill selection is entitlement-gated (tier ->
 // CAPABILITY_MATRIX, entitlement/capability.ts) against a fixed demo
 // workspace (no real login yet) - see docs/80-liaison for Atlas/Runos.
+//
+// Layout follows the common chat-product pattern (ChatGPT/Claude): a single
+// centered conversation column, not stretched full-width, with model/skill
+// as compact pill dropdowns in a toolbar above the log - not sidebar cards.
 
 interface ChatContext {
   tier: string | null;
@@ -27,32 +31,29 @@ function tierBadgeClass(tier: string | null): string {
   return "badge badge-accent";
 }
 
-function OptionSelect({
+function PillSelect({
+  label,
   options,
   value,
   onChange,
-  disabled,
 }: {
+  label: string;
   options: GatedOption[];
   value: string;
   onChange: (v: string) => void;
-  disabled?: boolean;
 }) {
   return (
-    <select
-      className="select"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      style={{ width: "100%" }}
-    >
-      {options.map((o) => (
-        <option key={o.code} value={o.code} disabled={!o.allowed}>
-          {o.label}
-          {!o.allowed ? ` \u{1F512} requires ${o.requiredTier ?? "?"}` : ""}
-        </option>
-      ))}
-    </select>
+    <span className="pill-select">
+      <span className="pill-label">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.code} value={o.code} disabled={!o.allowed}>
+            {o.label}
+            {!o.allowed ? ` \u{1F512} ${o.requiredTier ?? "?"}` : ""}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
 
@@ -73,7 +74,7 @@ export default function ChatPage() {
         const data = (await r.json()) as ChatContext;
         setCtx(data);
         setModelCode(data.models.find((m) => m.allowed)?.code ?? data.models[0]?.code ?? "");
-        setSkillCode(data.skills.find((s) => s.allowed)?.code ?? "");
+        setSkillCode(data.skills.find((s) => s.allowed)?.code ?? data.skills[0]?.code ?? "");
       })
       .catch(() => setError("failed to load model/skill catalog"));
   }, []);
@@ -109,25 +110,20 @@ export default function ChatPage() {
 
   return (
     <main className="page">
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
-        <span className={tierBadgeClass(ctx?.tier ?? null)}>
-          <span className="dot" />
-          {ctx ? tierLabel(ctx.tier) : "..."}
-        </span>
-        {mode && (
-          <span className={mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}>
+      <div style={{ maxWidth: 780, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
+          <h1 style={{ fontSize: "1.6rem" }}>Chat</h1>
+          <span className={tierBadgeClass(ctx?.tier ?? null)}>
             <span className="dot" />
-            {mode === "atlas" ? "Atlas connected" : "Mock mode"}
+            {ctx ? tierLabel(ctx.tier) : "..."}
           </span>
-        )}
-      </div>
-      <p className="lede">Capability verification for the platform's model gateway - selection is entitlement-gated.</p>
+        </div>
+        <p className="lede">Capability verification for the platform's model gateway - selection below is entitlement-gated.</p>
 
-      <div className="split" style={{ marginTop: "1.4rem" }}>
         <div
           className="card"
           style={{
+            marginTop: "1.2rem",
             padding: 0,
             display: "flex",
             flexDirection: "column",
@@ -135,6 +131,26 @@ export default function ChatPage() {
             overflow: "hidden",
           }}
         >
+          <div className="chat-toolbar">
+            {ctx ? (
+              <>
+                <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
+                <PillSelect label="Skill" options={ctx.skills} value={skillCode} onChange={setSkillCode} />
+              </>
+            ) : (
+              <span style={{ color: "var(--slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
+            )}
+            {mode && (
+              <span
+                className={mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}
+                style={{ marginLeft: "auto" }}
+              >
+                <span className="dot" />
+                {mode === "atlas" ? "Atlas" : "Mock"}
+              </span>
+            )}
+          </div>
+
           <div
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
@@ -152,7 +168,7 @@ export default function ChatPage() {
                   border: m.role === "assistant" ? "1px solid var(--border)" : "none",
                   borderRadius: 12,
                   padding: "0.55rem 0.85rem",
-                  maxWidth: "70%",
+                  maxWidth: "78%",
                   whiteSpace: "pre-wrap",
                   fontSize: "0.92rem",
                   lineHeight: 1.5,
@@ -179,36 +195,13 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div>
-          <div className="card">
-            <h3>Model</h3>
-            {ctx ? (
-              <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
-            ) : (
-              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
-                loading...
-              </span>
-            )}
-          </div>
-          <div className="card">
-            <h3>Skill</h3>
-            {ctx ? (
-              <OptionSelect options={ctx.skills} value={skillCode} onChange={setSkillCode} />
-            ) : (
-              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
-                loading...
-              </span>
-            )}
-          </div>
-        </div>
+        {error && <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
+
+        <footer className="page-links">
+          <a href="/status">-&gt; integration status</a>
+          <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
+        </footer>
       </div>
-
-      {error && <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
-
-      <footer className="page-links">
-        <a href="/status">-&gt; integration status</a>
-        <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
-      </footer>
     </main>
   );
 }
