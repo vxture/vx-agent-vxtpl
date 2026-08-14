@@ -14,16 +14,26 @@ interface Row {
   bundled: boolean;
 }
 
-function rows(): Row[] {
-  const out: Row[] = [];
-  for (const tier of TIERS) {
-    for (const status of SUBSCRIPTION_STATUSES) {
-      out.push({ label: `${tier} / ${status}`, tier, status, bundled: false });
-    }
-  }
-  out.push({ label: "null / null (never subscribed)", tier: null, status: null, bundled: false });
-  out.push({ label: "bundled only (no direct purchase)", tier: null, status: null, bundled: true });
-  return out;
+interface Group {
+  heading: string;
+  rows: Row[];
+}
+
+function groups(): Group[] {
+  const tierGroups: Group[] = TIERS.map((tier) => ({
+    heading: tier,
+    rows: SUBSCRIPTION_STATUSES.map((status) => ({ label: status, tier, status, bundled: false })),
+  }));
+  return [
+    ...tierGroups,
+    {
+      heading: "no subscription",
+      rows: [
+        { label: "never subscribed", tier: null, status: null, bundled: false },
+        { label: "bundled only (no direct purchase)", tier: null, status: null, bundled: true },
+      ],
+    },
+  ];
 }
 
 function yesNo(b: boolean) {
@@ -36,10 +46,13 @@ function yesNo(b: boolean) {
 }
 
 export default function EntitlementMatrixPage() {
-  const data = rows().map((r) => {
-    const e = makeEntitlement("ws_demo", "__PRODUCT_CODE__", { tier: r.tier, status: r.status, bundled: r.bundled });
-    return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
-  });
+  const data = groups().map((g) => ({
+    ...g,
+    rows: g.rows.map((r) => {
+      const e = makeEntitlement("ws_demo", "__PRODUCT_CODE__", { tier: r.tier, status: r.status, bundled: r.bundled });
+      return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
+    }),
+  }));
   return (
     <main className="page">
       <div className="eyebrow">Verification surface</div>
@@ -52,27 +65,44 @@ export default function EntitlementMatrixPage() {
         <table className="ref">
           <thead>
             <tr>
-              <th>tier / status (bundled)</th>
+              <th>status (bundled)</th>
               <th>UI access</th>
               <th>data access</th>
               <th>CTA</th>
             </tr>
           </thead>
-          <tbody>
-            {data.map((r) => (
-              <tr key={r.label}>
-                <td>
-                  {r.label}
-                  {r.bundled ? " [bundled]" : ""}
-                </td>
-                <td>{yesNo(r.productAccess)}</td>
-                <td>{yesNo(r.dataAccess)}</td>
-                <td>
-                  <span className="mono">{r.cta}</span>
+          {data.map((g) => (
+            <tbody key={g.heading}>
+              <tr>
+                <td
+                  colSpan={4}
+                  style={{
+                    background: "var(--paper)",
+                    fontWeight: 700,
+                    fontSize: "0.72rem",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--accent-ink)",
+                  }}
+                >
+                  {g.heading}
                 </td>
               </tr>
-            ))}
-          </tbody>
+              {g.rows.map((r) => (
+                <tr key={r.label}>
+                  <td>
+                    {r.label}
+                    {r.bundled ? " [bundled]" : ""}
+                  </td>
+                  <td>{yesNo(r.productAccess)}</td>
+                  <td>{yesNo(r.dataAccess)}</td>
+                  <td>
+                    <span className="mono">{r.cta}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
       </div>
 
