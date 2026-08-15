@@ -9,4 +9,5 @@ Each increment must be idempotent: `ADD COLUMN IF NOT EXISTS`,
 `CREATE TABLE IF NOT EXISTS`, etc. Adding a writable column also requires updating
 `../98_column_locks.sql`, or the service-role write fails with permission denied.
 
-Empty in the template baseline.
+Empty at the vxtpl baseline: every table vxtpl uses is in `00_baseline.sql`. A
+product copied from vxtpl inherits that baseline and adds its own increments here.

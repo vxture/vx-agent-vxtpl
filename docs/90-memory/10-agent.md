@@ -4,17 +4,28 @@ Start here if you are an AI agent working in this repo.
 
 ## What this repo is
 
-A Vxture product repository (or the `vxture-vxtpl` template itself). It carries the org
-governance base, the platform integration contract surface, and the engineering
-shell - but no product domain logic in the template. A concrete product repo is
-produced by `scripts/init/instantiate.mjs <product_code>`, which replaces the
-`__PRODUCT_CODE__` placeholder and derives every downstream name.
+This is `vxtpl`: a Vxture product deployed at `https://vxtpl.vxture.com` (worker02,
+host port 3210, container port 3000) AND the reference build new product repos are
+copied from (ADR-001). Both, on purpose - see `docs/20-specs/10-product-definition.md`.
+
+Three things follow that will save you a wrong assumption:
+
+- **There are no placeholders.** Every name is the literal `vxtpl` value that runs
+  in production. If you find a `__SOMETHING__` token outside `docs/80-liaison/`
+  (frozen historical letters), it is a bug.
+- **A new product is a copy, not an instantiation.**
+  `scripts/init/rename-product.mjs <code>` rewrites the name cascade in contents
+  and in path names. `instantiate.mjs` is gone; so is the build-time substitution
+  step that used to run it.
+- **The exemplar zone is meant to be replaced, the rigid zone is not.** The
+  boundary is in `CLAUDE.md`. Filling an exemplar slot with something real is the
+  point; changing a rigid mechanism because it is inconvenient is not.
 
 ## Where authority lives
 
 Not in this repo. The governing standards are in the platform repo
 (`D:\MyWebSite\vxture`): `140-repo-governance-standard.md` (WHAT),
-`product_240_repo-template.md` (template design), `20-self-rectify-runbook.md`
+`product_240_repo-template.md` (product-repo design), `20-self-rectify-runbook.md`
 (HOW + machine checks), `070-docs-taxonomy.md` (docs numbering). When you hit a
 gap not covered by an existing standard, fix the standard in the platform repo
 first, then mirror it here - do not invent a standard inside a product repo.
@@ -28,5 +39,10 @@ first, then mirror it here - do not invent a standard inside a product repo.
 - Docs: numbered = formal, unnumbered = temporary. `lint:docs-numbering --strict`
   blocks unnumbered `.md`. Domain docs use `{kind}_{domain}_{NNN}_{slug}`.
 - Keep source, config, and root meta files ASCII-only.
-- See `CLAUDE.md` (repo root) for the full working agreement, and
+- `docs/80-liaison/` is append-only. Letters are dated records of what was sent;
+  correct a superseded claim with a NEW letter, never by editing an old one.
+- Product identity comes from `BRAND.productCode`, never from `OIDC_CLIENT_ID`
+  (the beta client is `vxtpl-beta`; the product code stays `vxtpl`).
+- See `CLAUDE.md` (repo root) for the full working agreement,
+  `docs/40-implementation/10-app-workspace.md` for how the app fits together, and
   `docs/70-workplan/00-index.md` for the batch tracker.

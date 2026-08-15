@@ -1,4 +1,4 @@
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 import { serviceIdentity } from "@vxture/shared";
 
 const CARDS = [
@@ -28,11 +28,12 @@ export default function HomePage() {
   const { gitSha } = serviceIdentity({ service: `${BRAND.productCode}-app`, product: BRAND.productCode });
   return (
     <main className="page">
-      <div className="eyebrow">Vxture product template</div>
+      <div className="eyebrow">Vxture product</div>
       <h1 style={{ fontSize: "2.2rem", marginTop: "0.5rem" }}>{BRAND.displayName}</h1>
       <p className="lede">
-        A live, self-deployed capability-verification instance of the vxture-vxtpl governance template. Build{" "}
-        <code>{gitSha}</code>.
+        A deployed Vxture product that signs users in against the central accounts service, gates them by
+        subscription tier, and calls Atlas and Runos for real work - and the reference build every new Vxture
+        product is copied from. Build <code>{gitSha}</code>.
       </p>
 
       <div

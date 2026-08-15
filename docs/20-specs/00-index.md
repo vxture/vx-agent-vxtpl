@@ -1,10 +1,12 @@
 # 20-specs - Product and business specifications
 
-The product definition lands here. Empty in the template skeleton: the template is
-domain-neutral, so it ships no product spec. When this repo is instantiated for a
-real product, its specification (what the product is, its surfaces, its business
-rules) is authored under this decade.
+vxtpl's product definition lives here: what the product is, what surfaces it
+exposes, and which platform contracts it consumes.
 
-Files use `NN-slug.md` numbering. Product subdirectories, if organized by product,
-use the layered product code from the taxonomy (section 6). Nothing is pre-created
-for a product that does not yet have real specs.
+| Doc | Covers |
+|-----|--------|
+| [10-product-definition.md](10-product-definition.md) | what vxtpl is, its four surfaces, the platform contracts it consumes, and what it deliberately does not do |
+
+Files use `NN-slug.md` numbering. A product repo copied from vxtpl replaces this
+decade wholesale with its own specification - vxtpl's product definition is not
+inherited, only the shape of it.

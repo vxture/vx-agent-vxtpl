@@ -1,20 +1,30 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage } from "../../chat/types";
+import type { ChatMessage, ChatReply, SkillOutcome } from "../../chat/types";
 import type { GatedOption } from "../../chat/catalog";
 
-// Chat capability-verification demo. Talks to /api/chat, which resolves
-// through Atlas when ATLAS_API_URL + ATLAS_S2S_TOKEN are configured, else the
-// offline Mock. Model/skill selection is entitlement-gated (tier ->
-// CAPABILITY_MATRIX, entitlement/capability.ts) against a fixed demo
-// workspace (no real login yet) - see docs/80-liaison for Atlas/Runos.
+// Chat surface. Talks to /api/chat, which requires a signed-in session: the
+// workspace it resolves entitlement for is also what the S2S token is minted
+// against and what Atlas attributes the call to. Model and skill selection are
+// entitlement-gated (tier -> CAPABILITY_MATRIX, entitlement/capability.ts), and
+// a selected skill is executed as a real Runos capability.
+
+const NO_SKILL = "";
 
 interface ChatContext {
   tier: string | null;
   productAccess: boolean;
   models: GatedOption[];
   skills: GatedOption[];
+}
+
+interface TurnMeta {
+  mode: "atlas" | "mock";
+  modelCode: string;
+  skill?: SkillOutcome;
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  latencyMs?: number;
 }
 
 function tierLabel(tier: string | null): string {
@@ -56,24 +66,55 @@ function OptionSelect({
   );
 }
 
+/** What the selected skill actually did. Silence here would read as "it worked". */
+function SkillReport({ skill }: { skill: SkillOutcome }) {
+  const tone =
+    skill.status === "ran" ? "badge badge-ok" : skill.status === "failed" ? "badge badge-warn" : "badge badge-neutral";
+  return (
+    <div style={{ marginTop: "0.6rem", fontSize: "0.8rem", color: "var(--slate)" }}>
+      <span className={tone}>
+        <span className="dot" />
+        {skill.code}: {skill.status}
+      </span>
+      {skill.capabilityId && (
+        <div style={{ marginTop: 4 }}>
+          via <code>{skill.capabilityId}</code>
+        </div>
+      )}
+      {skill.detail && (
+        <div style={{ marginTop: 4, wordBreak: "break-word" }}>{skill.detail.slice(0, 240)}</div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const [ctx, setCtx] = useState<ChatContext | null>(null);
   const [modelCode, setModelCode] = useState("");
   const [skillCode, setSkillCode] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"atlas" | "mock" | null>(null);
+  const [turn, setTurn] = useState<TurnMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedOut, setSignedOut] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/chat", { cache: "no-store" })
       .then(async (r) => {
+        if (r.status === 401 || r.status === 503) {
+          const body = (await r.json().catch(() => ({}))) as { error?: string };
+          setSignedOut(true);
+          setError(body.error ?? "sign in to use chat");
+          return;
+        }
         const data = (await r.json()) as ChatContext;
         setCtx(data);
         setModelCode(data.models.find((m) => m.allowed)?.code ?? data.models[0]?.code ?? "");
-        setSkillCode(data.skills.find((s) => s.allowed)?.code ?? "");
+        // Default to no skill: skills invoke a real, billed capability, so
+        // opting in should be the user's choice rather than a preselected value.
+        setSkillCode(NO_SKILL);
       })
       .catch(() => setError("failed to load model/skill catalog"));
   }, []);
@@ -96,10 +137,16 @@ export default function ChatPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ history: next, modelCode: modelCode || undefined, skillCode: skillCode || undefined }),
       });
-      const body = await res.json();
+      const body = (await res.json()) as ChatReply & { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setMessages([...next, body.message]);
-      setMode(body.mode);
+      setTurn({
+        mode: body.mode,
+        modelCode: body.modelCode,
+        skill: body.skill,
+        usage: body.usage,
+        latencyMs: body.latencyMs,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "chat request failed");
     } finally {
@@ -115,14 +162,30 @@ export default function ChatPage() {
           <span className="dot" />
           {ctx ? tierLabel(ctx.tier) : "..."}
         </span>
-        {mode && (
-          <span className={mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}>
+        {turn && (
+          <span className={turn.mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}>
             <span className="dot" />
-            {mode === "atlas" ? "Atlas connected" : "Mock mode"}
+            {turn.mode === "atlas" ? `Atlas - ${turn.modelCode}` : "Mock mode"}
           </span>
         )}
       </div>
-      <p className="lede">Capability verification for the platform's model gateway - selection is entitlement-gated.</p>
+      <p className="lede">
+        A tier-gated turn against the platform&apos;s model gateway. A selected skill runs as a real Runos
+        capability.
+      </p>
+
+      {signedOut && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <h3>Sign in to continue</h3>
+          <p style={{ fontSize: "0.88rem", color: "var(--slate)", lineHeight: 1.55 }}>
+            Chat resolves entitlement for your active workspace and mints its platform token on your session, so it
+            needs you signed in.
+          </p>
+          <a className="btn btn-primary" href="/auth/login?returnTo=/chat" style={{ marginTop: "0.6rem" }}>
+            Sign in
+          </a>
+        </div>
+      )}
 
       <div className="split" style={{ marginTop: "1.4rem" }}>
         <div
@@ -193,13 +256,33 @@ export default function ChatPage() {
           <div className="card">
             <h3>Skill</h3>
             {ctx ? (
-              <OptionSelect options={ctx.skills} value={skillCode} onChange={setSkillCode} />
+              <OptionSelect
+                options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
+                value={skillCode}
+                onChange={setSkillCode}
+              />
             ) : (
               <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
                 loading...
               </span>
             )}
+            {turn?.skill && <SkillReport skill={turn.skill} />}
           </div>
+          {turn?.usage && (
+            <div className="card">
+              <h3>Last turn</h3>
+              <div style={{ fontSize: "0.8rem", color: "var(--slate)", lineHeight: 1.7 }}>
+                <div>
+                  served by <code>{turn.modelCode}</code>
+                </div>
+                <div>
+                  {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
+                  {turn.usage.totalTokens} tokens
+                </div>
+                {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

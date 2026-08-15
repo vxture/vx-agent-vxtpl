@@ -15,7 +15,7 @@ product repo.
 | Container healthcheck | `docs/10-standards/020-container-healthcheck-standard.md` | liveness probe mechanics: zero-dependency route, bind `0.0.0.0`, probe params |
 | Health endpoint contract | `docs/10-standards/025-service-health-endpoint-contract.md` | liveness response body: identity block + build-time provenance injection (companion to 020) |
 
-## Template design and runbook (platform repo)
+## Product-repo design and runbook (platform repo)
 
 - `docs/30-design/product_240_repo-template.md` - what a product repo contains
 - `docs/50-deployment/rebuild/20-self-rectify-runbook.md` - batch A-G self-rectify
@@ -35,5 +35,5 @@ Local realization of the standards above (where to look, not a re-statement):
   re-implementation - see docs/60-operations TD-001), called from the liveness
   route `portals/app/app/api/health/`, fed by the four provenance `ARG->ENV` in
   `portals/app/Dockerfile` (runner stage) and their build-time derivation from
-  git tag/sha/date in `.github/workflows/build.yml`. Any instantiated product
-  inherits these unchanged, so its `/api/health` conforms out of the box.
+  git tag/sha/date in `.github/workflows/build.yml`. Any product repo copied from
+  vxtpl inherits these unchanged, so its `/api/health` conforms out of the box.

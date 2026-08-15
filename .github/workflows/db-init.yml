@@ -10,7 +10,7 @@ name: db-init
 #
 # `apply` runs the three-part baseline + incr/ increments (idempotent create-once
 # + ADD COLUMN IF NOT EXISTS) against the production db container as the DB
-# superuser (docker exec, in-container trust), then sets the <snake>_svc role's
+# superuser (docker exec, in-container trust), then sets the vxtpl_svc role's
 # password from the operator .env's DATABASE_URL so the app can authenticate
 # (generating + patching one in place if the URL has none yet). `verify` reports
 # schema tables + whether the role has a password, non-destructively.
@@ -42,9 +42,7 @@ permissions:
   contents: read
 
 env:
-  # Product code source: PRODUCT_CODE repo variable (template=vxtpl), else the
-  # __PRODUCT_CODE__ literal an instantiated product repo already replaced.
-  PRODUCT_CODE: ${{ vars.PRODUCT_CODE || '__PRODUCT_CODE__' }}
+  PRODUCT_CODE: vxtpl
 
 jobs:
   db-init:
@@ -123,12 +121,12 @@ jobs:
           CONT="${PRODUCT_CODE}-db"
           ENV_FILE="$(cd "$REPO_DIR/.." && pwd)/etc/.env"
           run() { docker exec -i "$CONT" psql -U postgres -d "$DB" -v ON_ERROR_STOP=1 "$@"; }
-          # Substitute the snake placeholder in the role/lock DDL (a no-op for an
-          # instantiated product where it is already the real code).
-          apply_file() { sed "s/__PRODUCT_CODE_SNAKE__/${SNAKE}/g" "$1" | run; }
+          # The DDL carries vxtpl's real role name (vxtpl_svc) - it is applied
+          # verbatim, with no substitution layer between the file and the database.
+          apply_file() { run < "$1"; }
 
           # Service-role password. The role is created LOGIN-only (no password) by
-          # 97_service_role.sql; the app connects as <snake>_svc over TCP (scram),
+          # 97_service_role.sql; the app connects as vxtpl_svc over TCP (scram),
           # so the role needs a password matching the operator .env's DATABASE_URL
           # (postgresql://<svc>:PASSWORD@host...). Parse it here - it lives only on
           # the host and never transits CI. Empty if the URL carries no password.

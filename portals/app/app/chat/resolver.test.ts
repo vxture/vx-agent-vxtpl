@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateHistory, MockChatResolver } from "./resolver";
+import { validateHistory, MockChatResolver, type ChatIdentity } from "./resolver";
 import { MAX_HISTORY_MESSAGES, MAX_MESSAGE_LENGTH } from "./types";
+
+const IDENTITY: ChatIdentity = { workspaceId: "ws-1", mint: { subjectToken: "user-token" } };
 
 test("validateHistory accepts well-formed messages", () => {
   const h = validateHistory([{ role: "user", content: "hi" }]);
@@ -39,7 +41,7 @@ test("validateHistory trims to the last MAX_HISTORY_MESSAGES entries", () => {
 
 test("MockChatResolver echoes the last user message and reports mode=mock", async () => {
   const r = new MockChatResolver();
-  const reply = await r.reply([{ role: "user", content: "ping" }]);
+  const reply = await r.reply([{ role: "user", content: "ping" }], IDENTITY);
   assert.equal(reply.mode, "mock");
   assert.equal(reply.message.role, "assistant");
   assert.match(reply.message.content, /ping/);
@@ -47,19 +49,27 @@ test("MockChatResolver echoes the last user message and reports mode=mock", asyn
 
 test("MockChatResolver defaults to chat/default with no skill selected", async () => {
   const r = new MockChatResolver();
-  const reply = await r.reply([{ role: "user", content: "hi" }]);
+  const reply = await r.reply([{ role: "user", content: "hi" }], IDENTITY);
   assert.equal(reply.modelCode, "chat/default");
   assert.equal(reply.skillCode, null);
+  assert.equal(reply.skill, undefined);
 });
 
 test("MockChatResolver echoes the selected model and skill", async () => {
   const r = new MockChatResolver();
-  const reply = await r.reply([{ role: "user", content: "hi" }], {
-    modelCode: "chat/reasoning",
+  const reply = await r.reply([{ role: "user", content: "hi" }], IDENTITY, {
+    modelCode: "chat/pro",
     skillCode: "web-search",
   });
-  assert.equal(reply.modelCode, "chat/reasoning");
+  assert.equal(reply.modelCode, "chat/pro");
   assert.equal(reply.skillCode, "web-search");
-  assert.match(reply.message.content, /chat\/reasoning/);
+  assert.match(reply.message.content, /chat\/pro/);
   assert.match(reply.message.content, /web-search/);
+});
+
+test("MockChatResolver reports a selected skill as not-invoked rather than pretending it ran", async () => {
+  const r = new MockChatResolver();
+  const reply = await r.reply([{ role: "user", content: "hi" }], IDENTITY, { skillCode: "code-exec" });
+  assert.equal(reply.skill?.status, "not-invoked");
+  assert.equal(reply.skill?.capabilityId, null);
 });

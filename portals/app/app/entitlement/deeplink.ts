@@ -1,4 +1,4 @@
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 import type { Tier } from "./types";
 
 // Conversion deep-link constructor (product_200 section 3.2): the single

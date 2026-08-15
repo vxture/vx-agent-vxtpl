@@ -37,7 +37,7 @@ function yesNo(b: boolean) {
 
 export default function EntitlementMatrixPage() {
   const data = rows().map((r) => {
-    const e = makeEntitlement("ws_demo", "__PRODUCT_CODE__", { tier: r.tier, status: r.status, bundled: r.bundled });
+    const e = makeEntitlement("ws_demo", "vxtpl", { tier: r.tier, status: r.status, bundled: r.bundled });
     return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
   });
   return (

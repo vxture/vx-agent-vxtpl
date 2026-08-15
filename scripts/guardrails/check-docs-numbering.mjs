@@ -7,15 +7,15 @@
  * docs/; any file that is not an index, not whitelisted, and matches none of the
  * legal numbered shapes is a violation.
  *
- * Template note: this is the platform check-docs-numbering.mjs TIGHTENED. The
- * domain-document pattern is restricted to the strict underscore family
+ * This is the platform check-docs-numbering.mjs TIGHTENED. The domain-document
+ * pattern is restricted to the strict underscore family
  * `{kind}_{domain}_{NNN}_{slug}` with kind in {data,design,ops} and a
  * hyphen-free domain word. The platform version accepted a loose
  * `{prefix}(_{domain})?_{NNN}` with hyphens (arda's `arda-{sub}-NNN` legacy
- * variant); new product repos do NOT get that exemption.
+ * variant); this repo and every product copied from it do NOT get that exemption.
  *
  * Modes: default lists violations as a worklist (exit 0); `--strict` fails hard
- * (exit 1) for CI. New product repos run --strict from day one.
+ * (exit 1) for CI, which is how it runs here from day one.
  */
 
 import { readdirSync, statSync } from "node:fs";

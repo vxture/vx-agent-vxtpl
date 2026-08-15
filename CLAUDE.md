@@ -2,13 +2,23 @@
 
 Authoritative working agreement for this repo. The goal is a clean, predictable
 branch and deploy flow with no direct human writes to protected branches, and a
-governance base that every instantiated product repo inherits unchanged.
+governance base that every product repo copied from here inherits unchanged.
 
-This is the Vxture product-repo template. It is domain-neutral by design: it
-carries the org governance base, the platform integration contract surface, and
-the engineering shell, but no product domain logic. A concrete product repo is
-produced by running `scripts/init/instantiate.mjs <product_code>`, which replaces
-the `__PRODUCT_CODE__` placeholder and derives every downstream name.
+## What vxtpl is
+
+`vxtpl` is a real, deployed Vxture product (`https://vxtpl.vxture.com`, worker02,
+host port 3210) AND the reference build every new Vxture product is copied from.
+Those are one thing, not two: the only way to keep a template honest is to run it
+in production, so vxtpl proves the platform integration surface by actually
+consuming it - it signs users in against the central accounts service, gates them
+by subscription tier, receives provisioning webhooks, calls Atlas for model
+inference, and calls Runos for capability execution. What ships here is the
+working shape of a Vxture product, not a diagram of one.
+
+There are no placeholders. Every name is the concrete `vxtpl` value that runs in
+production. A new product repo is created by copying this one and running
+`node scripts/init/rename-product.mjs <new_code>`, which rewrites the name cascade
+below (including file and directory names) in one pass.
 
 **Package manager: pnpm** (whole-stack, owner-decided 2026-07-20). CI cache keys,
 the Dockerfile deps stage, and the osv `--lockfile=pnpm-lock.yaml` path are all
@@ -16,44 +26,50 @@ pnpm. Do not reintroduce npm workspaces.
 
 Authority for the design lives in the platform repo (`D:\MyWebSite\vxture`), not
 here: `140-repo-governance-standard.md` (WHAT), `product_240_repo-template.md`
-(template design), `20-self-rectify-runbook.md` (HOW + machine checks),
+(product-repo design), `20-self-rectify-runbook.md` (HOW + machine checks),
 `070-docs-taxonomy.md` (docs numbering). When a gap is not covered by an existing
 standard, fix the standard in the platform repo first, then mirror it here - do
-not invent a standard inside the template.
+not invent a standard inside a product repo.
 
-## Placeholder cascade
+## Name cascade
 
-`__PRODUCT_CODE__` (matches `^[a-z][a-z0-9_-]{0,31}$`) is defined once and cascades
-across the whole repo. `scripts/init/instantiate.mjs` replaces it and derives:
-OIDC client pair (`<code>` / `<code>-beta`), compose project/container prefix
-(`<code>-app` / `-redis` / `-db`), image name `<code>-app`, database name and role
-(`vxturebiz_<code>_<env>` / `<code>_svc`), workspace package scope `@<code>/*`,
-secret names (`<CODE>_DB_SVC_PASSWORD`, `<CODE>_PROVISION_WEBHOOK_SECRET`,
-`<CODE>_WEBHOOK_BASE_URL`), and deploy-contract sentinels. Batch 1 only plants the
-placeholder; later batches consume the derived names.
+The product code `vxtpl` (matching `^[a-z][a-z0-9_-]{0,31}$`) determines every
+downstream name in the repo. These are literals in the source, not substitutions:
 
-## Build status (batches)
+| Slot | vxtpl value |
+|------|-------------|
+| OIDC client pair | `vxtpl` / `vxtpl-beta` |
+| compose project + containers | `vxtpl` / `vxtpl-app`, `vxtpl-redis`, `vxtpl-db` |
+| image | `ghcr.io/vxture/vxtpl-app` (ACR fallback mirrors it) |
+| database / service role | `vxturebiz_vxtpl_prod` / `vxtpl_svc` |
+| workspace package scope | `@vxtpl/*` |
+| platform-side secret names | `VXTPL_DB_SVC_PASSWORD`, `VXTPL_PROVISION_WEBHOOK_SECRET`, `VXTPL_WEBHOOK_BASE_URL` |
+| stack root on the deploy host | `/srv/md0/vxtpl` |
+| public vhost / host port | `vxtpl.vxture.com` / `3210` |
 
-This repository is built incrementally; each batch is one PR with machine-checked
-acceptance (`docs/70-workplan/`). Batch 1 (A-D) delivers the governance shell:
-root files + branch protection, secret hygiene, SCA gate, docs skeleton, the
-placeholder + instantiate script, and two bootstrap checklists. It does NOT
-include application source, the deploy pipeline (batch E), or the business-face
-database (batch F). Sections below describing the tag-to-env CD model and the
-app runtime state the intended standard the template grows into; the concrete
-workflow files land in later batches.
+`BRAND.productCode` (`portals/packages/shared/src/brand.ts`) is the single source
+of product identity in application code. Never derive the product code from
+`OIDC_CLIENT_ID`: the beta client is `vxtpl-beta` while the product code stays
+`vxtpl`, so the two diverge on any non-prod stack.
+
+`scripts/init/rename-product.mjs` is the only supported way to re-derive this
+cascade for a copied repo; it is site-aware (DB and role names take the snake_case
+form, secret names the upper form) and renames paths as well as file contents.
 
 ## Branch model
 
 Single long-lived branch: `main` (trunk-based). Deploys are NOT tied to merges -
-they are triggered only by pushing a release tag, which also selects the
-environment (product repos default to two tiers):
+they are triggered only by pushing a release tag:
 
 - `main` - the only integration branch. All feature work merges here via PR.
   Merging to `main` does NOT deploy anything by itself.
-- `beta-YYYYMMDD.N` tag - deploys the beta stack. No approval gate.
 - `vX.Y.Z` tag - deploys the production stack. Gated by a required reviewer on
   the `production` GitHub Environment - the deploy job pauses until approved.
+
+vxtpl runs **prod-only** (ADR-002): there is no beta stack, no `beta` GitHub
+Environment, and `deploy.yml` rejects any tag that is not `v*.*.*`. The
+`vxtpl-beta` OIDC client stays reserved but unused. A product copied from vxtpl
+that wants two tiers adds the beta routing and a beta compose project itself.
 
 `dev-*` and `varda-*` tags are platform-repo-only; product repos do not build
 develop/varda environments.
@@ -90,14 +106,12 @@ ruleset is `docs/50-deployment/rebuild/main-ruleset.json`:
   review), require the five status checks below (strict / up-to-date with base),
   block deletion, block non-fast-forward, require linear history, squash-only.
 - `production` GitHub Environment: required reviewer - every `v*.*.*` tag deploy
-  pauses here until approved.
-- `beta` GitHub Environment: no reviewer gate.
+  pauses here until approved. It is the only environment (ADR-002).
 
 **Required checks (authoritative set of five):** `quality-gate` / `build` /
 `test-coverage` / `audit` / `gitleaks`. CI job names must produce exactly these
-five contexts - renaming a job breaks branch protection. A skeleton repo with no
-unit tests still provides a permanently-green `test-coverage` job (it occupies the
-context; zero tests passes). Never remove a check from the required set.
+five contexts - renaming a job breaks branch protection. Never remove a check
+from the required set.
 
 ## CI/CD pipeline
 
@@ -106,11 +120,9 @@ lands on main is a new SHA, so it gets its own gate run); it does NOT deploy.
 
 - `quality-gate` aggregates the static checks: `git diff --check` and the docs
   numbering guardrail (`node scripts/guardrails/check-docs-numbering.mjs --strict`).
-- `build`: type-check and production build. In the skeleton (no app yet) this is a
-  placeholder step (`echo "skeleton: no app yet"`); batch 2 replaces it with a
-  real build. Also its own required check.
-- `test-coverage`: permanently-green no-op in the skeleton; occupies the required
-  context until real tests exist.
+- `build`: installs the pnpm workspace with a frozen lockfile, type-checks, and
+  produces the Next.js standalone build. Also its own required check.
+- `test-coverage`: runs the app's `node:test` suite.
 - `audit` (separate required check): `osv-scanner` (pinned binary) scans
   `pnpm-lock.yaml` for known dependency vulnerabilities, hard-blocking on any new
   finding, with `--config .osv-scanner.toml`. Exceptions are recorded per
@@ -122,9 +134,12 @@ lands on main is a new SHA, so it gets its own gate run); it does NOT deploy.
 None of these run on a tag push - cutting a release tag ships whatever is already
 at that commit on `main`, it does not re-verify the gates.
 
-The tag-to-env deploy workflows (`deploy.yml`/`build.yml`/`rollback.yml`/
-`db-init.yml`) and the `tailnet-ssh-connect` composite action are batch E and are
-not present in batch 1.
+The deploy chain is `deploy.yml` (tag -> production Environment -> approval) ->
+`build.yml` (reusable; GHCR primary + ACR fallback, dedup by `sha-<short>` tag) ->
+`deploy/deploy.sh` over the tailnet (`tailnet-ssh-connect` composite action).
+`rollback.yml` re-points the app container at a previously built image, and
+`db-init.yml` is the only path that touches DB structure. The product code is a
+literal in these files - there is no build-time substitution step.
 
 ## Secret hygiene (four layers)
 
@@ -154,8 +169,8 @@ shared to selected repos, not duplicated per repo.
 `audit` = osv-scanner hard gate over `pnpm-lock.yaml`. Fix (upgrade / pnpm
 override / exact pin for peer-only deps) or record a named `[[PackageOverrides]]`
 exception with a reason - never widen the gate (no `continue-on-error`, never
-removed from required). The template ships an empty ignore baseline; do not copy
-another repo's named ignores.
+removed from required). vxtpl ships an empty ignore baseline, and a product
+copied from it starts empty too; do not copy another repo's named ignores.
 
 ## Docs taxonomy
 
@@ -165,24 +180,30 @@ another repo's named ignores.
 map in `docs/00-meta/00-index.md`. Numbered = formal, unnumbered = temporary
 (delete or number it), enforced by the docs numbering guardrail. Domain documents
 use the strict underscore family `{kind}_{domain}_{NNN}_{slug}` (`kind` in
-data/design/ops) - the template's `check-docs-numbering.mjs` is tightened from the
+data/design/ops) - this repo's `check-docs-numbering.mjs` is tightened from the
 platform version and does NOT accept the arda hyphen variant. ADRs live in
 `docs/30-design/decisions/` with stable append-only IDs; the tech-debt register
 lives in `docs/60-operations/` (`TD-NNN`).
 
-## Rigid zone / blank zone
+## Rigid zone / exemplar zone
 
-**Rigid (do not deviate):** the entire governance base; CI/CD key names, job
-names, workflow semantics; the three-channel module endpoints/signing/idempotency/
-gating formula/cache discipline; value-domain consumption; DB governance (DDL
-three-part + column locks + db-init as the sole structure-change path); docs
-numbering; the data-face hard constraints.
+**Rigid (do not deviate, here or in any copy):** the entire governance base;
+CI/CD key names, job names, workflow semantics; the three-channel module
+endpoints/signing/idempotency/gating formula/cache discipline; value-domain
+consumption; DB governance (DDL three-part + column locks + db-init as the sole
+structure-change path); docs numbering; the data-face hard constraints.
 
-**Blank (each product decides, template gives an empty slot only):** domain pages
-and components; the N product domain schemas (naming/count product-decided; the
-`vx_provision` / `local_authz` / `local_usage` names are reserved); role/permission
-catalog values; the content of the capability matrix and billing model (format is
-reference only); `20-specs/` product definition; domain guardrails.
+**Exemplar (concrete vxtpl content a copy is expected to replace):** the product
+surfaces under `portals/app/app/` and their components; the domain schemas beyond
+the three reserved contract schemas (`vx_provision` / `local_authz` /
+`local_usage` are reserved names and must not be reused for domain data);
+role/permission catalog values; the contents of the capability matrix
+(`portals/app/app/entitlement/capability.ts`) and the model/skill catalog; the
+`20-specs/` product definition; domain guardrails.
+
+The distinction is mechanism versus content. vxtpl fills every exemplar slot with
+something real and working, so a copy has a worked example to edit rather than an
+empty file to guess at - but it edits the content and leaves the mechanism alone.
 
 ## Repository hygiene
 

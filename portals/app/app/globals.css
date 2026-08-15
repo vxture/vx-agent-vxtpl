@@ -1,6 +1,7 @@
-/* Design tokens + base styles for the vxtpl product surface. Plain CSS
-   (no framework) - keeps the template dependency-light. Light/dark aware via
-   prefers-color-scheme; no manual toggle exists yet. */
+/* Design tokens + base styles for the vxtpl product surface. Plain CSS, no
+   framework - one less dependency in the image and one less thing a product
+   copied from here has to adopt. Light/dark aware via prefers-color-scheme;
+   no manual toggle exists yet. */
 
 :root {
   --paper: #f6f7f9;
@@ -171,6 +172,43 @@ select {
 .topnav nav a:hover {
   color: var(--ink);
   text-decoration: none;
+  border-bottom-color: var(--border-strong);
+}
+
+/* Session control sits at the far end of the nav, away from the page links. */
+.topnav nav {
+  flex: 1;
+}
+
+.nav-session {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  color: var(--slate-faint);
+  max-width: 22ch;
+}
+
+.nav-session > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-session button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--slate);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.nav-session button:hover {
+  color: var(--ink);
   border-bottom-color: var(--border-strong);
 }
 

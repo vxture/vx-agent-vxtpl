@@ -10,6 +10,17 @@ test("findModel/findSkill look up by code", () => {
   assert.equal(findSkill("nope"), undefined);
 });
 
+test("every model code is an Atlas endpoint that actually routes", () => {
+  // An unknown endpointCode fails at call time with 404 ENDPOINT_NOT_ROUTABLE,
+  // never at build or deploy time, and Atlas offers no runtime way to validate
+  // the list. This test is the standing reminder: adding an entry here means
+  // the platform line has created that endpoint AND granted it to vxtpl.
+  const ROUTABLE = new Set(["chat/cheap", "chat/default", "chat/pro"]);
+  for (const m of MODEL_CATALOG) {
+    assert.ok(ROUTABLE.has(m.code), `${m.code} is not a known Atlas endpoint`);
+  }
+});
+
 test("gatedModels marks nothing allowed with no subscription", () => {
   const e = makeEntitlement("ws", "p", { tier: null });
   const gated = gatedModels(e);
@@ -29,7 +40,7 @@ test("gatedModels/gatedSkills allow strictly more at a higher tier", () => {
 
 test("gated options report the correct requiredTier hint", () => {
   const e = makeEntitlement("ws", "p", { tier: "free" });
-  const reasoning = gatedModels(e).find((m) => m.code === "chat/reasoning");
-  assert.equal(reasoning?.allowed, false);
-  assert.equal(reasoning?.requiredTier, "pro");
+  const pro = gatedModels(e).find((m) => m.code === "chat/pro");
+  assert.equal(pro?.allowed, false);
+  assert.equal(pro?.requiredTier, "pro");
 });

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
+import { SessionControl } from "./session-control";
 import "./globals.css";
 
 export const metadata = {
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   {l.label}
                 </a>
               ))}
+              <SessionControl />
             </nav>
           </header>
           {children}

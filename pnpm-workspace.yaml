@@ -1,7 +1,7 @@
-# pnpm workspace roots. The template ships no workspace packages yet; application
-# and shared packages are added in later batches (the app profile roots them under
-# portals/, per the governance source-directory slots). Keep this file present so
-# the repo is a pnpm workspace from day one.
+# pnpm workspace roots. The app profile roots packages under portals/, per the
+# governance source-directory slots: portals/app is the Next.js application
+# (@vxtpl/app) and portals/packages/* holds shared workspace packages
+# (@vxtpl/shared).
 packages:
   - "portals/*"
   - "portals/packages/*"

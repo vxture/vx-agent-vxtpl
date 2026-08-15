@@ -16,8 +16,18 @@ const PRIVATE_HOST_SUFFIX = [".ts.net", ".tailnet", ".internal"];
 function isPrivateHost(host: string): boolean {
   if (host === "localhost") return true;
   if (PRIVATE_V4.some((re) => re.test(host))) return true;
-  if (host === "::1") return true;
-  return PRIVATE_HOST_SUFFIX.some((s) => host.endsWith(s));
+  if (PRIVATE_HOST_SUFFIX.some((s) => host.endsWith(s))) return true;
+  // An IPv6 literal arrives from URL.hostname in BRACKETED form ("[::1]"), which
+  // is both why the loopback comparison needs the brackets and why the literal
+  // has to be settled here: it contains no dot, so the single-label rule below
+  // would otherwise treat every globally routable IPv6 address as internal.
+  if (host.startsWith("[")) return host === "[::1]";
+  // Single-label hostnames cannot resolve on public DNS - they are container DNS
+  // names (vxtpl-db, vxtpl-redis) or tailscale MagicDNS short names (worker-02,
+  // which is how the platform line publishes the Atlas and Runos base URLs).
+  // Rejecting them would refuse the documented internal endpoints while letting
+  // a genuinely public target through unnoticed.
+  return !host.includes(".") && host.length > 0;
 }
 
 /** Throws if the URL is not a safe internal target for a secret-bearing call. */

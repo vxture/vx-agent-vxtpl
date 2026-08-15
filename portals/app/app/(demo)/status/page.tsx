@@ -78,6 +78,20 @@ export default function StatusPage() {
       <p className="lede">Non-secret config presence + live channel probes across every platform-integration surface.</p>
       {gate && <p style={{ color: "var(--slate)", marginTop: "1rem" }}>{gate}</p>}
 
+      {status?.mockOnDeployedStage && (
+        <div
+          className="card"
+          style={{ marginTop: "1.2rem", borderColor: "var(--danger)", borderWidth: 1, borderStyle: "solid" }}
+        >
+          <h3 style={{ color: "var(--danger)" }}>Serving mock data on a deployed stage</h3>
+          <p style={{ fontSize: "0.88rem", color: "var(--slate)", lineHeight: 1.55 }}>
+            A platform base URL is missing, so entitlement or chat is answering from a mock resolver. Everything below
+            about tiers and models is fabricated. This state only persists because{" "}
+            <code>ALLOW_MOCK_ON_DEPLOY=on</code> is set - without it the app refuses to start.
+          </p>
+        </div>
+      )}
+
       {status && (
         <div style={{ marginTop: "1.6rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "0.9rem" }}>
           <div className="card">
@@ -126,6 +140,18 @@ export default function StatusPage() {
 
           <div className="card">
             <h3>
+              <span className={badgeClass(status.s2s.configured ? "ok" : "warn")}>
+                <span className="dot" />
+                {status.s2s.configured ? "ready" : "not configured"}
+              </span>
+              S2S token minting
+            </h3>
+            <Field k="issuer" v={status.s2s.issuer ?? "-"} />
+            <Field k="credential" v="the C1 OIDC client (no separate S2S secret)" />
+          </div>
+
+          <div className="card">
+            <h3>
               <span className={badgeClass(status.chat.resolver === "atlas" ? "ok" : "warn")}>
                 <span className="dot" />
                 {status.chat.resolver}
@@ -133,7 +159,18 @@ export default function StatusPage() {
               Chat - Atlas
             </h3>
             <Field k="atlas API" v={boolBadge(status.chat.atlasApiConfigured)} />
-            <Field k="S2S token" v={boolBadge(status.chat.atlasTokenConfigured)} />
+          </div>
+
+          <div className="card">
+            <h3>
+              <span className={badgeClass(status.capability.runosApiConfigured ? "ok" : "warn")}>
+                <span className="dot" />
+                {status.capability.runosApiConfigured ? "configured" : "off"}
+              </span>
+              Capability - Runos
+            </h3>
+            <Field k="runos API" v={boolBadge(status.capability.runosApiConfigured)} />
+            <Field k="mode" v="on-behalf-of only (its guard requires a user subject)" />
           </div>
 
           <div className="card">

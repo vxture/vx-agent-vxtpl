@@ -6,10 +6,10 @@ name: ci
 # Produces four of the five required status checks named in
 # docs/50-deployment/rebuild/main-ruleset.json: `quality-gate` / `build` /
 # `test-coverage` / `audit` (the fifth, `gitleaks`, is in secret-scan.yml). Job
-# names are a stable contract - renaming one breaks branch protection. In the
-# governance-shell batch `build` and `test-coverage` are green placeholders (no
-# app, no tests yet); later batches replace them with real work while keeping
-# the context names stable.
+# names are a stable contract - renaming one breaks branch protection. All four
+# do real work: `build` installs the workspace and produces the Next.js
+# standalone build, `test-coverage` runs the app's node:test suite, `audit` is
+# the osv-scanner SCA gate, `quality-gate` aggregates the static guardrails.
 
 on:
   pull_request:
@@ -170,4 +170,4 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Run tests
-        run: pnpm --filter @product-code/app test
+        run: pnpm --filter @vxtpl/app test

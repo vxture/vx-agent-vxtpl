@@ -1,14 +1,13 @@
-# Three-container stack for the app profile: <code>-app (Next.js) + <code>-redis
-# (RP session store) + <code>-db (business data). PROJECT_NAME drives the
-# compose project + container-name prefix so prod and beta never collide on one
-# host (prod=<code>-*, beta=<code>-beta-*). Backing services are internal-only;
-# only the app publishes a port. Structure/deploy details are exercised in the
-# deployment batch (batch E).
-name: ${PROJECT_NAME:-__PRODUCT_CODE__}
+# Three-container stack for vxtpl: vxtpl-app (Next.js) + vxtpl-redis (RP session
+# store) + vxtpl-db (business data). PROJECT_NAME drives the compose project +
+# container-name prefix, so a second stack on the same host never collides.
+# Backing services are internal-only; only the app publishes a port - 3210 on
+# worker02, from the operator .env (the container always listens on 3000).
+name: ${PROJECT_NAME:-vxtpl}
 
 services:
   app:
-    container_name: ${PROJECT_NAME:-__PRODUCT_CODE__}-app
+    container_name: ${PROJECT_NAME:-vxtpl}-app
     build:
       context: .
       dockerfile: portals/app/Dockerfile
@@ -19,7 +18,7 @@ services:
         GIT_SHA: ${GIT_SHA:-unknown}
         BUILD_TIME: ${BUILD_TIME:-unknown}
         DEPLOY_STAGE: ${DEPLOY_STAGE:-dev}
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-vxture}/${PRODUCT_CODE:-__PRODUCT_CODE__}-app:${IMAGE_TAG:-local}
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-vxture}/${PRODUCT_CODE:-vxtpl}-app:${IMAGE_TAG:-local}
     # Load the full operator .env into the app so ALL runtime config (OIDC,
     # platform client, webhook, INTERNAL_JOB_TOKEN, STATUS_PAGE, ...) reaches it -
     # not just the few keys in `environment:` below. APP_ENV_FILE is the absolute
@@ -30,7 +29,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      REDIS_URL: redis://${PROJECT_NAME:-__PRODUCT_CODE__}-redis:6379
+      REDIS_URL: redis://${PROJECT_NAME:-vxtpl}-redis:6379
       DATABASE_URL: ${DATABASE_URL:-}
     ports:
       - "${APP_PUBLISH_PORT:-3000}:3000"
@@ -46,7 +45,7 @@ services:
     restart: unless-stopped
 
   redis:
-    container_name: ${PROJECT_NAME:-__PRODUCT_CODE__}-redis
+    container_name: ${PROJECT_NAME:-vxtpl}-redis
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -55,14 +54,14 @@ services:
     restart: unless-stopped
 
   db:
-    container_name: ${PROJECT_NAME:-__PRODUCT_CODE__}-db
+    container_name: ${PROJECT_NAME:-vxtpl}-db
     image: postgres:16-alpine
     environment:
       # The container superuser is the DB OWNER, NOT the service role. The DDL
-      # (db-init, as this owner) creates the least-privilege <code>_svc role that
+      # (db-init, as this owner) creates the least-privilege vxtpl_svc role that
       # the app connects as via DATABASE_URL (product_240 section 2.7: connect
-      # identity = <code>_svc, never owner-direct).
-      POSTGRES_DB: ${POSTGRES_DB:-vxturebiz_${PRODUCT_CODE_SNAKE:-__PRODUCT_CODE_SNAKE__}_prod}
+      # identity = vxtpl_svc, never owner-direct).
+      POSTGRES_DB: ${POSTGRES_DB:-vxturebiz_${PRODUCT_CODE_SNAKE:-vxtpl}_prod}
       POSTGRES_USER: ${POSTGRES_DB_OWNER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
@@ -72,4 +71,4 @@ services:
 
 networks:
   appnet:
-    name: ${PROJECT_NAME:-__PRODUCT_CODE__}-net
+    name: ${PROJECT_NAME:-vxtpl}-net

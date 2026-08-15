@@ -38,7 +38,7 @@ export function getOidcConfig(): OidcConfig {
   const issuer = env("OIDC_ISSUER", "https://accounts.vxture.com").replace(/\/$/, "");
   return {
     issuer,
-    clientId: env("OIDC_CLIENT_ID", "__PRODUCT_CODE__"),
+    clientId: env("OIDC_CLIENT_ID", "vxtpl"),
     clientSecret: env("OIDC_CLIENT_SECRET"),
     redirectUri: env("OIDC_REDIRECT_URI"),
     postLogoutRedirectUri: env("OIDC_POST_LOGOUT_REDIRECT_URI"),

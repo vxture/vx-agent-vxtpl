@@ -1,5 +1,5 @@
 {
-  "name": "@product-code/app",
+  "name": "@vxtpl/app",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -7,13 +7,13 @@
     "prisma:generate": "prisma generate",
     "build": "prisma generate && next build",
     "start": "next start",
-    "type-check": "tsc --noEmit",
+    "type-check": "prisma generate && tsc --noEmit",
     "test": "node --import tsx --test --experimental-test-coverage \"app/**/*.test.ts\""
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@product-code/shared": "workspace:*",
+    "@vxtpl/shared": "workspace:*",
     "@vxture/shared": "^1.5.0",
     "ioredis": "^5.4.0",
     "jose": "^5.9.0",

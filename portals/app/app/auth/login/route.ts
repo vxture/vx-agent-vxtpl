@@ -11,6 +11,18 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request): Promise<Response> {
   const cfg = getOidcConfig();
+  // Without a client secret and redirect URI, the 302 below lands the user on an
+  // IdP error page with no way back. Refuse here instead, where the reason is
+  // visible - C1 not being provisioned yet is a deployment state, not a bug.
+  if (!cfg.enabled || !cfg.clientSecret || !cfg.redirectUri) {
+    return NextResponse.json(
+      {
+        error: "sign-in is not configured on this deployment",
+        detail: "OIDC_RP_ENABLED must be on, with OIDC_CLIENT_SECRET and OIDC_REDIRECT_URI set",
+      },
+      { status: 503 },
+    );
+  }
   const url = new URL(req.url);
   const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
 

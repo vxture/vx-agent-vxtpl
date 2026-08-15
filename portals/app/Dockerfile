@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for the Next.js standalone app in a pnpm workspace.
 # Build context = repo root (so the workspace and lockfile are visible).
-# Produces the single owned image <code>-app.
+# Produces the single owned image vxtpl-app.
 
 FROM node:22-alpine AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
@@ -19,7 +19,7 @@ RUN --mount=type=secret,id=node_auth_token \
     --mount=type=cache,id=pnpm,target=/pnpm/store \
     NODE_AUTH_TOKEN="$(cat /run/secrets/node_auth_token 2>/dev/null || true)" \
     pnpm install --frozen-lockfile
-RUN pnpm --filter @product-code/app build
+RUN pnpm --filter @vxtpl/app build
 
 # --- runner (Next standalone, non-root, never migrates) ---
 FROM base AS runner

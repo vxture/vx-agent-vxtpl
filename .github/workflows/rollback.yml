@@ -26,9 +26,7 @@ permissions:
   packages: read
 
 env:
-  # Product code source: PRODUCT_CODE repo variable (template=vxtpl), else the
-  # __PRODUCT_CODE__ literal an instantiated product repo already replaced.
-  PRODUCT_CODE: ${{ vars.PRODUCT_CODE || '__PRODUCT_CODE__' }}
+  PRODUCT_CODE: vxtpl
 
 jobs:
   rollback:

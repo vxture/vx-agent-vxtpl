@@ -4,10 +4,9 @@ import { GET } from "./route";
 
 // The identity-block shape and honest-fallback behavior (025 section 3/6) are
 // @vxture/shared's own responsibility (its own test suite covers that). This
-// tests OUR wiring: the route calls buildHealthIdentity with the right
-// service/product (matching the un-instantiated template's __PRODUCT_CODE__
-// placeholder), and honest fallbacks flow through end to end when build env is
-// absent - no fabrication (025 section 6).
+// tests OUR wiring: the route calls buildHealthIdentity with vxtpl's real
+// service/product identity, and honest fallbacks flow through end to end when
+// the build env is absent - no fabrication (025 section 6).
 
 const PROV_KEYS = ["APP_VERSION", "GIT_SHA", "DEPLOY_STAGE", "BUILD_TIME"] as const;
 
@@ -32,8 +31,8 @@ test("GET wires service/product from BRAND and returns the full identity block",
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, "ok");
-    assert.equal(body.service, "__PRODUCT_CODE__-app");
-    assert.equal(body.product, "__PRODUCT_CODE__");
+    assert.equal(body.service, "vxtpl-app");
+    assert.equal(body.product, "vxtpl");
     for (const k of ["version", "gitSha", "stage", "buildTime", "time"]) {
       assert.equal(typeof body[k], "string", `${k} must be a string`);
     }
