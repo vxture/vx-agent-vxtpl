@@ -17,3 +17,4 @@ guardrail still passes).
 | `80-2608131530-vxtpl-repo-renamed.md` | 2608131530 | platform line | repo renamed vxture-template -> vxture-vxtpl (informational) | closed |
 | `90-2608131600-vxtpl-c3-webhook-secret-received.md` | 2608131600 | platform line | C3 provisioning webhook secret set on worker02, verified live | closed |
 | `100-2608160200-vxtpl-product-grade-exemplar-and-s2s-correction.md` | 2608160200 | platform line | vxtpl repositioned as a deployed product + reference build (supersedes 80's positioning); withdraws the static-S2S-token asks in 60/70 as structurally impossible; asks for registration + coverage instead | open |
+| `110-2608160600-vxtpl-atlas-runos-integration-questions.md` | 2608160600 | Atlas line, Runos line | integration questions filed as vxture-runos#116 (delegation_token aud contract) and vxture-atlas#198 (product-endpoint grants, real production endpointCodes, no consumer-side catalog self-check) | open |
