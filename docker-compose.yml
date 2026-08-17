@@ -3,11 +3,21 @@
 # container-name prefix, so a second stack on the same host never collides.
 # Backing services are internal-only; only the app publishes a port.
 #
-# ONE NUMBER, NOT TWO. The published port, the container-internal port, and the
-# in-code fallback default are all the same value, per the port registry's rule
-# R3 - the earlier split (publish X, listen 3000) is what made it possible for a
-# repo to state a port that was true nowhere. The number itself is allocated by
-# the registry, which is the only source that may assign one.
+# ONE NUMBER, AND ONE VARIABLE. Registry rule R3 makes three things equal - the
+# dev port, the in-code fallback default, and the port the app listens on INSIDE
+# the container. It deliberately does NOT include the published host port, which
+# stays a variable: that is what lets a prod and a beta stack of the same product
+# share a host (arda publishes 3230 and 3231 into two containers that both listen
+# on 3230). The number is allocated by the port registry, the only source that
+# may assign one.
+#
+# The container side is a LITERAL on purpose. Making it a variable too - which
+# this file briefly did - means the port the app listens on depends on an env
+# value reaching every consumer of it, and on 2026-08-17 one consumer did not get
+# it: deploy.sh probed the default while the container listened on the operator's
+# value, and reported a health failure against a container Docker had already
+# marked healthy. A literal cannot drift. Every other product on the deploy host
+# (atlas 3100, runos 3120, arda 3230) is written this way.
 name: ${PROJECT_NAME:-vxtpl}
 
 services:
@@ -33,16 +43,16 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      PORT: "${APP_PUBLISH_PORT:-4000}"
+      PORT: "4000"
       REDIS_URL: redis://${PROJECT_NAME:-vxtpl}-redis:6379
       DATABASE_URL: ${DATABASE_URL:-}
     ports:
-      - "${APP_PUBLISH_PORT:-4000}:${APP_PUBLISH_PORT:-4000}"
+      - "${APP_PUBLISH_PORT:-4000}:4000"
     depends_on:
       - redis
       - db
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:${APP_PUBLISH_PORT:-4000}/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3

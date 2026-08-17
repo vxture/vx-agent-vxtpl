@@ -29,11 +29,18 @@ WORKDIR /app
 # RUNTIME by the liveness route - server-side env, NOT NEXT_PUBLIC (stays out of
 # the client bundle). HOSTNAME=0.0.0.0 keeps loopback healthchecks reachable
 # (020 section 3: Next standalone otherwise binds the container ID only).
+#
+# PORT/EXPOSE are vxtpl's allocated number, not a generic 3000. One number: the
+# app listens on, is published on, and is proxied to the same port, so there is
+# no mapping anywhere that can be right in one place and stale in another. The
+# allocation comes from the org port registry, which is the only source allowed
+# to assign one; compose overrides PORT at runtime from the deploy host's env,
+# and this default is what a bare `docker run` gets.
 ARG APP_VERSION=dev
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 ARG DEPLOY_STAGE=dev
-ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 \
+ENV NODE_ENV=production PORT=4000 HOSTNAME=0.0.0.0 \
     APP_VERSION=${APP_VERSION} \
     GIT_SHA=${GIT_SHA} \
     BUILD_TIME=${BUILD_TIME} \
@@ -43,5 +50,5 @@ COPY --from=builder /repo/portals/app/.next/standalone ./
 COPY --from=builder /repo/portals/app/.next/static ./portals/app/.next/static
 COPY --from=builder /repo/portals/app/public ./portals/app/public
 USER nextjs
-EXPOSE 3000
+EXPOSE 4000
 CMD ["node", "portals/app/server.js"]
