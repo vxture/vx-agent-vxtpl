@@ -194,13 +194,31 @@ The fixes are structural rather than a set of corrected values:
   to nothing. Reported on `vxture/vxture-platform#268`.
 - Read the installed `dist/index.d.ts` for the component list, never the
   monorepo source - the two have been out of step at every version so far.
-- **The umbrella cannot be imported from a server component.** `dist/index.mjs`
-  is `"use client"` AND uses `export *` to re-export design-ui and
-  design-tokens; Next.js rejects that combination outright ("It's currently
-  unsupported to use `export *` in a client boundary"). Every server component
-  that wants a DS component has to go through a local client module -
-  `portals/app/app/ds.tsx` here, which re-exports by name and carries the
-  reason. Also on #268.
+- **Neither entry can be imported from a server component**, for two unrelated
+  reasons, so every DS import in this repo goes through one local client module
+  (`portals/app/app/ds.tsx`).
+  - The umbrella's `dist/index.mjs` is `"use client"` AND uses `export *`;
+    Next.js rejects that combination outright ("It's currently unsupported to
+    use `export *` in a client boundary").
+  - `dist/server.mjs` - the subpath whose entire purpose is React Server
+    Components - transitively imports `@phosphor-icons/react`, which calls
+    `createContext` at module scope and ships no `"use client"` directive. In an
+    RSC graph that is `TypeError: (0 , react.createContext) is not a function`
+    and a 500. Both on #268.
+
+  Worth recording how that second one was found, because it is the argument for
+  rendering the page rather than reading the diff: `tsc` was clean, all 147
+  tests passed **including** the guard that every imported name exists at
+  runtime, and five independent reviews of the migration diff came back
+  faithful. Two of six pages were returning 500 the whole time. The three
+  `"use client"` pages were fine, which is precisely the shape of the defect -
+  the failure is invisible to every check that does not execute a server render.
+
+- **The server subpath's types promise more than it exports.** `server.d.ts`
+  re-exports the whole client surface; `server.mjs` re-exports only
+  design-ui/server. So `import { Button } from "@vxture/design-system/server"`
+  type-checks with zero errors and is `undefined` at render. This is the one DS
+  defect a machine can catch, so `design-system.test.ts` catches it. On #268.
 - **Dark mode is a class, not a media query.** The DS keys dark on `.dark` on
   `<html>` and never reads `prefers-color-scheme` - zero occurrences in its
   whole CSS graph. vxtpl's stylesheet used the media query, so after the 5.x
