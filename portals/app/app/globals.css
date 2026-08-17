@@ -277,6 +277,68 @@ select {
   word-break: break-word;
 }
 
+/* The tier band inside the matrix. A `th scope="colgroup"` rather than a styled
+ * `td`, so a screen reader announces which tier the following rows belong to
+ * instead of reading a stray cell. */
+.ref .tier-heading {
+  background: var(--accent);
+  color: var(--primary-text);
+  font-weight: 700;
+  font-size: var(--label-sm-font-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+/* --- chat toolbar ---------------------------------------------------------
+ * Model and skill live inside the conversation card, on one row, as pills. The
+ * pill is deliberately not a DS control: the DS's NativeSelect is a form field
+ * with a field's weight, and two of them in a toolbar read as a settings panel
+ * that happens to sit above a chat. Values are DS tokens even so, so the pills
+ * re-brand with everything else.
+ */
+
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.pill-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  padding: 0.28rem 0.75rem 0.28rem 0.85rem;
+  font-size: var(--label-sm-font-size);
+  color: var(--foreground);
+}
+.pill-select .pill-label {
+  color: var(--muted-foreground);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pill-select select {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  max-width: 160px;
+}
+.pill-select select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+  border-radius: 4px;
+}
+
 /* --- table --- */
 
 .table-wrap {

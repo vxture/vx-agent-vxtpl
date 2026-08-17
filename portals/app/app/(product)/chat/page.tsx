@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  NativeSelect,
   Stack,
   StatusBadge,
 } from "../../ds";
@@ -50,42 +49,39 @@ function tierTone(tier: string | null): "neutral" | "warning" | "brand" {
 }
 
 /**
- * The catalog has not arrived yet.
+ * Model and skill, as toolbar pills rather than sidebar cards.
  *
- * A disabled NativeSelect rather than a styled span, so the placeholder is the
- * same control the visitor is about to get. The old version wore the
- * hand-written `.select` class, which stopped matching the moment the real
- * selects became DS components - a placeholder that does not resemble what it
- * stands in for is worse than none.
+ * A picker parked in a sidebar reads as configuration you set once. These are a
+ * per-turn choice, so they sit next to the thing they change. The `label` is
+ * part of the control rather than a heading above it, which is what lets two of
+ * them share one row without either looking like a section.
+ *
+ * An option the tier does not cover stays VISIBLE and disabled, carrying the
+ * tier it needs. Hiding it would answer "why can I not pick that" with silence.
  */
-function LoadingSelect() {
-  return (
-    <NativeSelect value="" onChange={() => undefined} disabled>
-      <option value="">loading...</option>
-    </NativeSelect>
-  );
-}
-
-function OptionSelect({
+function PillSelect({
+  label,
   options,
   value,
   onChange,
-  disabled,
 }: {
+  label: string;
   options: GatedOption[];
   value: string;
   onChange: (v: string) => void;
-  disabled?: boolean;
 }) {
   return (
-    <NativeSelect value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
-      {options.map((o) => (
-        <option key={o.code} value={o.code} disabled={!o.allowed}>
-          {o.label}
-          {!o.allowed ? ` \u{1F512} requires ${o.requiredTier ?? "?"}` : ""}
-        </option>
-      ))}
-    </NativeSelect>
+    <span className="pill-select">
+      <span className="pill-label">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.code} value={o.code} disabled={!o.allowed}>
+            {o.label}
+            {!o.allowed ? ` \u{1F512} ${o.requiredTier ?? "?"}` : ""}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
 
@@ -182,11 +178,6 @@ export default function ChatPage() {
         <StatusBadge tone={tierTone(ctx?.tier ?? null)} dot>
           {ctx ? tierLabel(ctx.tier) : "..."}
         </StatusBadge>
-        {turn && (
-          <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
-            {turn.mode === "atlas" ? `Atlas - ${turn.modelCode}` : "Mock mode"}
-          </StatusBadge>
-        )}
       </div>
       <p className="lede">
         A tier-gated turn against the platform&apos;s model gateway. A selected skill runs as a real Runos
@@ -210,11 +201,38 @@ export default function ChatPage() {
         </Card>
       )}
 
-      <div className="split" style={{ marginTop: "1.4rem" }}>
-        {/* The transcript scrolls to the card's own edges and the composer sits
-            flush against its bottom rule, so the card contributes the frame only -
-            its padding and inter-child gap are zeroed rather than worked around. */}
+      {/* One conversation column, model and skill as a toolbar inside the card -
+          the layout every chat product converged on, and for a reason: a model
+          picker parked in a sidebar reads as configuration you set once, when it
+          is really a per-turn choice that belongs next to the thing it changes.
+          The transcript scrolls to the card's own edges and the composer sits
+          flush against its bottom rule, so the card contributes the frame only -
+          its padding and inter-child gap are zeroed rather than worked around. */}
+      <div style={{ marginTop: "1.4rem" }}>
         <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden" }}>
+          <div className="chat-toolbar">
+            {ctx ? (
+              <>
+                <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
+                <PillSelect
+                  label="Skill"
+                  options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
+                  value={skillCode}
+                  onChange={setSkillCode}
+                />
+              </>
+            ) : (
+              <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
+            )}
+            {turn && (
+              <span style={{ marginLeft: "auto" }}>
+                <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
+                  {turn.mode === "atlas" ? "Atlas" : "Mock"}
+                </StatusBadge>
+              </span>
+            )}
+          </div>
+
           <div
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
@@ -232,7 +250,7 @@ export default function ChatPage() {
                   border: m.role === "assistant" ? "1px solid var(--border)" : "none",
                   borderRadius: 12,
                   padding: "0.55rem 0.85rem",
-                  maxWidth: "70%",
+                  maxWidth: "min(78%, 640px)",
                   whiteSpace: "pre-wrap",
                   fontSize: "0.92rem",
                   lineHeight: 1.5,
@@ -258,56 +276,43 @@ export default function ChatPage() {
           </div>
         </Card>
 
-        <Stack gap="md">
-          <Card>
-            <CardHeader>
-              <CardTitle>Model</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ctx ? (
-                <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
-              ) : (
-                <LoadingSelect />
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Skill</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ctx ? (
-                <OptionSelect
-                  options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
-                  value={skillCode}
-                  onChange={setSkillCode}
-                />
-              ) : (
-                <LoadingSelect />
-              )}
-              {turn?.skill && <SkillReport skill={turn.skill} />}
-            </CardContent>
-          </Card>
-          {turn?.usage && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Last turn</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
-                  <div>
-                    served by <code>{turn.modelCode}</code>
+        {/* What the last turn actually did, under the conversation rather than
+            beside it: it is a result, so it belongs downstream of the thing that
+            produced it and it should not occupy width while there is nothing to
+            report. */}
+        {(turn?.skill || turn?.usage) && (
+          <Stack gap="md" style={{ marginTop: "1rem" }}>
+            {turn.skill && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Skill</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SkillReport skill={turn.skill} />
+                </CardContent>
+              </Card>
+            )}
+            {turn.usage && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Last turn</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
+                    <div>
+                      served by <code>{turn.modelCode}</code>
+                    </div>
+                    <div>
+                      {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
+                      {turn.usage.totalTokens} tokens
+                    </div>
+                    {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
                   </div>
-                  <div>
-                    {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
-                    {turn.usage.totalTokens} tokens
-                  </div>
-                  {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </Stack>
+                </CardContent>
+              </Card>
+            )}
+          </Stack>
+        )}
       </div>
 
       {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}

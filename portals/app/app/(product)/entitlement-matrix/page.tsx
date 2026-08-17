@@ -15,16 +15,33 @@ interface Row {
   bundled: boolean;
 }
 
-function rows(): Row[] {
-  const out: Row[] = [];
-  for (const tier of TIERS) {
-    for (const status of SUBSCRIPTION_STATUSES) {
-      out.push({ label: `${tier} / ${status}`, tier, status, bundled: false });
-    }
-  }
-  out.push({ label: "null / null (never subscribed)", tier: null, status: null, bundled: false });
-  out.push({ label: "bundled only (no direct purchase)", tier: null, status: null, bundled: true });
-  return out;
+interface Group {
+  heading: string;
+  rows: Row[];
+}
+
+/**
+ * Grouped by tier, one `tbody` each.
+ *
+ * Thirty-two rows of `tier / status` reads as a wall: the tier repeats six times
+ * running and the eye has to re-parse it on every line to find where one tier
+ * ends. Hoisting it into a heading row leaves the first column carrying only
+ * what actually varies within the group, which is the status.
+ */
+function groups(): Group[] {
+  return [
+    ...TIERS.map((tier) => ({
+      heading: tier,
+      rows: SUBSCRIPTION_STATUSES.map((status) => ({ label: status, tier, status, bundled: false })),
+    })),
+    {
+      heading: "no subscription",
+      rows: [
+        { label: "never subscribed", tier: null, status: null, bundled: false },
+        { label: "bundled only (no direct purchase)", tier: null, status: null, bundled: true },
+      ],
+    },
+  ];
 }
 
 // A denied gate is the expected outcome for most of this matrix, not a fault, so
@@ -38,10 +55,13 @@ function yesNo(b: boolean) {
 }
 
 export default function EntitlementMatrixPage() {
-  const data = rows().map((r) => {
-    const e = makeEntitlement("ws_demo", "vxtpl", { tier: r.tier, status: r.status, bundled: r.bundled });
-    return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
-  });
+  const data = groups().map((g) => ({
+    ...g,
+    rows: g.rows.map((r) => {
+      const e = makeEntitlement("ws_demo", "vxtpl", { tier: r.tier, status: r.status, bundled: r.bundled });
+      return { ...r, productAccess: hasProductAccess(e), dataAccess: hasDataAccess(e), cta: ctaFor(e) };
+    }),
+  }));
   return (
     <main className="page">
       <Stack gap="xs">
@@ -60,27 +80,34 @@ export default function EntitlementMatrixPage() {
             <table className="ref">
               <thead>
                 <tr>
-                  <th>tier / status (bundled)</th>
+                  <th>status (bundled)</th>
                   <th>UI access</th>
                   <th>data access</th>
                   <th>CTA</th>
                 </tr>
               </thead>
-              <tbody>
-                {data.map((r) => (
-                  <tr key={r.label}>
-                    <td>
-                      {r.label}
-                      {r.bundled ? " [bundled]" : ""}
-                    </td>
-                    <td>{yesNo(r.productAccess)}</td>
-                    <td>{yesNo(r.dataAccess)}</td>
-                    <td>
-                      <span className="mono">{r.cta}</span>
-                    </td>
+              {data.map((g) => (
+                <tbody key={g.heading}>
+                  <tr>
+                    <th colSpan={4} scope="colgroup" className="tier-heading">
+                      {g.heading}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {g.rows.map((r) => (
+                    <tr key={r.label}>
+                      <td>
+                        {r.label}
+                        {r.bundled ? " [bundled]" : ""}
+                      </td>
+                      <td>{yesNo(r.productAccess)}</td>
+                      <td>{yesNo(r.dataAccess)}</td>
+                      <td>
+                        <span className="mono">{r.cta}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         </Section>
