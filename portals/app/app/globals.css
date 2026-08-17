@@ -13,7 +13,6 @@
  */
 @import "@vxture/design-system/styles/globals.css";
 @import "@vxture/design-system/styles/brands/vxture.css";
-@source "../node_modules/@vxture/design-system/dist";
 
 /* --- vxtpl's own surface -------------------------------------------------
  * Everything below is vxtpl's, loaded after the DS so it wins on the classes

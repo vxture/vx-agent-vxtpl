@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AuthPrimaryButton, ShellBrand } from "@vxture/design-system";
 import "./gate.css";
 import { subscribeUrl, type Intent } from "../entitlement/deeplink";
 import type { Cta } from "../entitlement/types";
@@ -90,27 +89,30 @@ export function ProductGate({ productName, destination, tagline }: ProductGatePr
       <div className="vx-gate__wash" aria-hidden="true" />
 
       <section className="vx-gate__panel">
-        <ShellBrand label={productName} className="vx-gate__brand" />
+        {/* The DS's own brand lockup classes, which ship as real CSS in the
+            package - no component bundle to scan, so no path to reach into. */}
+        <div className="vx-brand-lockup vx-gate__brand">
+          <span className="vx-brand-name">{productName}</span>
+        </div>
 
         <p className="vx-gate__message">{view.message}</p>
 
         {view.action ? (
           <a className="vx-gate__action" href={view.action.href}>
-            <AuthPrimaryButton loading={false} label={view.action.label} loadingLabel={view.action.label} />
+            {view.action.label}
           </a>
         ) : (
-          <div className="vx-gate__action">
-            <AuthPrimaryButton
-              loading={view.pending}
-              label={view.idleLabel}
-              loadingLabel="验证中"
-              disabled={!view.pending}
-              disabledLabel={view.idleLabel}
-            />
-          </div>
+          // No action means there is nothing this visitor can do from here -
+          // either the check is still running, or the answer is one only an
+          // operator or an admin can change. A disabled button says so without
+          // offering a door that leads nowhere.
+          <button className="vx-gate__action" type="button" disabled aria-busy={view.pending}>
+            {view.pending && <span className="vx-gate__spinner" aria-hidden="true" />}
+            {view.idleLabel}
+          </button>
         )}
 
-        <p className="vx-gate__hint">{view.hint ?? (tagline || " ")}</p>
+        <p className="vx-gate__hint">{view.hint ?? tagline ?? ""}</p>
       </section>
     </main>
   );

@@ -58,13 +58,45 @@ Three details are contractual rather than stylistic:
 2. **Globals first, then exactly one brand entry.** Two brand entries, or a
    local copy of brand tokens, is how a product ends up with a palette that is
    neither the platform's nor its own.
-3. **`@source "../node_modules/@vxture/design-system/dist"`.** Tailwind v4 only
-   generates utilities it can see, and the DS components carry theirs inside
-   their compiled `dist`, which Tailwind does not scan by default. Without this
-   line the DS's own BEM rules still land while every utility its components put
-   on the DOM (`p-6`, `flex-col-reverse`, ...) is silently absent - components
-   render unstyled in a way that looks like a broken import rather than a
-   missing scan path. This was measured, not assumed.
+3. **Package specifiers only - never a path into the package.** Every reference
+   is `@vxture/design-system[/subpath]`, resolved through the package's declared
+   exports. A repo that reaches into `node_modules/@vxture/design-system/...`
+   has taken a dependency on the package's internal layout and on the
+   installer's, neither of which the package promises to keep.
+
+## What that third rule costs, and why it still holds
+
+vxtpl consumes the DS's **published CSS** - tokens, brand lockup classes,
+component styles - and not its React components.
+
+That is not a preference. Tailwind v4 only generates utilities it can see in a
+scanned source, and it excludes `node_modules` by default. The DS's React
+components carry their utilities inside their compiled bundle, so making them
+render requires `@source` pointing at a path inside `node_modules` - and
+`@source` takes a path pattern, with no package-specifier form (verified against
+tailwindcss 4.3.3: a bare `@source "@vxture/design-system"` silently matches
+nothing).
+
+So using the components requires breaking rule 3. Measured, with the `@source`
+line removed: `w-full`, `animate-spin`, `rounded-full`, `border-t-transparent`,
+`inline-flex`, `items-center` are all absent from the built CSS - every utility
+`AuthPrimaryButton` and `ShellBrand` need. The DS's hand-written component layer
+(`.vx-brand-lockup`, `.vx-auth-*`) is unaffected, because that ships as real CSS
+in `src/styles` and arrives through the package import.
+
+The published package is therefore not self-sufficient for a consumer installing
+it from the registry. That is a defect in the DS, not a decision for a product
+repo to work around: per CLAUDE.md, a gap like this is fixed upstream first. It
+is filed as `vxture/vxture-platform#268`. The fix is for the package to either
+ship precompiled component CSS or register its own sources; once it does, vxtpl
+adopts the components without a path and this section becomes history.
+
+The cost of holding the line is real and worth naming: the fleet's reference
+product is not exercising the DS's component layer, so a regression there has no
+consumer catching it. That is a worse trade than it looks only if the alternative
+were free - it is not. A path into `node_modules` copied into every product repo
+makes the DS's internal layout a fleet-wide contract that nobody agreed to and
+one refactor breaks everywhere at once.
 
 vxtpl's existing stylesheet is loaded after the DS and keeps the classes it
 already owns. It is being migrated surface by surface, not deleted in one move -

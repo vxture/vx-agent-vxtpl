@@ -1,14 +1,21 @@
 /* The product front door.
  *
- * Colour, radius, shadow and type all come from DS tokens - nothing here picks
- * a hex value. That is what makes the gate inherit a product's brand when the
- * repo is copied and its brand entry swapped: the layout is vxtpl's, the palette
- * is never vxtpl's.
+ * Every value here is a design-system token, reached through the package's
+ * published stylesheet (`@vxture/design-system/styles/globals.css`). Nothing
+ * picks a hex, a radius or a duration of its own, and nothing reaches into the
+ * package's files - which is what lets a copied product inherit its own brand
+ * by swapping one import line.
+ *
+ * The brand lockup uses the DS's own `.vx-brand-*` classes rather than a
+ * hand-drawn mark. The button is vxtpl's, built from DS tokens: the DS's React
+ * Button carries Tailwind utilities inside its compiled bundle, and generating
+ * those would require pointing Tailwind at a path inside node_modules. See
+ * ADR-004 for why that trade lands here.
  *
  * The drifting flow lines are the one decorative element kept from the original
- * template. They are `aria-hidden`, they stop entirely under
- * `prefers-reduced-motion`, and they sit behind a radial wash so text contrast
- * never depends on where a line happens to fall.
+ * template. They are aria-hidden, stop entirely under prefers-reduced-motion,
+ * and sit behind a radial wash so text contrast never depends on where a line
+ * happens to fall.
  */
 
 .vx-gate {
@@ -17,7 +24,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--color-background, var(--paper));
+  background: var(--vx-color-page, var(--vx-color-background));
 }
 
 .vx-gate__flow {
@@ -34,10 +41,10 @@
 
 .vx-gate__flow path {
   fill: none;
-  stroke: var(--color-border, var(--border-strong));
+  stroke: var(--vx-color-border);
   stroke-width: 1.2;
   stroke-linecap: round;
-  animation: vx-gate-drift 18s ease-in-out infinite alternate;
+  animation: vx-gate-drift 18s var(--vx-ease-standard, ease-in-out) infinite alternate;
 }
 
 .vx-gate__flow path:nth-child(2) {
@@ -62,16 +69,16 @@
   }
 }
 
-/* The wash keeps the panel legible over the lines without hiding them. */
+/* Keeps the panel legible over the lines without hiding them. */
 .vx-gate__wash {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: radial-gradient(
     circle at 50% 48%,
-    var(--color-background, var(--paper)) 0%,
-    color-mix(in srgb, var(--color-background, var(--paper)) 78%, transparent) 27%,
-    color-mix(in srgb, var(--color-background, var(--paper)) 25%, transparent) 58%,
+    var(--vx-color-page, var(--vx-color-background)) 0%,
+    color-mix(in srgb, var(--vx-color-page, var(--vx-color-background)) 78%, transparent) 27%,
+    color-mix(in srgb, var(--vx-color-page, var(--vx-color-background)) 25%, transparent) 58%,
     transparent 76%
   );
 }
@@ -80,46 +87,104 @@
   position: relative;
   width: min(390px, calc(100vw - 48px));
   text-align: center;
-  /* Sits slightly above centre: optically centred rather than mathematically,
-     since the eye reads a lone panel as low when it is exactly halfway. */
+  /* Optically centred rather than mathematically: the eye reads a lone panel as
+     sitting low when it is exactly halfway. */
   transform: translateY(-3vh);
 }
 
 .vx-gate__brand {
-  display: inline-flex;
+  justify-content: center;
   margin-bottom: clamp(2.5rem, 9vh, 4.75rem);
-  font-size: 1.3rem;
-  font-weight: 650;
-  letter-spacing: -0.025em;
 }
 
 .vx-gate__message {
-  margin: 0 auto 2.5rem;
+  margin: 0 auto var(--vx-space-2xl, 2rem);
   max-width: 30ch;
-  color: var(--color-muted-foreground, var(--slate));
-  font-size: 0.95rem;
+  color: var(--vx-color-text-secondary);
+  font-size: var(--vx-typography-body-size);
   line-height: 1.7;
 }
 
+/* --- the action ---------------------------------------------------------
+ * One element with two jobs: a disabled button while verifying, an anchor once
+ * there is somewhere to go. Both wear this class so the box does not resize as
+ * the gate resolves.
+ */
 .vx-gate__action {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vx-space-sm);
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 var(--vx-space-lg);
+  border: 0;
+  border-radius: var(--vx-radius-lg);
+  background: var(--vx-color-primary);
+  color: var(--vx-color-text-on-primary, #fff);
+  font-family: inherit;
+  font-size: var(--vx-typography-body-size);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--vx-shadow-sm);
+  transition:
+    background var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease),
+    box-shadow var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease),
+    transform var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease);
+}
+
+a.vx-gate__action:hover {
+  background: var(--vx-color-primary-hover, var(--vx-color-primary));
+  box-shadow: var(--vx-shadow-md);
+  transform: translateY(-1px);
   text-decoration: none;
 }
-.vx-gate__action:hover {
-  text-decoration: none;
+
+a.vx-gate__action:active {
+  transform: translateY(0);
+}
+
+.vx-gate__action:disabled {
+  cursor: default;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.vx-gate__action:focus-visible {
+  outline: none;
+  box-shadow: var(--vx-shadow-focus-ring, 0 0 0 3px var(--vx-color-ring));
+}
+
+/* The verifying indicator. Sized in em so it tracks the label. */
+.vx-gate__spinner {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--vx-radius-full);
+  animation: vx-gate-spin var(--vx-duration-spinner, 0.8s) linear infinite;
+}
+
+@keyframes vx-gate-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .vx-gate__hint {
-  /* Reserves its line even when empty, so the panel does not jump as the gate
+  /* Holds its line even when empty, so the panel does not jump as the gate
      moves from verifying to resolved. */
   min-height: 1.5em;
-  margin: 1.4rem 0 0;
-  font-size: 0.78rem;
-  color: var(--color-muted-foreground, var(--slate-faint));
+  margin: var(--vx-space-lg, 1.4rem) 0 0;
+  font-size: var(--vx-typography-caption-size, 0.78rem);
+  color: var(--vx-color-text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vx-gate__flow path {
+  .vx-gate__flow path,
+  .vx-gate__spinner {
     animation: none;
   }
 }
