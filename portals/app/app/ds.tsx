@@ -24,6 +24,48 @@ import { ThemeProvider, themeBootstrapScript } from "@vxture/design-system";
 
 export { ShellBrand, ShellBootScreen } from "@vxture/design-system";
 
+// The layout and surface components, re-exported for the same reason with a
+// different cause.
+//
+// `@vxture/design-system/server` exists so React Server Components can use
+// these, and it cannot: its chunk imports icons from `@phosphor-icons/react`,
+// which calls `createContext` at module scope and ships NO `"use client"`
+// directive. Pulled into an RSC graph that throws on sight -
+// `TypeError: (0 , react.createContext) is not a function` - and the page 500s.
+//
+// Nothing catches it earlier. `tsc` is clean, the names all exist at runtime
+// (`design-system.test.ts` checks that and passes), and the component diff
+// reviews cleanly. Only rendering the page finds it.
+//
+// Re-exporting through this client boundary puts the icon library where it can
+// legally live. The pages stay server components - only the rendering of these
+// presentational shells moves - so server-only work like `serviceIdentity()`
+// is unaffected. Reported on vxture/vxture-platform#268.
+export {
+  Banner,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Grid,
+  Section,
+  Stack,
+  StatusBadge,
+} from "@vxture/design-system/server";
+
+/**
+ * The interactive controls, from the client entry.
+ *
+ * They are only usable from a client component anyway, but they are re-exported
+ * here so the repo has ONE import path for the design system. That is the point
+ * of this file more than any individual re-export: vxtpl is copied, and an
+ * `import ... from "@vxture/design-system/server"` pasted from a client page
+ * into a server page is a 500 with a stack trace that names React, not the DS.
+ * Routing everything through here means the trap cannot be copied.
+ */
+export { Button, Input, NativeSelect } from "@vxture/design-system";
+
 /**
  * Theme wiring: the pre-paint class-setter plus the provider.
  *

@@ -260,25 +260,6 @@ select {
 
 /* --- cards / surfaces --- */
 
-.card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--vxtpl-surface);
-  box-shadow: var(--vxtpl-shadow-sm);
-  padding: 1.2rem 1.35rem;
-}
-.card + .card {
-  margin-top: 0.9rem;
-}
-.card h3 {
-  font-size: 0.98rem;
-  margin: 0 0 0.7rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  flex-wrap: wrap;
-}
-
 .field-row {
   display: flex;
   justify-content: space-between;
@@ -294,93 +275,6 @@ select {
   color: var(--vxtpl-ink-soft);
   text-align: right;
   word-break: break-word;
-}
-
-/* --- badges / status dots --- */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4em;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 0.22rem 0.6rem;
-  border-radius: 20px;
-  white-space: nowrap;
-}
-.badge-ok {
-  background: var(--vxtpl-success-soft);
-  color: var(--vxtpl-success);
-}
-.badge-warn {
-  background: var(--vxtpl-warn-soft);
-  color: var(--vxtpl-warn);
-}
-.badge-bad {
-  background: var(--vxtpl-danger-soft);
-  color: var(--vxtpl-danger);
-}
-.badge-neutral {
-  background: var(--vxtpl-paper);
-  color: var(--vxtpl-slate-faint);
-  border: 1px dashed var(--vxtpl-border-strong);
-}
-.badge-accent {
-  background: var(--vxtpl-accent-soft);
-  color: var(--vxtpl-accent-ink);
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex: none;
-}
-
-/* --- form controls --- */
-
-.select,
-.input {
-  border: 1px solid var(--vxtpl-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--vxtpl-surface);
-  color: var(--vxtpl-ink);
-  padding: 0.5rem 0.65rem;
-  font-size: 0.88rem;
-}
-.select:disabled,
-.input:disabled {
-  opacity: 0.6;
-}
-
-.btn {
-  border: 1px solid var(--vxtpl-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--vxtpl-surface);
-  color: var(--vxtpl-ink);
-  padding: 0.5rem 1rem;
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--vxtpl-accent);
-  color: var(--vxtpl-accent-ink);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.btn-primary {
-  background: var(--vxtpl-accent);
-  border-color: var(--vxtpl-accent);
-  color: #fff;
-}
-.btn-primary:hover:not(:disabled) {
-  background: var(--vxtpl-accent-hover);
-  border-color: var(--vxtpl-accent-hover);
-  color: #fff;
 }
 
 /* --- table --- */

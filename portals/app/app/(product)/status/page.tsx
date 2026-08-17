@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Banner, Card, CardContent, CardHeader, CardTitle, Grid, Section, StatusBadge } from "../../ds";
 import type { IntegrationStatus } from "../../lib/status";
 
 // Integration-status dashboard (product_240 verification surface): at-a-glance
@@ -19,16 +20,16 @@ const CHANNELS: Omit<Probe, "status">[] = [
   { name: "C2 entitlement", endpoint: "/api/entitlement" },
 ];
 
-function badgeClass(state: "ok" | "warn" | "bad" | "na"): string {
-  return { ok: "badge badge-ok", warn: "badge badge-warn", bad: "badge badge-bad", na: "badge badge-neutral" }[state];
-}
+// `.card h3` laid the status pill out beside the heading text; CardTitle is a
+// bare heading, so the row those two form has to be stated at each use.
+const TITLE_ROW = "flex flex-wrap items-center gap-xs";
+
 function boolBadge(b: boolean | null | undefined) {
-  const state = b === null || b === undefined ? "na" : b ? "ok" : "bad";
+  const unknown = b === null || b === undefined;
   return (
-    <span className={badgeClass(state)}>
-      <span className="dot" />
-      {b === null || b === undefined ? "n/a" : b ? "configured" : "not configured"}
-    </span>
+    <StatusBadge tone={unknown ? "neutral" : b ? "success" : "danger"} dot>
+      {unknown ? "n/a" : b ? "configured" : "not configured"}
+    </StatusBadge>
   );
 }
 
@@ -74,139 +75,179 @@ export default function StatusPage() {
   return (
     <main className="page">
       <div className="eyebrow">Verification surface</div>
-      <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Integration status</h1>
-      <p className="lede">Non-secret config presence + live channel probes across every platform-integration surface.</p>
-      {gate && <p style={{ color: "var(--vxtpl-slate)", marginTop: "1rem" }}>{gate}</p>}
+      <Section
+        level={1}
+        title="Integration status"
+        description={<span className="block max-w-[62ch]">Non-secret config presence + live channel probes across every platform-integration surface.</span>}
+      >
+        {gate && <p style={{ color: "var(--vxtpl-slate)" }}>{gate}</p>}
 
-      {status?.mockOnDeployedStage && (
-        <div
-          className="card"
-          style={{ marginTop: "1.2rem", borderColor: "var(--vxtpl-danger)", borderWidth: 1, borderStyle: "solid" }}
-        >
-          <h3 style={{ color: "var(--vxtpl-danger)" }}>Serving mock data on a deployed stage</h3>
-          <p style={{ fontSize: "0.88rem", color: "var(--vxtpl-slate)", lineHeight: 1.55 }}>
-            A platform base URL is missing, so entitlement or chat is answering from a mock resolver. Everything below
-            about tiers and models is fabricated. This state only persists because{" "}
-            <code>ALLOW_MOCK_ON_DEPLOY=on</code> is set - without it the app refuses to start.
-          </p>
-        </div>
-      )}
-
-      {status && (
-        <div style={{ marginTop: "1.6rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "0.9rem" }}>
-          <div className="card">
-            <h3>Identity</h3>
-            <Field k="product" v={status.identity.productCode} />
-            <Field k="build" v={status.identity.gitSha} />
-            <Field k="env" v={status.identity.appEnv} />
-          </div>
-
-          <div className="card">
-            <h3>
-              <span className={badgeClass(status.c1.enabled ? "ok" : "warn")}>
-                <span className="dot" />
-                {status.c1.enabled ? "on" : "off"}
+        {status?.mockOnDeployedStage && (
+          <Banner
+            tone="danger"
+            title="Serving mock data on a deployed stage"
+            description={
+              <span className="block max-w-[62ch]">
+                A platform base URL is missing, so entitlement or chat is answering from a mock resolver. Everything
+                below about tiers and models is fabricated. This state only persists because{" "}
+                <code>ALLOW_MOCK_ON_DEPLOY=on</code> is set - without it the app refuses to start.
               </span>
-              C1 - OIDC RP
-            </h3>
-            <Field k="issuer" v={status.c1.issuer ?? "-"} />
-            <Field k="client_id" v={status.c1.clientId ?? "-"} />
-            <Field k="redirect_uri" v={status.c1.redirectUri ?? "-"} />
-            <Field k="scopes" v={status.c1.scopes ?? "-"} />
-            <Field k="cookie" v={status.c1.cookieName ?? "-"} />
-            <Field k="client secret" v={boolBadge(status.c1.clientSecretConfigured)} />
-          </div>
+            }
+          />
+        )}
 
-          <div className="card">
-            <h3>
-              <span className={badgeClass(status.c2.resolver === "platform" ? "ok" : "warn")}>
-                <span className="dot" />
-                {status.c2.resolver}
-              </span>
-              C2 - entitlement
-            </h3>
-            <Field k="platform API" v={boolBadge(status.c2.platformApiConfigured)} />
-            <Field k="internal-auth token" v={boolBadge(status.c2.authTokenConfigured)} />
-            <Field k="console URL" v={status.c2.consoleUrl ?? "-"} />
-            <Field k="cache TTL (ms)" v={status.c2.cacheTtlMs} />
-          </div>
+        {status && (
+          // Grid's `columns` is a fixed count; these cards claim a width and let
+          // the viewport decide how many fit, which only the track list says.
+          <Grid gap="md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Identity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="product" v={status.identity.productCode} />
+                <Field k="build" v={status.identity.gitSha} />
+                <Field k="env" v={status.identity.appEnv} />
+              </CardContent>
+            </Card>
 
-          <div className="card">
-            <h3>C3 - provisioning + usage</h3>
-            <Field k="webhook secret" v={boolBadge(status.c3.webhookSecretConfigured)} />
-            <Field k="webhook rotation (_NEXT)" v={boolBadge(status.c3.webhookRotationConfigured)} />
-            <Field k="internal job token" v={boolBadge(status.c3.internalJobTokenConfigured)} />
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className={TITLE_ROW}>
+                  <StatusBadge tone={status.c1.enabled ? "success" : "warning"} dot>
+                    {status.c1.enabled ? "on" : "off"}
+                  </StatusBadge>
+                  C1 - OIDC RP
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="issuer" v={status.c1.issuer ?? "-"} />
+                <Field k="client_id" v={status.c1.clientId ?? "-"} />
+                <Field k="redirect_uri" v={status.c1.redirectUri ?? "-"} />
+                <Field k="scopes" v={status.c1.scopes ?? "-"} />
+                <Field k="cookie" v={status.c1.cookieName ?? "-"} />
+                <Field k="client secret" v={boolBadge(status.c1.clientSecretConfigured)} />
+              </CardContent>
+            </Card>
 
-          <div className="card">
-            <h3>
-              <span className={badgeClass(status.s2s.configured ? "ok" : "warn")}>
-                <span className="dot" />
-                {status.s2s.configured ? "ready" : "not configured"}
-              </span>
-              S2S token minting
-            </h3>
-            <Field k="issuer" v={status.s2s.issuer ?? "-"} />
-            <Field k="credential" v="the C1 OIDC client (no separate S2S secret)" />
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className={TITLE_ROW}>
+                  <StatusBadge tone={status.c2.resolver === "platform" ? "success" : "warning"} dot>
+                    {status.c2.resolver}
+                  </StatusBadge>
+                  C2 - entitlement
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="platform API" v={boolBadge(status.c2.platformApiConfigured)} />
+                <Field k="internal-auth token" v={boolBadge(status.c2.authTokenConfigured)} />
+                <Field k="console URL" v={status.c2.consoleUrl ?? "-"} />
+                <Field k="cache TTL (ms)" v={status.c2.cacheTtlMs} />
+              </CardContent>
+            </Card>
 
-          <div className="card">
-            <h3>
-              <span className={badgeClass(status.chat.resolver === "atlas" ? "ok" : "warn")}>
-                <span className="dot" />
-                {status.chat.resolver}
-              </span>
-              Chat - Atlas
-            </h3>
-            <Field k="atlas API" v={boolBadge(status.chat.atlasApiConfigured)} />
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>C3 - provisioning + usage</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="webhook secret" v={boolBadge(status.c3.webhookSecretConfigured)} />
+                <Field k="webhook rotation (_NEXT)" v={boolBadge(status.c3.webhookRotationConfigured)} />
+                <Field k="internal job token" v={boolBadge(status.c3.internalJobTokenConfigured)} />
+              </CardContent>
+            </Card>
 
-          <div className="card">
-            <h3>
-              <span className={badgeClass(status.capability.runosApiConfigured ? "ok" : "warn")}>
-                <span className="dot" />
-                {status.capability.runosApiConfigured ? "configured" : "off"}
-              </span>
-              Capability - Runos
-            </h3>
-            <Field k="runos API" v={boolBadge(status.capability.runosApiConfigured)} />
-            <Field k="mode" v="on-behalf-of only (its guard requires a user subject)" />
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className={TITLE_ROW}>
+                  <StatusBadge tone={status.s2s.configured ? "success" : "warning"} dot>
+                    {status.s2s.configured ? "ready" : "not configured"}
+                  </StatusBadge>
+                  S2S token minting
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="issuer" v={status.s2s.issuer ?? "-"} />
+                <Field k="credential" v="the C1 OIDC client (no separate S2S secret)" />
+              </CardContent>
+            </Card>
 
-          <div className="card">
-            <h3>Data plane</h3>
-            <Field
-              k="database"
-              v={
-                <>
-                  {boolBadge(status.data.database.reachable)}{" "}
-                  {status.data.database.configured ? "configured" : "not configured"}
-                </>
-              }
-            />
-            {status.showInfra && status.data.database.host && (
-              <Field k="db" v={`${status.data.database.role}@${status.data.database.host}/${status.data.database.db}`} />
-            )}
-            <Field
-              k="redis"
-              v={
-                <>
-                  {boolBadge(status.data.redis.reachable)}{" "}
-                  {status.data.redis.configured ? "configured" : "not configured"}
-                </>
-              }
-            />
-            {status.showInfra && status.data.redis.host && <Field k="host" v={status.data.redis.host} />}
-          </div>
-        </div>
-      )}
+            <Card>
+              <CardHeader>
+                <CardTitle className={TITLE_ROW}>
+                  <StatusBadge tone={status.chat.resolver === "atlas" ? "success" : "warning"} dot>
+                    {status.chat.resolver}
+                  </StatusBadge>
+                  Chat - Atlas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="atlas API" v={boolBadge(status.chat.atlasApiConfigured)} />
+              </CardContent>
+            </Card>
 
-      <div className="card" style={{ marginTop: "1.6rem" }}>
-        <h3>Live channel probes</h3>
-        {probes.map((p) => (
-          <Field key={p.endpoint} k={`${p.name} (${p.endpoint})`} v={p.status} />
-        ))}
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className={TITLE_ROW}>
+                  <StatusBadge tone={status.capability.runosApiConfigured ? "success" : "warning"} dot>
+                    {status.capability.runosApiConfigured ? "configured" : "off"}
+                  </StatusBadge>
+                  Capability - Runos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field k="runos API" v={boolBadge(status.capability.runosApiConfigured)} />
+                <Field k="mode" v="on-behalf-of only (its guard requires a user subject)" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Data plane</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field
+                  k="database"
+                  v={
+                    <>
+                      {boolBadge(status.data.database.reachable)}{" "}
+                      {status.data.database.configured ? "configured" : "not configured"}
+                    </>
+                  }
+                />
+                {status.showInfra && status.data.database.host && (
+                  <Field
+                    k="db"
+                    v={`${status.data.database.role}@${status.data.database.host}/${status.data.database.db}`}
+                  />
+                )}
+                <Field
+                  k="redis"
+                  v={
+                    <>
+                      {boolBadge(status.data.redis.reachable)}{" "}
+                      {status.data.redis.configured ? "configured" : "not configured"}
+                    </>
+                  }
+                />
+                {status.showInfra && status.data.redis.host && <Field k="host" v={status.data.redis.host} />}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Live channel probes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {probes.map((p) => (
+              <Field key={p.endpoint} k={`${p.name} (${p.endpoint})`} v={p.status} />
+            ))}
+          </CardContent>
+        </Card>
+      </Section>
 
       <footer className="page-links">
         <a href="/entitlement-matrix">-&gt; tier x status gating matrix</a>

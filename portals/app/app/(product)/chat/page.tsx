@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  NativeSelect,
+  Stack,
+  StatusBadge,
+} from "../../ds";
 import type { ChatMessage, ChatReply, SkillOutcome } from "../../chat/types";
 import type { GatedOption } from "../../chat/catalog";
 
@@ -31,10 +43,27 @@ function tierLabel(tier: string | null): string {
   return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "No subscription";
 }
 
-function tierBadgeClass(tier: string | null): string {
-  if (!tier) return "badge badge-neutral";
-  if (tier === "free" || tier === "starter") return "badge badge-warn";
-  return "badge badge-accent";
+function tierTone(tier: string | null): "neutral" | "warning" | "brand" {
+  if (!tier) return "neutral";
+  if (tier === "free" || tier === "starter") return "warning";
+  return "brand";
+}
+
+/**
+ * The catalog has not arrived yet.
+ *
+ * A disabled NativeSelect rather than a styled span, so the placeholder is the
+ * same control the visitor is about to get. The old version wore the
+ * hand-written `.select` class, which stopped matching the moment the real
+ * selects became DS components - a placeholder that does not resemble what it
+ * stands in for is worse than none.
+ */
+function LoadingSelect() {
+  return (
+    <NativeSelect value="" onChange={() => undefined} disabled>
+      <option value="">loading...</option>
+    </NativeSelect>
+  );
 }
 
 function OptionSelect({
@@ -49,33 +78,25 @@ function OptionSelect({
   disabled?: boolean;
 }) {
   return (
-    <select
-      className="select"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      style={{ width: "100%" }}
-    >
+    <NativeSelect value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
       {options.map((o) => (
         <option key={o.code} value={o.code} disabled={!o.allowed}>
           {o.label}
           {!o.allowed ? ` \u{1F512} requires ${o.requiredTier ?? "?"}` : ""}
         </option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }
 
 /** What the selected skill actually did. Silence here would read as "it worked". */
 function SkillReport({ skill }: { skill: SkillOutcome }) {
-  const tone =
-    skill.status === "ran" ? "badge badge-ok" : skill.status === "failed" ? "badge badge-warn" : "badge badge-neutral";
+  const tone = skill.status === "ran" ? "success" : skill.status === "failed" ? "warning" : "neutral";
   return (
     <div style={{ marginTop: "0.6rem", fontSize: "0.8rem", color: "var(--vxtpl-slate)" }}>
-      <span className={tone}>
-        <span className="dot" />
+      <StatusBadge tone={tone} dot>
         {skill.code}: {skill.status}
-      </span>
+      </StatusBadge>
       {skill.capabilityId && (
         <div style={{ marginTop: 4 }}>
           via <code>{skill.capabilityId}</code>
@@ -158,15 +179,13 @@ export default function ChatPage() {
     <main className="page">
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
-        <span className={tierBadgeClass(ctx?.tier ?? null)}>
-          <span className="dot" />
+        <StatusBadge tone={tierTone(ctx?.tier ?? null)} dot>
           {ctx ? tierLabel(ctx.tier) : "..."}
-        </span>
+        </StatusBadge>
         {turn && (
-          <span className={turn.mode === "atlas" ? "badge badge-ok" : "badge badge-neutral"}>
-            <span className="dot" />
+          <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
             {turn.mode === "atlas" ? `Atlas - ${turn.modelCode}` : "Mock mode"}
-          </span>
+          </StatusBadge>
         )}
       </div>
       <p className="lede">
@@ -175,29 +194,27 @@ export default function ChatPage() {
       </p>
 
       {signedOut && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Sign in to continue</h3>
-          <p style={{ fontSize: "0.88rem", color: "var(--vxtpl-slate)", lineHeight: 1.55 }}>
-            Chat resolves entitlement for your active workspace and mints its platform token on your session, so it
-            needs you signed in.
-          </p>
-          <a className="btn btn-primary" href="/auth/login?returnTo=/chat" style={{ marginTop: "0.6rem" }}>
-            Sign in
-          </a>
-        </div>
+        <Card style={{ marginTop: "1rem" }}>
+          <CardHeader>
+            <CardTitle>Sign in to continue</CardTitle>
+            <CardDescription>
+              Chat resolves entitlement for your active workspace and mints its platform token on your session, so it
+              needs you signed in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <a href="/auth/login?returnTo=/chat">Sign in</a>
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       <div className="split" style={{ marginTop: "1.4rem" }}>
-        <div
-          className="card"
-          style={{
-            padding: 0,
-            display: "flex",
-            flexDirection: "column",
-            height: 560,
-            overflow: "hidden",
-          }}
-        >
+        {/* The transcript scrolls to the card's own edges and the composer sits
+            flush against its bottom rule, so the card contributes the frame only -
+            its padding and inter-child gap are zeroed rather than worked around. */}
+        <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden" }}>
           <div
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
@@ -227,8 +244,7 @@ export default function ChatPage() {
             {busy && <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
           </div>
           <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
-            <input
-              className="input"
+            <Input
               style={{ flex: 1 }}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -236,54 +252,62 @@ export default function ChatPage() {
               placeholder="Type a message"
               disabled={busy}
             />
-            <button className="btn btn-primary" onClick={send} disabled={busy || !input.trim()}>
+            <Button onClick={send} disabled={busy || !input.trim()}>
               {busy ? "..." : "Send"}
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
 
-        <div>
-          <div className="card">
-            <h3>Model</h3>
-            {ctx ? (
-              <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
-            ) : (
-              <span className="select" style={{ display: "block", color: "var(--vxtpl-slate-faint)" }}>
-                loading...
-              </span>
-            )}
-          </div>
-          <div className="card">
-            <h3>Skill</h3>
-            {ctx ? (
-              <OptionSelect
-                options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
-                value={skillCode}
-                onChange={setSkillCode}
-              />
-            ) : (
-              <span className="select" style={{ display: "block", color: "var(--vxtpl-slate-faint)" }}>
-                loading...
-              </span>
-            )}
-            {turn?.skill && <SkillReport skill={turn.skill} />}
-          </div>
+        <Stack gap="md">
+          <Card>
+            <CardHeader>
+              <CardTitle>Model</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {ctx ? (
+                <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
+              ) : (
+                <LoadingSelect />
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Skill</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {ctx ? (
+                <OptionSelect
+                  options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
+                  value={skillCode}
+                  onChange={setSkillCode}
+                />
+              ) : (
+                <LoadingSelect />
+              )}
+              {turn?.skill && <SkillReport skill={turn.skill} />}
+            </CardContent>
+          </Card>
           {turn?.usage && (
-            <div className="card">
-              <h3>Last turn</h3>
-              <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
-                <div>
-                  served by <code>{turn.modelCode}</code>
+            <Card>
+              <CardHeader>
+                <CardTitle>Last turn</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
+                  <div>
+                    served by <code>{turn.modelCode}</code>
+                  </div>
+                  <div>
+                    {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
+                    {turn.usage.totalTokens} tokens
+                  </div>
+                  {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
                 </div>
-                <div>
-                  {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
-                  {turn.usage.totalTokens} tokens
-                </div>
-                {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
-        </div>
+        </Stack>
       </div>
 
       {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}

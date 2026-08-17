@@ -1,3 +1,4 @@
+import { Section, Stack, StatusBadge } from "../../ds";
 import { TIERS, SUBSCRIPTION_STATUSES, hasProductAccess, hasDataAccess, ctaFor } from "../../entitlement/types";
 import type { Tier, SubscriptionStatus } from "../../entitlement/types";
 import { makeEntitlement } from "../../entitlement/resolver";
@@ -26,12 +27,13 @@ function rows(): Row[] {
   return out;
 }
 
+// A denied gate is the expected outcome for most of this matrix, not a fault, so
+// "no" stays neutral - a danger tone here would paint the correct rules red.
 function yesNo(b: boolean) {
   return (
-    <span className={b ? "badge badge-ok" : "badge badge-neutral"}>
-      <span className="dot" />
+    <StatusBadge tone={b ? "success" : "neutral"} dot>
       {b ? "yes" : "no"}
-    </span>
+    </StatusBadge>
   );
 }
 
@@ -42,39 +44,47 @@ export default function EntitlementMatrixPage() {
   });
   return (
     <main className="page">
-      <div className="eyebrow">Verification surface</div>
-      <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Entitlement gating matrix</h1>
-      <p className="lede">
-        Offline demonstration of the C2 gating and CTA rules (product_220 section 3). UI gate ={" "}
-        <code>tier != null</code>; data gate = <code>tier != null || bundled</code>.
-      </p>
-      <div className="table-wrap" style={{ marginTop: "1.4rem" }}>
-        <table className="ref">
-          <thead>
-            <tr>
-              <th>tier / status (bundled)</th>
-              <th>UI access</th>
-              <th>data access</th>
-              <th>CTA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r) => (
-              <tr key={r.label}>
-                <td>
-                  {r.label}
-                  {r.bundled ? " [bundled]" : ""}
-                </td>
-                <td>{yesNo(r.productAccess)}</td>
-                <td>{yesNo(r.dataAccess)}</td>
-                <td>
-                  <span className="mono">{r.cta}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Stack gap="xs">
+        <div className="eyebrow">Verification surface</div>
+        <Section
+          level={1}
+          title="Entitlement gating matrix"
+          description={
+            <span className="block max-w-[62ch]">
+              Offline demonstration of the C2 gating and CTA rules (product_220 section 3). UI gate ={" "}
+              <code>tier != null</code>; data gate = <code>tier != null || bundled</code>.
+            </span>
+          }
+        >
+          <div className="table-wrap">
+            <table className="ref">
+              <thead>
+                <tr>
+                  <th>tier / status (bundled)</th>
+                  <th>UI access</th>
+                  <th>data access</th>
+                  <th>CTA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((r) => (
+                  <tr key={r.label}>
+                    <td>
+                      {r.label}
+                      {r.bundled ? " [bundled]" : ""}
+                    </td>
+                    <td>{yesNo(r.productAccess)}</td>
+                    <td>{yesNo(r.dataAccess)}</td>
+                    <td>
+                      <span className="mono">{r.cta}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      </Stack>
 
       <footer className="page-links">
         <a href="/status">-&gt; integration status</a>

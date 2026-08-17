@@ -101,6 +101,49 @@ test("vxtpl defines no token that the design system also defines", () => {
   );
 });
 
+test("every name imported from the DS server entry exists at runtime", async () => {
+  // The one DS defect a machine can catch, so it is caught here.
+  //
+  // `@vxture/design-system/server` declares MORE than it exports: its `.d.ts`
+  // re-exports the whole client surface, its `.mjs` re-exports only
+  // design-ui/server. So `import { Button } from "@vxture/design-system/server"`
+  // type-checks with zero errors and is `undefined` when the component renders -
+  // "Element type is invalid ... but got: undefined", at runtime, possibly in
+  // production if the path is behind a conditional.
+  //
+  // tsc actively vouches for the broken import, which is what makes this worse
+  // than the DS's other rough edges rather than merely equal to them. Reported
+  // as vxture/vxture-platform#268.
+  const runtime = new Set(Object.keys(await import("@vxture/design-system/server")));
+  assert.ok(runtime.size > 10, `expected the server entry to export components, found ${runtime.size}`);
+
+  const repoRoot = resolvePath(import.meta.dirname, "../../..");
+  const sources = execSync("git ls-files portals", { cwd: repoRoot, encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".test.ts"));
+
+  const phantom: string[] = [];
+  for (const file of sources) {
+    const src = readFileSync(resolvePath(repoRoot, file), "utf8");
+    for (const [, names] of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@vxture\/design-system\/server["']/g)) {
+      for (const raw of names.split(",")) {
+        // `type Foo` and `Foo as Bar` - only the imported name matters.
+        const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0].trim();
+        if (name && !runtime.has(name)) phantom.push(`${file}: ${name}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    phantom.sort(),
+    [],
+    `these type-check but are undefined at runtime:\n  ${phantom.join("\n  ")}\n` +
+      `The server entry's types promise the whole client surface; only what design-ui/server ` +
+      `actually exports is real. Runtime names: ${[...runtime].sort().join(", ")}`,
+  );
+});
+
 test("dark mode is keyed on the class the design system sets, not the media query", () => {
   // The DS toggles `.dark` on <html> from localStorage, defaulting to system,
   // and never reads `prefers-color-scheme` - verified: zero occurrences in its
