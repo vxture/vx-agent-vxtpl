@@ -7,6 +7,7 @@
  * into its files, only through the specifiers it publishes - see ADR-004, and
  * `design-system.test.ts` for the rules that keep it honest.
  */
+@config "../tailwind.config.mjs";
 @import "@vxture/design-system/styles/globals.css";
 @import "@vxture/design-system/styles/brands/vxture.css";
 
@@ -51,31 +52,35 @@
   --vxtpl-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Sarasa Mono SC", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --vxtpl-paper: #0c0e13;
-    --vxtpl-surface: #14171f;
-    --vxtpl-surface-raised: #1a1e28;
-    --vxtpl-border-strong: #383f4d;
-    --vxtpl-ink: #e9ebf0;
-    --vxtpl-ink-soft: #c2c8d3;
-    --vxtpl-slate: #99a1af;
-    --vxtpl-slate-faint: #6b7280;
-    --vxtpl-accent: #7d92f5;
-    --vxtpl-accent-soft: #1c2340;
-    --vxtpl-accent-ink: #c2cdfb;
-    --vxtpl-accent-hover: #93a5ff;
-    --vxtpl-success: #4ade80;
-    --vxtpl-success-soft: #16281e;
-    --vxtpl-warn: #e0954f;
-    --vxtpl-warn-soft: #2b2113;
-    --vxtpl-danger: #f87171;
-    --vxtpl-danger-soft: #2b1414;
-    --vxtpl-code-bg: #0a0c11;
-    --vxtpl-code-ink: #d9dee6;
-    --vxtpl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.65);
-    --vxtpl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  }
+/* Keyed on `.dark`, not `prefers-color-scheme`, because that is the signal the
+ * design system answers to - it sets the class on <html> from localStorage
+ * (defaulting to system) before first paint and never reads the media query.
+ * A media query here would flip vxtpl's surfaces while the DS's tokens stayed
+ * light, which is the half-dark page this repo shipped briefly after the 5.x
+ * migration. `design-system.test.ts` pins it. */
+.dark {
+  --vxtpl-paper: #0c0e13;
+  --vxtpl-surface: #14171f;
+  --vxtpl-surface-raised: #1a1e28;
+  --vxtpl-border-strong: #383f4d;
+  --vxtpl-ink: #e9ebf0;
+  --vxtpl-ink-soft: #c2c8d3;
+  --vxtpl-slate: #99a1af;
+  --vxtpl-slate-faint: #6b7280;
+  --vxtpl-accent: #7d92f5;
+  --vxtpl-accent-soft: #1c2340;
+  --vxtpl-accent-ink: #c2cdfb;
+  --vxtpl-accent-hover: #93a5ff;
+  --vxtpl-success: #4ade80;
+  --vxtpl-success-soft: #16281e;
+  --vxtpl-warn: #e0954f;
+  --vxtpl-warn-soft: #2b2113;
+  --vxtpl-danger: #f87171;
+  --vxtpl-danger-soft: #2b1414;
+  --vxtpl-code-bg: #0a0c11;
+  --vxtpl-code-ink: #d9dee6;
+  --vxtpl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.65);
+  --vxtpl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 * {

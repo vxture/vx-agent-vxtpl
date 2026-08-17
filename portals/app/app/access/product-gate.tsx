@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ShellBootScreen, ShellBrand } from "../ds";
 import "./gate.css";
 import { subscribeUrl, type Intent } from "../entitlement/deeplink";
 import type { Cta } from "../entitlement/types";
@@ -11,9 +12,10 @@ import { isThrough, type AccessState } from "./types";
  *
  * A visitor arriving at the domain has not asked for a login page - they asked
  * for the product. So the gate VERIFIES FIRST and only shows a door if that
- * fails: the button spends its first moment disabled and reading "verifying",
- * and an already-signed-in visitor never sees the door at all, because the
- * check resolves into a redirect.
+ * fails. While the check runs it shows the design system's boot screen, which
+ * waits 250ms before drawing anything: a visitor who is already signed in
+ * resolves faster than that, so they never see a verifying screen at all - the
+ * gate is invisible to everyone it lets through.
  *
  * Everything the gate needs arrives in ONE call (`/api/access`). That is not
  * only about latency - see the route for why two calls race - but it is also
@@ -74,7 +76,12 @@ export function ProductGate({ productName, destination, tagline }: ProductGatePr
     };
   }, [destination]);
 
-  const view = describe(phase, destination);
+  // Two states mean "no answer yet": the check is in flight, or it came back
+  // `open` and the redirect has already been issued. Both get the DS's boot
+  // screen, whose 250ms delay is the point - a visitor who is already signed in
+  // resolves faster than that and never sees a verifying screen flash past on
+  // the way to the product.
+  const settling = phase.kind === "verifying" || (phase.kind === "resolved" && phase.state.status === "open");
 
   return (
     <main className="vx-gate">
@@ -88,40 +95,61 @@ export function ProductGate({ productName, destination, tagline }: ProductGatePr
       </div>
       <div className="vx-gate__wash" aria-hidden="true" />
 
-      <section className="vx-gate__panel">
-        {/* The DS's own brand lockup classes, which ship as real CSS in the
-            package - no component bundle to scan, so no path to reach into. */}
-        <div className="vx-brand-lockup vx-gate__brand">
-          <span className="vx-brand-name">{productName}</span>
-        </div>
-
-        <p className="vx-gate__message">{view.message}</p>
-
-        {view.action ? (
-          <a className="vx-gate__action" href={view.action.href}>
-            {view.action.label}
-          </a>
-        ) : (
-          // No action means there is nothing this visitor can do from here -
-          // either the check is still running, or the answer is one only an
-          // operator or an admin can change. A disabled button says so without
-          // offering a door that leads nowhere.
-          <button className="vx-gate__action" type="button" disabled aria-busy={view.pending}>
-            {view.pending && <span className="vx-gate__spinner" aria-hidden="true" />}
-            {view.idleLabel}
-          </button>
-        )}
-
-        <p className="vx-gate__hint">{view.hint ?? tagline ?? ""}</p>
-      </section>
+      {settling ? (
+        // `bg-transparent` so the boot screen sits on the gate's own backdrop
+        // instead of painting over it - the panel that follows must not look
+        // like a different page.
+        <ShellBootScreen label={productName} description="正在验证您的访问权限" className="bg-transparent" />
+      ) : (
+        <Resolved phase={phase} destination={destination} productName={productName} tagline={tagline} />
+      )}
     </main>
+  );
+}
+
+function Resolved({
+  phase,
+  destination,
+  productName,
+  tagline,
+}: {
+  phase: Phase;
+  destination: string;
+  productName: string;
+  tagline?: string;
+}) {
+  const view = describe(phase, destination);
+
+  return (
+    <section className="vx-gate__panel">
+      {/* The DS's brand lockup. `href` points at the product rather than the
+          site root: clicking the mark is an attempt to enter, and if the
+          visitor still cannot, the gate answers again - which is the truth. */}
+      <ShellBrand href={destination} label={productName} className="vx-gate__brand" />
+
+      <p className="vx-gate__message">{view.message}</p>
+
+      {view.action ? (
+        <a className="vx-gate__action" href={view.action.href}>
+          {view.action.label}
+        </a>
+      ) : (
+        // No action means there is nothing this visitor can do from here - the
+        // answer is one only an operator or an admin can change. A disabled
+        // button says so without offering a door that leads nowhere.
+        <button className="vx-gate__action" type="button" disabled>
+          {view.idleLabel}
+        </button>
+      )}
+
+      <p className="vx-gate__hint">{view.hint ?? tagline ?? ""}</p>
+    </section>
   );
 }
 
 interface View {
   message: string;
   hint?: string;
-  pending: boolean;
   idleLabel: string;
   action?: { label: string; href: string };
 }
@@ -137,7 +165,9 @@ interface View {
  */
 function describe(phase: Phase, destination: string): View {
   if (phase.kind === "verifying") {
-    return { message: "正在验证您的访问权限", pending: true, idleLabel: "验证中" };
+    // Unreachable - the caller renders the DS boot screen instead. Kept so this
+    // function stays total over Phase rather than relying on that promise.
+    return { message: "正在验证您的访问权限", idleLabel: "验证中" };
   }
 
   if (phase.kind === "error") {
@@ -148,7 +178,6 @@ function describe(phase: Phase, destination: string): View {
     return {
       message: "无法完成验证",
       hint: phase.message,
-      pending: false,
       idleLabel: "重试",
       action: { label: "重试", href: retry },
     };
@@ -162,7 +191,6 @@ function describe(phase: Phase, destination: string): View {
       return {
         message: "请登录以验证您的订阅并访问产品",
         hint: "登录后将自动返回当前产品",
-        pending: false,
         idleLabel: "登录",
         action: { label: "登录", href: `/auth/login?returnTo=${returnTo}` },
       };
@@ -176,7 +204,6 @@ function describe(phase: Phase, destination: string): View {
       return {
         message: ctaMessage(cta),
         hint: state.entitlement.tier ? `当前订阅：${state.entitlement.tier}` : "当前工作空间尚未开通本产品",
-        pending: false,
         idleLabel: ctaLabel(cta),
         action: { label: ctaLabel(cta), href: subscribeUrl({ intent: ctaIntent(cta) }) },
       };
@@ -186,7 +213,6 @@ function describe(phase: Phase, destination: string): View {
       return {
         message: "该账号当前不可用",
         hint: "请联系管理员恢复账号后再试",
-        pending: false,
         idleLabel: "账号不可用",
       };
 
@@ -194,7 +220,6 @@ function describe(phase: Phase, destination: string): View {
       return {
         message: "您的账号尚未加入任何工作空间",
         hint: "请在控制台创建或加入一个工作空间",
-        pending: false,
         idleLabel: "前往控制台",
         action: { label: "前往控制台", href: consoleUrl() },
       };
@@ -203,13 +228,13 @@ function describe(phase: Phase, destination: string): View {
       return {
         message: "本产品的登录尚未配置",
         hint: "这是部署侧的配置缺失，不是您的账号问题",
-        pending: false,
         idleLabel: "暂不可用",
       };
 
     case "open":
-      // Only reachable in local development; the redirect already fired.
-      return { message: "本地开发模式", pending: true, idleLabel: "验证中" };
+      // Local development only, and the caller shows the boot screen for it -
+      // the redirect has already been issued by the time this could matter.
+      return { message: "本地开发模式", idleLabel: "验证中" };
   }
 }
 

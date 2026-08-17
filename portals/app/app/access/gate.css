@@ -19,11 +19,16 @@
  * to `sticky`. Spending a Tailwind default here would have looked correct and
  * quietly opted the gate out of the design system.
  *
- * The brand lockup uses the DS's own `.vx-brand-*` classes rather than a
- * hand-drawn mark. The button is vxtpl's, built from DS tokens: the DS's React
- * Button carries Tailwind utilities inside its compiled bundle, and generating
- * those would require pointing Tailwind at a path inside node_modules. See
- * ADR-004 for why that trade lands here.
+ * WHAT IS LEFT HERE, now that the DS components are usable: the backdrop, the
+ * panel box, and the action. The brand lockup is `ShellBrand` and the verifying
+ * screen is `ShellBootScreen` - both real components, so their styling is not
+ * this file's business any more.
+ *
+ * The action stays because the DS has no link-shaped button. `AuthPrimaryButton`
+ * is a `type="submit"` control and the umbrella does not re-export the `Button`
+ * primitive, so the gate's three navigating states (sign in, subscribe, retry)
+ * have nothing to be. An anchor built from DS tokens is the honest version of
+ * that; wrapping a DS button in an anchor would be a link inside a button.
  *
  * The drifting flow lines are the one decorative element kept from the original
  * template. They are aria-hidden, stop entirely under prefers-reduced-motion,
@@ -169,24 +174,6 @@ a.vx-gate__action:active {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
-/* The verifying indicator. Sized in em so it tracks the label; 50% rather than
- * a radius token because a circle is the shape, not a rounding choice. */
-.vx-gate__spinner {
-  width: 1em;
-  height: 1em;
-  flex: none;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: vx-gate-spin 0.8s linear infinite;
-}
-
-@keyframes vx-gate-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .vx-gate__hint {
   /* Holds its line even when empty, so the panel does not jump as the gate
      moves from verifying to resolved. */
@@ -197,8 +184,7 @@ a.vx-gate__action:active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vx-gate__flow path,
-  .vx-gate__spinner {
+  .vx-gate__flow path {
     animation: none;
   }
 }

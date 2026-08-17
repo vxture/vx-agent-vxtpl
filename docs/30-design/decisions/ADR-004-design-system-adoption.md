@@ -62,10 +62,38 @@ Three details are contractual rather than stylistic:
    has taken a dependency on the package's internal layout and on the
    installer's, neither of which the package promises to keep.
 
-## What that third rule costs, and why it still holds
+## How the components became usable
 
-vxtpl consumes the DS's **published CSS** - tokens, brand lockup classes,
-component styles - and not its React components.
+Rule 3 cost vxtpl the DS's React components for as long as the only way to
+generate their utilities was an `@source` naming a path inside `node_modules`.
+That is no longer the only way.
+
+`@source` is a CSS at-rule and cannot compute, but a Tailwind config is
+JavaScript and can. `portals/app/tailwind.config.mjs` derives its content globs
+from `require.resolve("@vxture/design-system")` - it asks the package manager
+where the package's own declared entry point is, rather than asserting where it
+should be. design-ui is resolved THROUGH design-system, following the umbrella's
+own pin rather than adding a dependency this app is forbidden to have.
+
+The distinction is the whole point, and it is visible in the output: the paths
+that come back are pnpm store paths with content hashes in them
+(`node_modules/.pnpm/@vxture+design-ui@2.0.0_@ph_343c6a91.../`). No hardcoded
+path could have produced that, and none would survive the next install. Asking
+does; asserting does not.
+
+Measured: the built stylesheet goes from 59KB to 121KB and `bg-primary`,
+`shadow-raised`, `h-control-lg`, `inline-flex`, `animate-spin`, `rounded-full`
+and `flex-col-reverse` all appear. The gate now uses `ShellBootScreen` and
+`ShellBrand`, verified in a browser: the brand renders in the DS's own Funnel
+Display, the action in the DS brand blue, and the boot screen's 250ms delay
+means a visitor who is already signed in never sees a verifying screen at all.
+
+This does not close `vxture/vxture-platform#268`. Every consumer still has to
+write this config, and a consumer who does not gets a grey page with no error -
+the package should carry it. But it does mean vxtpl is no longer choosing
+between the components and rule 3.
+
+## What the CSS-only period cost, and why the rule held through it
 
 That is not a preference. Tailwind v4 only generates utilities it can see in a
 scanned source, and it excludes `node_modules` by default. The DS's React
@@ -166,3 +194,17 @@ The fixes are structural rather than a set of corrected values:
   to nothing. Reported on `vxture/vxture-platform#268`.
 - Read the installed `dist/index.d.ts` for the component list, never the
   monorepo source - the two have been out of step at every version so far.
+- **The umbrella cannot be imported from a server component.** `dist/index.mjs`
+  is `"use client"` AND uses `export *` to re-export design-ui and
+  design-tokens; Next.js rejects that combination outright ("It's currently
+  unsupported to use `export *` in a client boundary"). Every server component
+  that wants a DS component has to go through a local client module -
+  `portals/app/app/ds.tsx` here, which re-exports by name and carries the
+  reason. Also on #268.
+- **Dark mode is a class, not a media query.** The DS keys dark on `.dark` on
+  `<html>` and never reads `prefers-color-scheme` - zero occurrences in its
+  whole CSS graph. vxtpl's stylesheet used the media query, so after the 5.x
+  rename the two halves of the page disagreed whenever the OS was dark: vxtpl's
+  surfaces flipped, the DS's tokens did not. Fixed by adopting `ThemeProvider`
+  and `themeBootstrapScript` (which sets the class before first paint) and
+  moving vxtpl's own dark block onto `.dark`. Pinned by a test.

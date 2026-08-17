@@ -101,6 +101,30 @@ test("vxtpl defines no token that the design system also defines", () => {
   );
 });
 
+test("dark mode is keyed on the class the design system sets, not the media query", () => {
+  // The DS toggles `.dark` on <html> from localStorage, defaulting to system,
+  // and never reads `prefers-color-scheme` - verified: zero occurrences in its
+  // entire CSS graph. A stylesheet here that used the media query instead would
+  // be answering a different question, and the two disagree exactly when the OS
+  // is dark: vxtpl's surfaces flip, the DS's tokens do not, and the page comes
+  // out half black. This repo shipped that for one commit after the 5.x
+  // migration, so it is pinned rather than remembered.
+  const offenders: string[] = [];
+  for (const file of ourStylesheets()) {
+    const withoutComments = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    if (/@media[^{]*prefers-color-scheme/.test(withoutComments)) {
+      offenders.push(file.split(/[\\/]/).pop() as string);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these switch on prefers-color-scheme: ${offenders.join(", ")}. The DS switches on \`.dark\`, ` +
+      `so a media query here desynchronises the two halves of the page. Use \`.dark { ... }\`.`,
+  );
+});
+
 test("every token vxtpl defines for itself is namespaced", () => {
   const stray: string[] = [];
   for (const file of ourStylesheets()) {
