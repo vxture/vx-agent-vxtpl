@@ -71,7 +71,7 @@ function SkillReport({ skill }: { skill: SkillOutcome }) {
   const tone =
     skill.status === "ran" ? "badge badge-ok" : skill.status === "failed" ? "badge badge-warn" : "badge badge-neutral";
   return (
-    <div style={{ marginTop: "0.6rem", fontSize: "0.8rem", color: "var(--slate)" }}>
+    <div style={{ marginTop: "0.6rem", fontSize: "0.8rem", color: "var(--vxtpl-slate)" }}>
       <span className={tone}>
         <span className="dot" />
         {skill.code}: {skill.status}
@@ -177,7 +177,7 @@ export default function ChatPage() {
       {signedOut && (
         <div className="card" style={{ marginTop: "1rem" }}>
           <h3>Sign in to continue</h3>
-          <p style={{ fontSize: "0.88rem", color: "var(--slate)", lineHeight: 1.55 }}>
+          <p style={{ fontSize: "0.88rem", color: "var(--vxtpl-slate)", lineHeight: 1.55 }}>
             Chat resolves entitlement for your active workspace and mints its platform token on your session, so it
             needs you signed in.
           </p>
@@ -203,15 +203,15 @@ export default function ChatPage() {
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
           >
             {messages.length === 0 && (
-              <span style={{ color: "var(--slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
+              <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
             )}
             {messages.map((m, i) => (
               <div
                 key={i}
                 style={{
                   alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  background: m.role === "user" ? "var(--accent-soft)" : "var(--paper)",
-                  color: m.role === "user" ? "var(--accent-ink)" : "var(--ink-soft)",
+                  background: m.role === "user" ? "var(--vxtpl-accent-soft)" : "var(--vxtpl-paper)",
+                  color: m.role === "user" ? "var(--vxtpl-accent-ink)" : "var(--vxtpl-ink-soft)",
                   border: m.role === "assistant" ? "1px solid var(--border)" : "none",
                   borderRadius: 12,
                   padding: "0.55rem 0.85rem",
@@ -224,7 +224,7 @@ export default function ChatPage() {
                 {m.content}
               </div>
             ))}
-            {busy && <span style={{ color: "var(--slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
+            {busy && <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
           </div>
           <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
             <input
@@ -248,7 +248,7 @@ export default function ChatPage() {
             {ctx ? (
               <OptionSelect options={ctx.models} value={modelCode} onChange={setModelCode} />
             ) : (
-              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
+              <span className="select" style={{ display: "block", color: "var(--vxtpl-slate-faint)" }}>
                 loading...
               </span>
             )}
@@ -262,7 +262,7 @@ export default function ChatPage() {
                 onChange={setSkillCode}
               />
             ) : (
-              <span className="select" style={{ display: "block", color: "var(--slate-faint)" }}>
+              <span className="select" style={{ display: "block", color: "var(--vxtpl-slate-faint)" }}>
                 loading...
               </span>
             )}
@@ -271,7 +271,7 @@ export default function ChatPage() {
           {turn?.usage && (
             <div className="card">
               <h3>Last turn</h3>
-              <div style={{ fontSize: "0.8rem", color: "var(--slate)", lineHeight: 1.7 }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
                 <div>
                   served by <code>{turn.modelCode}</code>
                 </div>
@@ -286,7 +286,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {error && <p style={{ color: "var(--danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
+      {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
 
       <footer className="page-links">
         <a href="/status">-&gt; integration status</a>

@@ -6,6 +6,19 @@
  * package's files - which is what lets a copied product inherit its own brand
  * by swapping one import line.
  *
+ * NO FALLBACKS IN `var()`, deliberately. The DS 2.x -> 5.x migration renamed
+ * every semantic token (`--vx-color-primary` -> `--primary`), and the fallbacks
+ * this file used to carry turned that into a silent downgrade: the gate still
+ * rendered, in the wrong colours, with nothing to notice. Without a fallback a
+ * missing token invalidates the declaration outright, which is visible in one
+ * glance. `gate.test.ts` turns the same drift into a failing test, so it does
+ * not depend on someone looking - and it is what caught the shadows below:
+ * `--vxtpl-shadow-sm` resolves, but it is TAILWIND's default, not a DS decision. The
+ * DS's shadow vocabulary is an elevation scale (flat / raised / sticky /
+ * overlay / dialog / notification), so a button at rest is `raised` and lifts
+ * to `sticky`. Spending a Tailwind default here would have looked correct and
+ * quietly opted the gate out of the design system.
+ *
  * The brand lockup uses the DS's own `.vx-brand-*` classes rather than a
  * hand-drawn mark. The button is vxtpl's, built from DS tokens: the DS's React
  * Button carries Tailwind utilities inside its compiled bundle, and generating
@@ -24,7 +37,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--vx-color-page, var(--vx-color-background));
+  background: var(--background);
 }
 
 .vx-gate__flow {
@@ -41,10 +54,10 @@
 
 .vx-gate__flow path {
   fill: none;
-  stroke: var(--vx-color-border);
+  stroke: var(--border);
   stroke-width: 1.2;
   stroke-linecap: round;
-  animation: vx-gate-drift 18s var(--vx-ease-standard, ease-in-out) infinite alternate;
+  animation: vx-gate-drift 18s var(--ease-standard) infinite alternate;
 }
 
 .vx-gate__flow path:nth-child(2) {
@@ -76,9 +89,9 @@
   pointer-events: none;
   background: radial-gradient(
     circle at 50% 48%,
-    var(--vx-color-page, var(--vx-color-background)) 0%,
-    color-mix(in srgb, var(--vx-color-page, var(--vx-color-background)) 78%, transparent) 27%,
-    color-mix(in srgb, var(--vx-color-page, var(--vx-color-background)) 25%, transparent) 58%,
+    var(--background) 0%,
+    color-mix(in srgb, var(--background) 78%, transparent) 27%,
+    color-mix(in srgb, var(--background) 25%, transparent) 58%,
     transparent 76%
   );
 }
@@ -98,10 +111,10 @@
 }
 
 .vx-gate__message {
-  margin: 0 auto var(--vx-space-2xl, 2rem);
+  margin: 0 auto var(--space-2xl);
   max-width: 30ch;
-  color: var(--vx-color-text-secondary);
-  font-size: var(--vx-typography-body-size);
+  color: var(--muted-foreground);
+  font-size: var(--body-md-font-size);
   line-height: 1.7;
 }
 
@@ -114,29 +127,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--vx-space-sm);
+  gap: var(--space-sm);
   width: 100%;
   min-height: 2.75rem;
-  padding: 0 var(--vx-space-lg);
+  padding: 0 var(--space-lg);
   border: 0;
-  border-radius: var(--vx-radius-lg);
-  background: var(--vx-color-primary);
-  color: var(--vx-color-text-on-primary, #fff);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
   font-family: inherit;
-  font-size: var(--vx-typography-body-size);
+  font-size: var(--body-md-font-size);
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: var(--vx-shadow-sm);
+  box-shadow: var(--shadow-raised);
   transition:
-    background var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease),
-    box-shadow var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease),
-    transform var(--vx-duration-fast, 0.18s) var(--vx-ease-standard, ease);
+    background var(--transition-duration-base) var(--ease-standard),
+    box-shadow var(--transition-duration-base) var(--ease-standard),
+    transform var(--transition-duration-base) var(--ease-standard);
 }
 
 a.vx-gate__action:hover {
-  background: var(--vx-color-primary-hover, var(--vx-color-primary));
-  box-shadow: var(--vx-shadow-md);
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-sticky);
   transform: translateY(-1px);
   text-decoration: none;
 }
@@ -153,18 +166,19 @@ a.vx-gate__action:active {
 
 .vx-gate__action:focus-visible {
   outline: none;
-  box-shadow: var(--vx-shadow-focus-ring, 0 0 0 3px var(--vx-color-ring));
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
-/* The verifying indicator. Sized in em so it tracks the label. */
+/* The verifying indicator. Sized in em so it tracks the label; 50% rather than
+ * a radius token because a circle is the shape, not a rounding choice. */
 .vx-gate__spinner {
   width: 1em;
   height: 1em;
   flex: none;
   border: 2px solid currentColor;
   border-top-color: transparent;
-  border-radius: var(--vx-radius-full);
-  animation: vx-gate-spin var(--vx-duration-spinner, 0.8s) linear infinite;
+  border-radius: 50%;
+  animation: vx-gate-spin 0.8s linear infinite;
 }
 
 @keyframes vx-gate-spin {
@@ -177,9 +191,9 @@ a.vx-gate__action:active {
   /* Holds its line even when empty, so the panel does not jump as the gate
      moves from verifying to resolved. */
   min-height: 1.5em;
-  margin: var(--vx-space-lg, 1.4rem) 0 0;
-  font-size: var(--vx-typography-caption-size, 0.78rem);
-  color: var(--vx-color-text-muted);
+  margin: var(--space-lg) 0 0;
+  font-size: var(--label-sm-font-size);
+  color: var(--content-tertiary);
 }
 
 @media (prefers-reduced-motion: reduce) {

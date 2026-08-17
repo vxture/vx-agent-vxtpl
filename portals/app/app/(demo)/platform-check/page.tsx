@@ -46,7 +46,7 @@ export default function PlatformCheckPage() {
         Read-only, agent-usage-perspective checks against Atlas (model gateway) and Runos (commercial capability
         plane). Neither probe spends model tokens or capability quota.
       </p>
-      {error && <p style={{ color: "var(--danger)", marginTop: "1rem" }}>{error}</p>}
+      {error && <p style={{ color: "var(--vxtpl-danger)", marginTop: "1rem" }}>{error}</p>}
       {data && (
         <div style={{ marginTop: "1.6rem" }}>
           <div className="card">
@@ -54,7 +54,7 @@ export default function PlatformCheckPage() {
               {badgeFor(data.atlas)}
               Atlas
             </h3>
-            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--ink-soft)" }}>
+            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--vxtpl-ink-soft)" }}>
               {data.atlas.detail}
             </p>
           </div>
@@ -63,7 +63,7 @@ export default function PlatformCheckPage() {
               {badgeFor(data.runos)}
               Runos
             </h3>
-            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--ink-soft)" }}>
+            <p className="mono" style={{ fontSize: "0.83rem", color: "var(--vxtpl-ink-soft)" }}>
               {data.runos.detail}
             </p>
           </div>

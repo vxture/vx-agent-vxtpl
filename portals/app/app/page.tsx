@@ -51,8 +51,8 @@ export default function HomePage() {
             className="card"
             style={{ display: "block", color: "inherit" }}
           >
-            <h3 style={{ color: "var(--accent-ink)" }}>{c.title}</h3>
-            <p style={{ fontSize: "0.86rem", color: "var(--slate)", lineHeight: 1.55 }}>{c.body}</p>
+            <h3 style={{ color: "var(--vxtpl-accent-ink)" }}>{c.title}</h3>
+            <p style={{ fontSize: "0.86rem", color: "var(--vxtpl-slate)", lineHeight: 1.55 }}>{c.body}</p>
           </a>
         ))}
       </div>

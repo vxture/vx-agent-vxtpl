@@ -76,15 +76,15 @@ export default function StatusPage() {
       <div className="eyebrow">Verification surface</div>
       <h1 style={{ fontSize: "1.8rem", marginTop: "0.4rem" }}>Integration status</h1>
       <p className="lede">Non-secret config presence + live channel probes across every platform-integration surface.</p>
-      {gate && <p style={{ color: "var(--slate)", marginTop: "1rem" }}>{gate}</p>}
+      {gate && <p style={{ color: "var(--vxtpl-slate)", marginTop: "1rem" }}>{gate}</p>}
 
       {status?.mockOnDeployedStage && (
         <div
           className="card"
-          style={{ marginTop: "1.2rem", borderColor: "var(--danger)", borderWidth: 1, borderStyle: "solid" }}
+          style={{ marginTop: "1.2rem", borderColor: "var(--vxtpl-danger)", borderWidth: 1, borderStyle: "solid" }}
         >
-          <h3 style={{ color: "var(--danger)" }}>Serving mock data on a deployed stage</h3>
-          <p style={{ fontSize: "0.88rem", color: "var(--slate)", lineHeight: 1.55 }}>
+          <h3 style={{ color: "var(--vxtpl-danger)" }}>Serving mock data on a deployed stage</h3>
+          <p style={{ fontSize: "0.88rem", color: "var(--vxtpl-slate)", lineHeight: 1.55 }}>
             A platform base URL is missing, so entitlement or chat is answering from a mock resolver. Everything below
             about tiers and models is fabricated. This state only persists because{" "}
             <code>ALLOW_MOCK_ON_DEPLOY=on</code> is set - without it the app refuses to start.
