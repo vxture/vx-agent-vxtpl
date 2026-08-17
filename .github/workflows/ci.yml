@@ -106,6 +106,12 @@ jobs:
       - name: Placeholder guardrail (no build-time substitution tokens)
         run: node scripts/guardrails/check-no-placeholders.mjs --strict
 
+      # One product, one number. The port is stated in ten files because a
+      # Dockerfile cannot read compose and an nginx vhost cannot read a shell
+      # script; what it must not do is disagree with itself.
+      - name: Port guardrail (every site states the same port)
+        run: node scripts/guardrails/check-port-consistency.mjs --strict
+
   # -- Quality gate (aggregator; stable required-check name) ------------------
   quality-gate:
     name: quality-gate

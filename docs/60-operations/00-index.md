@@ -17,6 +17,7 @@ register rather than inheriting them.
 | TD-004 | `local_authz` is schema-only - no code reads or writes the membership and role tables | 2026-08-16 | open |
 | TD-005 | No request-level tests for the auth, webhook and chat routes | 2026-08-16 | open |
 | TD-006 | Port cutover to 4000 is not executed on the deploy host | 2026-08-17 | open |
+| TD-007 | varda-bff occupies 3121, which the registry allocates to runos beta | 2026-08-18 | open |
 
 ### TD-001 - `@vxture/shared` value-domain dependency
 
@@ -166,33 +167,74 @@ assembly rather than in a part.
 
 ### TD-006 - Port cutover to 4000 is not executed on the deploy host
 
-The org port registry moved vxtpl from `3210/3211` (L2, object-domain) to
-`4000/4001` (L3, industry agent) on 2026-08-13, on the grounds that vxtpl is
-agent-level rather than an object domain; `3210/3211` now belongs to ontos. The
-registry records vxtpl's status as **in production, cutover not executed**.
+The registry moved vxtpl from `3210/3211` (L2) to `4000/4001` (L3) on
+2026-08-13 - it is agent-level, not an object domain - and `3210/3211` went to
+ontos. This repo is entirely on 4000. The deploy host is not:
+`/srv/md0/vxtpl/etc/.env` carries `APP_PUBLISH_PORT=3210`, so a deploy still
+brings the stack up on the old number. **Changing this repo does not move
+production.**
 
-This repo is now entirely on 4000 - image default and `EXPOSE`, compose,
-`deploy.sh`, `.env.example`, the edge vhost's `$upstream`, `pnpm dev`. The
-deploy host is not: `/srv/md0/vxtpl/etc/.env` still carries
-`APP_PUBLISH_PORT=3210`, so a deploy still brings the stack up on the old
-number. **Changing this repo does not move production.** Two things have to
-happen on the operations side, and they are one number so they happen together:
+Verified on the host 2026-08-17: `vxtpl-app` was `Up (healthy)`, publishing
+`3210->3210`, and `127.0.0.1:3210/api/health` returned the v0.2.0 payload. The
+application was never down. The public edge had already been retargeted -
+`proxy_pass http://${VX_WORKER02_TAILNET_IP}:4000` - so `vxtpl.vxture.com`
+returned 502 against a perfectly healthy app.
 
-1. `APP_PUBLISH_PORT=4000` in the deploy host's `etc/.env`, then redeploy.
-2. The edge vhost's `$upstream` set to `vx-worker-02:4000`. `configs/edge/vxtpl.vxture.com.conf`
-   is the source of record and already says 4000; it must be installed, not
-   just committed. Owner is handling the edge separately.
+Remaining step, one number so both halves move together:
 
-Order matters only in that both must land before traffic is correct; between
-them the site is down, so do them in one window rather than a day apart.
+    APP_PUBLISH_PORT=4000 in /srv/md0/vxtpl/etc/.env, then recreate the stack
 
-**Why this is a TD entry rather than a note.** The 2026-08-17 v0.2.0 deploy is
-what surfaced it, and it surfaced badly: the deploy reported a health failure
-against a container Docker had already marked healthy, because `verify` read
-the port from a shell variable CI never exports while compose read it from
-`--env-file`. The two disagreed silently and the failure pointed at the wrong
-thing. `deploy.sh` now reads the same file compose does and logs which port it
-probed, so the next mismatch is legible instead of a phantom outage - but the
-underlying split between what this repo says and what the host runs stays open
-until the cutover is executed, and anyone reading the repo would otherwise
-conclude production is on 4000.
+The edge needs nothing: it is already on 4000, and its own comment says so.
+
+### What this cost, and what now prevents it
+
+Worth keeping in full, because a template's most transferable asset is a
+mistake it has already made.
+
+**Three numbers, three files, no single place the disagreement was visible.**
+The edge said 4000, the deploy host said 3210, and the repo had just been
+changed to 4000. Each file, read alone, looked correct.
+
+**The check that should have caught it was reading a different source from the
+thing it checked.** `deploy.sh` took the port from its own shell, which never
+has it - CI does not export `APP_PUBLISH_PORT` over SSH, and the operator .env
+reaches compose through `--env-file` rather than the environment. So `verify`
+probed the default while the container listened on the operator's value, and
+reported a health failure against a container Docker had already marked
+healthy. That failure then pointed at the wrong problem: an hour went into a
+phantom outage of an app that was serving the whole time.
+
+**A variable was used where a constant belonged.** Making the container-internal
+port an env value meant the port the app listens on depended on that value
+reaching every consumer of it. One consumer did not get it. Every other product
+on the same host writes the container side as a literal (atlas 3100, runos 3120,
+arda 3230) and only varies the published side - which is also what registry rule
+R3 actually says. vxtpl had over-applied it to both sides.
+
+Three things changed as a result, and a copied product inherits all three:
+
+1. The container port is a literal again; only the published side is a variable.
+2. `deploy.sh` probes that literal and **logs both ports**, so a container/host
+   disagreement is one line of output rather than an inference.
+3. `scripts/guardrails/check-port-consistency.mjs` fails CI when the ten places
+   this repo states its port stop agreeing. It cannot know the number is the
+   right one - only the registry can - but it can insist the repo tell one
+   story. Verified by breaking each of the nine editable sites in turn.
+
+What none of that covers, and what TD-006 stays open for: the deploy host's
+`.env` and the installed edge vhost are outside this repo, so no check here can
+see them. That gap is structural. The mitigation is the log line in (2) - it
+prints the published port every deploy, so the next time the host disagrees
+with the edge it is written down at the moment it happens.
+
+### TD-007 - varda-bff occupies 3121, allocated to runos beta
+
+`vx-varda-bff` publishes `3121->3121` on worker-02. The registry allocates
+`3120/3121` to runos (prod/beta) and gives varda `3090-3099`. runos beta is
+dormant (runos TD-006), so nothing collides today; the day it is enabled, it
+will.
+
+Not vxtpl's to fix - varda is platform-line (L0), and where its three components
+(bff / server / studio) land inside `3090-3099` is theirs to decide. Recorded
+here because vxtpl shares the host and found it, and a collision discovered at
+the moment someone enables a beta stack is the expensive way to find out.

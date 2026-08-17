@@ -22,29 +22,35 @@ PRODUCT_CODE="${PRODUCT_CODE:-vxtpl}"
 PRODUCT_CODE_SNAKE="${PRODUCT_CODE//-/_}"
 IMAGE_NAME="${PRODUCT_CODE}-app"
 PROJECT_NAME="${PRODUCT_CODE}"
-# One number: the app listens on, and is published on, the port the registry
-# allocated. The operator .env carries it; this default only keeps a bare
-# on-host run working.
+# The port the app listens on INSIDE the container. A LITERAL, matching the
+# registry allocation and every other product on this host (atlas 3100, runos
+# 3120, arda 3230). `verify` reaches it with `docker exec`, so it is the
+# container side that matters here, never the published one.
 #
-# READ FROM THE ENV FILE, not from this shell. `compose` gets the value via
-# --env-file, so that is where the truth is; the shell never sees it because CI
-# does not export it over SSH. Taking the shell's value meant `verify` probed
-# the DEFAULT while the container listened on whatever the operator .env said,
-# and the two only agreed by luck. That is not hypothetical - it is how the
-# v0.2.0 deploy came to report a health failure against a container Docker had
-# already marked healthy, sending everyone after a phantom outage.
-#
-# Matches the digits and nothing else, so quoting, surrounding spaces, a CRLF
-# line ending and a trailing comment all fall away, and the result can only ever
-# be a number. Last assignment wins, the same as the file's own semantics.
-app_port_from_env_file() {
-  local v=""
+# This was briefly read from the environment, and that is exactly how the
+# 2026-08-17 deploy came to report a health failure against a container Docker
+# had already marked healthy: CI does not export APP_PUBLISH_PORT over SSH, so
+# the shell fell back to the default while the container listened on the
+# operator .env's value. A constant cannot drift out of step with itself.
+APP_CONTAINER_PORT=4000
+
+# The published side, for the log only. If it ever disagrees with what the edge
+# proxies to, that is the whole failure mode - so print it rather than leave the
+# operator to infer it. Digits only, so quoting, spaces, CRLF and trailing
+# comments fall away; last assignment wins, as the file itself means.
+published_port() {
+  local line=""
   if [ -f "$ENV_FILE" ]; then
-    v="$(sed -n 's/^[[:space:]]*APP_PUBLISH_PORT[[:space:]]*=[^0-9]*\([0-9][0-9]*\).*/\1/p' "$ENV_FILE" | tail -n 1)"
+    line="$(grep -E '^[[:space:]]*APP_PUBLISH_PORT[[:space:]]*=' "$ENV_FILE" | tail -n 1)"
   fi
+  # Digits only, so quoting, spaces, a CRLF ending and a trailing comment all
+  # fall away. No sed backreference: this file is copied into other repos, and
+  # a backslash escape that survives one editor and not the next is how a
+  # working script becomes a silently empty one.
+  local v="$(printf '%s' "$line" | grep -oE '[0-9]+' | head -n 1)"
   printf '%s' "${v:-${APP_PUBLISH_PORT:-4000}}"
 }
-APP_PORT="$(app_port_from_env_file)"
+APP_PUBLISHED_PORT="$(published_port)"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
 # next deploy's rsync. Absolute path under the stack root.
@@ -67,7 +73,7 @@ compose() {
 cmd_environment() {
   test -f "$ENV_FILE" || { log "missing $ENV_FILE"; exit 1; }
   test -f "$COMPOSE_FILE" || { log "missing $COMPOSE_FILE"; exit 1; }
-  log "environment OK ($ROOT, app port ${APP_PORT})"
+  log "environment OK ($ROOT; container :${APP_CONTAINER_PORT}, published :${APP_PUBLISHED_PORT})"
 }
 
 cmd_directories() {
@@ -94,14 +100,14 @@ cmd_start() {
 cmd_verify() {
   local tries=0
   until [ "$tries" -ge 20 ]; do
-    if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
-      log "verify OK (health 200 on :${APP_PORT})"
+    if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_CONTAINER_PORT}/api/health" >/dev/null 2>&1; then
+      log "verify OK (health 200 on container :${APP_CONTAINER_PORT}, published :${APP_PUBLISHED_PORT})"
       return 0
     fi
     tries=$((tries + 1))
     sleep 3
   done
-  log "verify FAILED: /api/health not healthy on :${APP_PORT} (from ${ENV_FILE})"
+  log "verify FAILED: /api/health not healthy on container :${APP_CONTAINER_PORT} (published :${APP_PUBLISHED_PORT})"
   compose ps
   exit 1
 }
