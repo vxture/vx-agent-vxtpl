@@ -1,24 +1,29 @@
 #!/usr/bin/env node
-// Placeholder guardrail: `__SOMETHING__` tokens must not exist in this repo.
+// Placeholder guardrail: build-time substitution tokens must not exist here.
 //
-// vxtpl began as `vxture-template`, a tree of `__PRODUCT_CODE__` tokens that
-// CI substituted at build time. ADR-001 removed that, and the reason is worth
-// restating because it is the reason this check exists rather than a comment:
-// the deployed artifact was not the repo. What ran in production was a rewrite
-// of the source produced during the build, so reading the repo told you what
-// production almost looked like. Every literal you can read here now is the
-// literal that runs.
+// A "substitution token" is a NAME WRAPPED IN DOUBLE UNDERSCORES - the shape
+// `vxture-template` used for its product code, which CI replaced during the
+// build. This file deliberately never writes one out, because a check that
+// needs an exemption for itself has already conceded the argument. (It also
+// found that out the hard way: the first version explained the rule using real
+// tokens and its own CI run reported five of them.)
 //
-// `docs/90-memory/10-agent.md` has stated the rule since - "if you find a
-// `__SOMETHING__` token outside docs/80-liaison/, it is a bug" - and nothing
-// enforced it. A rule that only exists in prose survives exactly as long as
-// everyone who reads it remembers it, which for a repo other products are
-// copied from is not long enough.
+// ADR-001 removed the mechanism, and the reason is why this check exists rather
+// than a comment: the deployed artifact was not the repo. What ran in production
+// was a rewrite of the source produced during the build, so reading the repo
+// told you what production almost looked like. Every literal you can read here
+// now is the literal that runs.
+//
+// `docs/90-memory/10-agent.md` has stated the rule since, and nothing enforced
+// it. A rule that lives only in prose holds for exactly as long as everyone who
+// reads it remembers it, which for a repo other products are copied from is not
+// long enough.
 //
 // THE RULE
 //
-//   Anything that runs or ships   a `__X__` token is forbidden, no exceptions.
-//   Markdown (prose, anywhere)    allowed ONLY as inline code: `__X__`
+//   Anything that runs or ships   a substitution token is forbidden, no
+//                                 exceptions, this file included
+//   Markdown (prose, anywhere)    allowed ONLY as inline code
 //   docs/80-liaison/              skipped - append-only frozen letters
 //
 // "Markdown anywhere" rather than "under docs/", because CLAUDE.md and
@@ -84,7 +89,7 @@ for (const file of tracked()) {
         line: i + 1,
         token: m[0],
         why: isProse
-          ? "prose may name a placeholder, but only as inline code (`" + m[0] + "`)"
+          ? "prose may name a substitution token, but only as inline code (`" + m[0] + "`)"
           : "this file runs or ships - a placeholder here means the artifact is not the repo",
       });
     }
