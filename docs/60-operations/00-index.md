@@ -16,6 +16,7 @@ register rather than inheriting them.
 | TD-003 | C2 entitlement + usage flush still use the deprecated `x-vxture-internal-auth` shared header | 2026-08-16 | open |
 | TD-004 | `local_authz` is schema-only - no code reads or writes the membership and role tables | 2026-08-16 | open |
 | TD-005 | No request-level tests for the auth, webhook and chat routes | 2026-08-16 | open |
+| TD-006 | Port cutover to 4000 is not executed on the deploy host | 2026-08-17 | open |
 
 ### TD-001 - `@vxture/shared` value-domain dependency
 
@@ -162,3 +163,36 @@ assembly rather than in a part.
   provisioning handler already has one) and assert the request-level contracts:
   webhook accept/reject on signature, state replay rejection on callback, 403 on
   an ungated model, 401 with no session.
+
+### TD-006 - Port cutover to 4000 is not executed on the deploy host
+
+The org port registry moved vxtpl from `3210/3211` (L2, object-domain) to
+`4000/4001` (L3, industry agent) on 2026-08-13, on the grounds that vxtpl is
+agent-level rather than an object domain; `3210/3211` now belongs to ontos. The
+registry records vxtpl's status as **in production, cutover not executed**.
+
+This repo is now entirely on 4000 - image default and `EXPOSE`, compose,
+`deploy.sh`, `.env.example`, the edge vhost's `$upstream`, `pnpm dev`. The
+deploy host is not: `/srv/md0/vxtpl/etc/.env` still carries
+`APP_PUBLISH_PORT=3210`, so a deploy still brings the stack up on the old
+number. **Changing this repo does not move production.** Two things have to
+happen on the operations side, and they are one number so they happen together:
+
+1. `APP_PUBLISH_PORT=4000` in the deploy host's `etc/.env`, then redeploy.
+2. The edge vhost's `$upstream` set to `vx-worker-02:4000`. `configs/edge/vxtpl.vxture.com.conf`
+   is the source of record and already says 4000; it must be installed, not
+   just committed. Owner is handling the edge separately.
+
+Order matters only in that both must land before traffic is correct; between
+them the site is down, so do them in one window rather than a day apart.
+
+**Why this is a TD entry rather than a note.** The 2026-08-17 v0.2.0 deploy is
+what surfaced it, and it surfaced badly: the deploy reported a health failure
+against a container Docker had already marked healthy, because `verify` read
+the port from a shell variable CI never exports while compose read it from
+`--env-file`. The two disagreed silently and the failure pointed at the wrong
+thing. `deploy.sh` now reads the same file compose does and logs which port it
+probed, so the next mismatch is legible instead of a phantom outage - but the
+underlying split between what this repo says and what the host runs stays open
+until the cutover is executed, and anyone reading the repo would otherwise
+conclude production is on 4000.

@@ -25,7 +25,26 @@ PROJECT_NAME="${PRODUCT_CODE}"
 # One number: the app listens on, and is published on, the port the registry
 # allocated. The operator .env carries it; this default only keeps a bare
 # on-host run working.
-APP_PORT="${APP_PUBLISH_PORT:-4000}"
+#
+# READ FROM THE ENV FILE, not from this shell. `compose` gets the value via
+# --env-file, so that is where the truth is; the shell never sees it because CI
+# does not export it over SSH. Taking the shell's value meant `verify` probed
+# the DEFAULT while the container listened on whatever the operator .env said,
+# and the two only agreed by luck. That is not hypothetical - it is how the
+# v0.2.0 deploy came to report a health failure against a container Docker had
+# already marked healthy, sending everyone after a phantom outage.
+#
+# Matches the digits and nothing else, so quoting, surrounding spaces, a CRLF
+# line ending and a trailing comment all fall away, and the result can only ever
+# be a number. Last assignment wins, the same as the file's own semantics.
+app_port_from_env_file() {
+  local v=""
+  if [ -f "$ENV_FILE" ]; then
+    v="$(sed -n 's/^[[:space:]]*APP_PUBLISH_PORT[[:space:]]*=[^0-9]*\([0-9][0-9]*\).*/\1/p' "$ENV_FILE" | tail -n 1)"
+  fi
+  printf '%s' "${v:-${APP_PUBLISH_PORT:-4000}}"
+}
+APP_PORT="$(app_port_from_env_file)"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
 # next deploy's rsync. Absolute path under the stack root.
@@ -48,7 +67,7 @@ compose() {
 cmd_environment() {
   test -f "$ENV_FILE" || { log "missing $ENV_FILE"; exit 1; }
   test -f "$COMPOSE_FILE" || { log "missing $COMPOSE_FILE"; exit 1; }
-  log "environment OK ($ROOT)"
+  log "environment OK ($ROOT, app port ${APP_PORT})"
 }
 
 cmd_directories() {
@@ -76,13 +95,13 @@ cmd_verify() {
   local tries=0
   until [ "$tries" -ge 20 ]; do
     if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
-      log "verify OK (health 200)"
+      log "verify OK (health 200 on :${APP_PORT})"
       return 0
     fi
     tries=$((tries + 1))
     sleep 3
   done
-  log "verify FAILED: /api/health not healthy"
+  log "verify FAILED: /api/health not healthy on :${APP_PORT} (from ${ENV_FILE})"
   compose ps
   exit 1
 }
