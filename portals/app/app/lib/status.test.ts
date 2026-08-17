@@ -10,7 +10,6 @@ const SECRETS = {
   PROVISION_WEBHOOK_SECRET: "SENTINEL_wh_secret_zzz",
   PROVISION_WEBHOOK_SECRET_NEXT: "SENTINEL_wh_next_zzz",
   INTERNAL_JOB_TOKEN: "SENTINEL_job_tok_zzz",
-  ATLAS_S2S_TOKEN: "SENTINEL_atlas_tok_zzz",
 };
 
 const FULL_ENV = {
@@ -26,6 +25,7 @@ const FULL_ENV = {
   PLATFORM_API_URL: "http://platform.internal",
   NEXT_PUBLIC_CONSOLE_URL: "https://console.vxture.com",
   ATLAS_API_URL: "http://atlas.internal",
+  RUNOS_API_URL: "http://runos.internal",
   DATABASE_URL: `postgresql://vxtpl_svc:${SECRETS.POSTGRES_PASSWORD}@vxtpl-db:5432/vxturebiz_vxtpl_prod`,
   REDIS_URL: "redis://vxtpl-redis:6379",
 };
@@ -44,11 +44,11 @@ test("secrets are reported as presence booleans only", () => {
   assert.equal(s.c3.webhookSecretConfigured, true);
   assert.equal(s.c3.webhookRotationConfigured, true);
   assert.equal(s.c3.internalJobTokenConfigured, true);
-  assert.equal(s.chat.atlasTokenConfigured, true);
+  assert.equal(s.s2s.configured, true);
   const empty = buildStatus({}, "t");
   assert.equal(empty.c1.clientSecretConfigured, false);
   assert.equal(empty.c3.internalJobTokenConfigured, false);
-  assert.equal(empty.chat.atlasTokenConfigured, false);
+  assert.equal(empty.s2s.configured, false);
 });
 
 test("resolver = platform only when both API url and token are set", () => {
@@ -57,10 +57,19 @@ test("resolver = platform only when both API url and token are set", () => {
   assert.equal(buildStatus({}, "t").c2.resolver, "mock");
 });
 
-test("chat.resolver = atlas only when both ATLAS_API_URL and ATLAS_S2S_TOKEN are set", () => {
+test("chat.resolver = atlas as soon as ATLAS_API_URL is set - the bearer is minted, not configured", () => {
   assert.equal(buildStatus(FULL_ENV, "t").chat.resolver, "atlas");
-  assert.equal(buildStatus({ ATLAS_API_URL: "x" }, "t").chat.resolver, "mock");
+  assert.equal(buildStatus({ ATLAS_API_URL: "x" }, "t").chat.resolver, "atlas");
   assert.equal(buildStatus({}, "t").chat.resolver, "mock");
+});
+
+test("a deployed stage missing platform config is flagged as running on mocks", () => {
+  assert.equal(buildStatus({ ...FULL_ENV, DEPLOY_STAGE: "production" }, "t").mockOnDeployedStage, false);
+  assert.equal(buildStatus({ DEPLOY_STAGE: "production" }, "t").mockOnDeployedStage, true);
+  assert.equal(buildStatus({ DEPLOY_STAGE: "beta" }, "t").mockOnDeployedStage, true);
+  // dev is where the mocks belong, so it is never flagged.
+  assert.equal(buildStatus({ DEPLOY_STAGE: "dev" }, "t").mockOnDeployedStage, false);
+  assert.equal(buildStatus({}, "t").mockOnDeployedStage, false);
 });
 
 test("parseDbUrl extracts host/db/role and DROPS the password", () => {

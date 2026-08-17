@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# On-host deployment lifecycle for the __PRODUCT_CODE__ production stack. Invoked
-# by CI (deploy.yml / rollback.yml) after the image build. Single-stack, prod
-# only. worker02 is a data-array box, so a full-stack pull + up -d is fine.
+# On-host deployment lifecycle for the vxtpl production stack. Invoked by CI
+# (deploy.yml / rollback.yml) after the image build. Single-stack, prod only
+# (ADR-002). worker02 is a data-array box, so a full-stack pull + up -d is fine.
 #
 #   bash deploy.sh all       # directories -> start -> verify
 #   bash deploy.sh start     # pull image (GHCR primary, ACR fallback) + up -d
@@ -13,17 +13,19 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/__PRODUCT_CODE__
+ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/vxtpl
 ENV_FILE="$ROOT/etc/.env"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 
-# Product code: from the environment (CI passes PRODUCT_CODE), else the
-# __PRODUCT_CODE__ literal an instantiated product repo already replaced.
-PRODUCT_CODE="${PRODUCT_CODE:-__PRODUCT_CODE__}"
+# CI passes PRODUCT_CODE explicitly; the default keeps a bare on-host run working.
+PRODUCT_CODE="${PRODUCT_CODE:-vxtpl}"
 PRODUCT_CODE_SNAKE="${PRODUCT_CODE//-/_}"
 IMAGE_NAME="${PRODUCT_CODE}-app"
 PROJECT_NAME="${PRODUCT_CODE}"
-APP_PORT="3000"
+# One number: the app listens on, and is published on, the port the registry
+# allocated. The operator .env carries it; this default only keeps a bare
+# on-host run working.
+APP_PORT="${APP_PUBLISH_PORT:-4000}"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
 # next deploy's rsync. Absolute path under the stack root.

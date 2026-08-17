@@ -1,20 +1,39 @@
-import { getAtlasClientConfig, fetchChatCompletion, DEFAULT_ENDPOINT_CODE, type AtlasClientConfig } from "./atlas-client";
+import { randomUUID } from "node:crypto";
+import {
+  getAtlasClientConfig,
+  fetchChatCompletion,
+  DEFAULT_ENDPOINT_CODE,
+  type AtlasClientConfig,
+} from "./atlas-client";
+import { findSkill } from "./catalog";
+import { runSkill } from "./skill-runner";
+import { assertMockAllowed } from "../lib/deploy-stage";
+import type { MintOptions } from "../lib/s2s-token";
 import {
   MAX_HISTORY_MESSAGES,
   MAX_MESSAGE_LENGTH,
   type ChatMessage,
   type ChatOptions,
   type ChatReply,
+  type SkillOutcome,
 } from "./types";
 
-// Resolver abstraction (entitlement/resolver.ts precedent). The product code
-// depends only on this interface; the factory picks the real Atlas client or
-// the offline Mock. Model/skill selection (chat/catalog.ts) is validated and
-// entitlement-gated by the caller (api/chat/route.ts) BEFORE reaching the
-// resolver - the resolver trusts codes it receives.
+// Resolver abstraction (entitlement/resolver.ts precedent). Product code depends
+// only on this interface; the factory picks the real Atlas client or the offline
+// Mock. Model and skill selection are validated and entitlement-gated by the
+// caller (api/chat/route.ts) BEFORE reaching the resolver - the resolver trusts
+// the codes it receives and does not re-check the gate.
+
+/** Everything a turn needs about who is asking. Never optional on a real call. */
+export interface ChatIdentity {
+  workspaceId: string;
+  /** Identity for S2S minting. OBO (subjectToken) is required for any Runos call. */
+  mint: MintOptions;
+  sessionId?: string;
+}
 
 export interface ChatResolver {
-  reply(history: ChatMessage[], options?: ChatOptions): Promise<ChatReply>;
+  reply(history: ChatMessage[], identity: ChatIdentity, options?: ChatOptions): Promise<ChatReply>;
 }
 
 export function validateHistory(history: unknown): ChatMessage[] {
@@ -29,12 +48,11 @@ export function validateHistory(history: unknown): ChatMessage[] {
   });
 }
 
-// Offline resolver: deterministic canned reply, no platform dependency. Lets
-// the chat UI, route, and validation be verified without any Atlas
-// credential. Echoes the selected model/skill back so the selection UI is
-// verifiable even fully offline.
+// Offline resolver: deterministic canned reply, no platform dependency. Lets the
+// chat UI, route, and validation be verified with no credential at all. It is
+// refused on a deployed stage - see lib/deploy-stage.ts for why.
 export class MockChatResolver implements ChatResolver {
-  async reply(history: ChatMessage[], options: ChatOptions = {}): Promise<ChatReply> {
+  async reply(history: ChatMessage[], _identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
     const last = history[history.length - 1];
     const echo = last?.content ?? "";
     const modelCode = options.modelCode ?? DEFAULT_ENDPOINT_CODE;
@@ -43,11 +61,12 @@ export class MockChatResolver implements ChatResolver {
       mode: "mock",
       modelCode,
       skillCode: options.skillCode ?? null,
+      skill: options.skillCode
+        ? { code: options.skillCode, capabilityId: null, status: "not-invoked", detail: "offline mock: Runos is not called" }
+        : undefined,
       message: {
         role: "assistant",
-        content:
-          `[mock, model: ${modelCode}]${skillNote} Atlas is not connected yet ` +
-          `(see docs/80-liaison for the pending credential request). You said: ${echo}`,
+        content: `[mock, model: ${modelCode}]${skillNote} Atlas is not configured. You said: ${echo}`,
       },
     };
   }
@@ -56,13 +75,56 @@ export class MockChatResolver implements ChatResolver {
 export class AtlasChatResolver implements ChatResolver {
   constructor(private readonly cfg: AtlasClientConfig) {}
 
-  async reply(history: ChatMessage[], options: ChatOptions = {}): Promise<ChatReply> {
+  async reply(history: ChatMessage[], identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
     const modelCode = options.modelCode ?? DEFAULT_ENDPOINT_CODE;
-    // Skill invocation requires the full Runos MCP protocol, out of scope
-    // for now (see docs/80-liaison/70-...) - selection is recorded but not
-    // yet wired into the Atlas call.
-    const message = await fetchChatCompletion(this.cfg, history, modelCode);
-    return { mode: "atlas", modelCode, skillCode: options.skillCode ?? null, message };
+    // ONE task id spans the whole turn - the Runos skill invocation, the outcome
+    // report that closes it, and the Atlas inference call. Both planes require
+    // it and both store it verbatim, so a turn that spent a capability call and
+    // model tokens can be totalled back up as one unit of work. Two ids would
+    // make that impossible, and neither side would complain.
+    const taskId = `vxtpl-${randomUUID()}`;
+
+    let skill: SkillOutcome | undefined;
+    let messages = history;
+
+    if (options.skillCode) {
+      skill = await runSkill(options.skillCode, history, {
+        taskId,
+        identity: identity.mint,
+        sessionId: identity.sessionId,
+      });
+      // A skill that produced something feeds the model; one that did not is
+      // reported honestly rather than silently dropped, so the user can tell
+      // "the skill found nothing" from "the skill never ran".
+      if (skill.status === "ran" && skill.detail) {
+        messages = [
+          ...history.slice(0, -1),
+          {
+            role: "user",
+            content:
+              `${history[history.length - 1].content}\n\n` +
+              `[${findSkill(options.skillCode)?.label ?? options.skillCode} result]\n${skill.detail}`,
+          },
+        ];
+      }
+    }
+
+    const completion = await fetchChatCompletion(this.cfg, identity.mint, messages, {
+      taskId,
+      endpointCode: modelCode,
+    });
+
+    return {
+      mode: "atlas",
+      // Report the model that actually served, not the one requested.
+      modelCode: completion.modelCode || modelCode,
+      skillCode: options.skillCode ?? null,
+      skill,
+      message: completion.message,
+      usage: completion.usage ?? undefined,
+      latencyMs: completion.latencyMs,
+      finishReason: completion.finishReason,
+    };
   }
 }
 
@@ -71,11 +133,16 @@ let singleton: ChatResolver | null = null;
 export function getChatResolver(): ChatResolver {
   if (singleton) return singleton;
   const cfg = getAtlasClientConfig();
-  singleton = cfg ? new AtlasChatResolver(cfg) : new MockChatResolver();
+  if (cfg) {
+    singleton = new AtlasChatResolver(cfg);
+    return singleton;
+  }
+  assertMockAllowed("chat (Atlas)", "ATLAS_API_URL");
+  singleton = new MockChatResolver();
   return singleton;
 }
 
-// For tests: reset the memoized resolver.
+/** For tests: reset the memoized resolver. */
 export function resetChatResolver(): void {
   singleton = null;
 }

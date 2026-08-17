@@ -6,12 +6,16 @@ register (`TD-NNN`), and incident notes.
 ## Tech-debt register (TD-NNN)
 
 Append-only. Each entry is a known, deliberately-deferred debt with a stable ID
-(never reused). Empty in the template skeleton.
+(never reused). These are vxtpl's; a repo copied from vxtpl starts an empty
+register rather than inheriting them.
 
 | ID | Title | Opened | Status |
 |----|-------|--------|--------|
 | TD-001 | Wire the published `@vxture/shared` value-domain dependency + alignment guardrail | 2026-07-21 | closed 2026-07-21 |
 | TD-002 | Vendored health-identity implementation deviated from 025's shared-helper clause (undeclared) | 2026-07-21 | closed 2026-07-21 |
+| TD-003 | C2 entitlement + usage flush still use the deprecated `x-vxture-internal-auth` shared header | 2026-08-16 | open |
+| TD-004 | `local_authz` is schema-only - no code reads or writes the membership and role tables | 2026-08-16 | open |
+| TD-005 | No request-level tests for the auth, webhook and chat routes | 2026-08-16 | open |
 
 ### TD-001 - `@vxture/shared` value-domain dependency
 
@@ -90,3 +94,71 @@ line - silent deviation fails self-rectify acceptance.
   remains to annotate (the vendor file no longer exists) - this entry plus the
   reply liaison letter (`docs/80-liaison/`) are the closure record `vxtpl_301`
   §3.4 asked for.
+
+### TD-003 - C2 and usage flush still use the deprecated shared-secret header
+
+`entitlement/platform-client.ts` and `usage/lib/flush.ts` authenticate to the
+platform with `x-vxture-internal-auth`, a long-lived shared secret carried in
+`PLATFORM_INTERNAL_AUTH_TOKEN`.
+
+The platform now dual-accepts that header OR a Bearer S2S token with
+`audience=vxture` (the `PLATFORM_S2S_AUDIENCE` sentinel), and intends to retire
+the shared-secret path once callers migrate. vxtpl already mints S2S tokens for
+Atlas and Runos (ADR-003), so the migration is a change of header on two call
+sites, not new machinery - and it would remove the last long-lived shared secret
+from the runtime environment.
+
+- **Why deferred**: batch F was one decision - "S2S tokens are minted, not
+  configured". Folding a C2 auth migration into it would have coupled a
+  behaviour change on the entitlement path (which gates paid access) to a
+  repositioning change, with one test run to catch both.
+- **Cost of waiting**: vxtpl is the reference build, so every product copied
+  from it inherits the deprecated convention and will need the same migration.
+- **Recovery condition**: platform confirms the Bearer path is preferred for
+  `/platform/entitlements` and `/usage/consume`; then switch both call sites to
+  `mintS2SToken(PLATFORM_AUDIENCE, ...)` with the header as configured fallback.
+
+### TD-004 - `local_authz` is schema-only
+
+`prisma/schema.prisma` defines the five `local_authz` models (member, role,
+permission, and the two link tables), `00_baseline.sql` creates them, and
+`98_column_locks.sql` locks their writable columns. No application code reads or
+writes any of them.
+
+The consequence is narrower than it looks: authorization currently works, because
+it runs entirely off the platform's governance roles in the access token
+(`auth/lib/claims.ts`). What is missing is the product-LOCAL layer - a member row
+created on first authenticated request, product-specific roles resolved per
+(workspace, sub) - which is the pattern a real product needs the moment it wants
+a permission the platform does not model.
+
+- **Why deferred**: vxtpl has no domain permission to gate, so any
+  implementation would be a demonstration with no user. Writing one anyway risks
+  encoding a shape that turns out wrong for the first product that actually needs
+  it.
+- **Cost of waiting**: the exemplar has a documented pattern with no worked
+  example, which is exactly the gap ADR-001 says an exemplar should not have.
+- **Recovery condition**: the first real permission requirement, or a decision
+  to demonstrate the pattern on the provisioning `onProvisioned` hook (which is
+  also currently unwired).
+
+### TD-005 - no request-level tests for the security-critical routes
+
+The units beneath them are well covered - PKCE, claim parsing, webhook signature
+verification and rotation, flush semantics - but no test invokes the exported
+`GET`/`POST` handlers of `auth/login`, `auth/callback`, `auth/backchannel-logout`,
+`provisioning/webhook`, or `api/chat` with a crafted `Request`.
+
+Those five are where a wiring mistake is most expensive: a callback that forgets
+to consume state, a webhook route that verifies the signature against a parsed
+body instead of raw bytes, a chat route that resolves entitlement for the wrong
+workspace. Unit tests cannot catch any of those, because each is a mistake in the
+assembly rather than in a part.
+
+- **Why deferred**: these handlers reach Redis and the cookie store, so the tests
+  need injectable seams that do not exist yet. Adding them is a refactor of the
+  route modules, not a test-writing task.
+- **Recovery condition**: introduce a thin dependency object per route (the
+  provisioning handler already has one) and assert the request-level contracts:
+  webhook accept/reject on signature, state replay rejection on callback, 403 on
+  an ungated model, 401 with no session.

@@ -2,7 +2,7 @@
   "name": "vxture-vxtpl",
   "version": "0.0.0",
   "private": true,
-  "description": "Governance-first template for a Vxture product repository.",
+  "description": "vxtpl - a deployed Vxture product and the reference build new product repos are copied from.",
   "packageManager": "pnpm@10.30.3",
   "engines": {
     "node": ">=22"
@@ -19,8 +19,11 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @product-code/app build",
-    "type-check:all": "pnpm --filter @product-code/shared type-check",
+    "dev": "pnpm --filter @vxtpl/app dev",
+    "build": "pnpm --filter @vxtpl/app build",
+    "start": "pnpm --filter @vxtpl/app start",
+    "test": "pnpm --recursive --if-present test",
+    "type-check:all": "pnpm --recursive --if-present type-check",
     "lint": "pnpm --recursive --if-present lint",
     "lint:docs-numbering": "node scripts/guardrails/check-docs-numbering.mjs --strict",
     "lint:data-design": "node scripts/guardrails/check-data-architecture.mjs --strict"

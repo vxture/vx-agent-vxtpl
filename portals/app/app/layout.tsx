@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
+import { AppTheme } from "./ds";
 import "./globals.css";
 
 export const metadata = {
@@ -7,32 +8,29 @@ export const metadata = {
   description: `${BRAND.displayName} - a Vxture product`,
 };
 
-const NAV_LINKS = [
-  { href: "/chat", label: "Chat" },
-  { href: "/status", label: "Status" },
-  { href: "/platform-check", label: "Platform check" },
-  { href: "/entitlement-matrix", label: "Entitlement matrix" },
-];
-
+/**
+ * The document, and nothing else.
+ *
+ * The product chrome lives in `(product)/layout.tsx` rather than here, because
+ * the gate must not have any: it is a checkpoint, and a nav bar on it offers a
+ * visitor links to places the gate has just decided they cannot go.
+ *
+ * THEME. The design system's dark mode is driven by a `.dark` class on
+ * `<html>`, and it never uses `prefers-color-scheme` - so a stylesheet that
+ * reaches for the media query instead is answering a different question from
+ * the one the DS is answering, and the two disagree the moment the OS is dark.
+ * vxtpl had exactly that bug after the 5.x migration: its own surfaces flipped
+ * and the DS's tokens did not.
+ *
+ * `AppTheme` carries both halves: the pre-paint class-setter and the provider.
+ * It lives in `ds.tsx` rather than here because the DS cannot be imported from
+ * a server component at all - see that file.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang={BRAND.defaultLocale}>
+    <html lang={BRAND.defaultLocale} suppressHydrationWarning>
       <body>
-        <div className="shell">
-          <header className="topnav">
-            <a href="/" className="brand-mark">
-              {BRAND.displayName}
-            </a>
-            <nav>
-              {NAV_LINKS.map((l) => (
-                <a key={l.href} href={l.href}>
-                  {l.label}
-                </a>
-              ))}
-            </nav>
-          </header>
-          {children}
-        </div>
+        <AppTheme>{children}</AppTheme>
       </body>
     </html>
   );

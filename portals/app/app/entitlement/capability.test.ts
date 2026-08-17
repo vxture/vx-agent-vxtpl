@@ -5,7 +5,7 @@ import { makeEntitlement } from "./resolver";
 
 test("canUseFeature denies when the entitlement has no tier (no product access)", () => {
   const e = makeEntitlement("ws", "p", { tier: null });
-  assert.equal(canUseFeature(e, "model:chat-default"), false);
+  assert.equal(canUseFeature(e, "model:chat-cheap"), false);
 });
 
 test("canUseFeature denies an unknown feature key at any tier", () => {
@@ -16,8 +16,8 @@ test("canUseFeature denies an unknown feature key at any tier", () => {
 test("canUseFeature is cumulative: enterprise has everything free has", () => {
   const free = makeEntitlement("ws", "p", { tier: "free" });
   const enterprise = makeEntitlement("ws", "p", { tier: "enterprise" });
-  assert.equal(canUseFeature(free, "model:chat-default"), true);
-  assert.equal(canUseFeature(enterprise, "model:chat-default"), true);
+  assert.equal(canUseFeature(free, "model:chat-cheap"), true);
+  assert.equal(canUseFeature(enterprise, "model:chat-cheap"), true);
 });
 
 test("canUseFeature gates a starter-only feature away from free", () => {
@@ -28,7 +28,7 @@ test("canUseFeature gates a starter-only feature away from free", () => {
 });
 
 test("minTierFor reports the lowest tier that unlocks a feature", () => {
-  assert.equal(minTierFor("model:chat-default"), "free");
+  assert.equal(minTierFor("model:chat-cheap"), "free");
   assert.equal(minTierFor("skill:summarize"), "starter");
   assert.equal(minTierFor("skill:data-analysis"), "enterprise");
   assert.equal(minTierFor("model:does-not-exist"), null);

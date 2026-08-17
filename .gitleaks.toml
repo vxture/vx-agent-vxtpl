@@ -1,6 +1,6 @@
 # gitleaks config for the secret-scan CI gate and the local pre-commit hook.
 # Extends the built-in ruleset and allowlists only this repo's known-safe,
-# non-secret patterns: env-var references and obvious template placeholders.
+# non-secret patterns: env-var references and obvious fill-me-in markers.
 # Real secrets never live in tracked files (see .gitignore: .env*, private/,
 # *.pem, *.key). New finding -> add a rule or a narrow allowlist entry, never
 # widen the gate. Keep the allowlist minimal; do not copy another repo's
@@ -15,9 +15,9 @@ useDefault = true
 [allowlist]
 description = "Known-safe placeholders and env-var references in tracked files"
 regexTarget = "match"
-# Placeholders substituted at install/render/instantiate time, not literal
-# secrets. Note: .env.example is NOT wholesale-exempted from scanning - only
-# these explicit placeholder shapes are.
+# Markers filled in at install/render time, not literal secrets. Note:
+# .env.example is NOT wholesale-exempted from scanning - only these explicit
+# shapes are.
 regexes = [
   '''\$\{[A-Z0-9_]+\}''',
   '''\{\{\s*[A-Z0-9_]+\s*\}\}''',

@@ -1,7 +1,8 @@
 # osv-scanner suppression config (CI `audit` job, .github/workflows/ci.yml).
 #
-# EMPTY IGNORE BASELINE. The template ships with zero accepted residuals - do
-# not copy another repo's named ignores. Every advisory osv-scanner reports on
+# EMPTY IGNORE BASELINE. vxtpl ships with zero accepted residuals, and a product
+# copied from it starts empty too - do not copy another repo's named ignores.
+# Every advisory osv-scanner reports on
 # pnpm-lock.yaml must be remediated (direct-dep floor bump / pnpm.overrides /
 # exact pin for peer-only deps), not suppressed here.
 #

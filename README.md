@@ -1,74 +1,97 @@
 # vxture-vxtpl
 
-A governance-first template for building a Vxture product repository. It ships
-the org governance base (trunk-based branching, branch-protection ruleset,
-four-layer secret hygiene, SCA hard gate, and the docs numbering system),
-plus a placeholder scheme and an instantiation script that turn this skeleton
-into a concrete product repo.
+**vxtpl** is a deployed Vxture product and the reference build every new Vxture
+product is copied from. Those are deliberately the same thing: a template nobody
+runs drifts from reality, so vxtpl proves the platform integration surface by
+consuming it in production at `https://vxtpl.vxture.com`.
 
-**Product code placeholder:** `__PRODUCT_CODE__` (matches
-`^[a-z][a-z0-9_-]{0,31}$`). A single value cascades across the whole repo -
-compose project/container prefixes, image name, database name/role, package
-scope, OIDC clients, and secret names. `scripts/init/instantiate.mjs` replaces
-the placeholder with a real product code and derives every downstream name (see
-`docs/50-deployment/` bootstrap checklist).
+It signs users in against the central accounts service (C1), gates them by
+subscription tier (C2), receives provisioning webhooks (C3), calls **Atlas** for
+model inference, and calls **Runos** for capability execution - with the same
+governance base, deploy chain, and CI gates any Vxture product is held to.
 
 **Package manager:** pnpm (whole-stack, owner-decided 2026-07-20). Do not
 reintroduce npm workspaces.
 
 ---
 
-## What this template is
+## What you get
 
-Not a static skeleton - a runnable, verifiable reference. The end-state template
-(built out across batches) authenticates users against the central accounts
-service, gates them by subscription tier, and exercises the platform's three
-integration channels (OIDC RP, entitlement, provisioning/usage) against real
-endpoints. Every instantiated repo passes the same self-rectify runbook
-acceptance gates (batches A-G).
+| Surface | What it demonstrates |
+|---------|----------------------|
+| `/gate` | The product front door: verifies access on entry, redirects a signed-in visitor straight through, and otherwise shows the one action that helps |
+| `/chat` | A tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
+| `/status` | Every integration channel's live configuration state, with no secret ever leaving the server |
+| `/platform-check` | Read-only connectivity probes against Atlas and Runos |
+| `/entitlement-matrix` | Every tier x status combination and the gate/CTA outcome it produces, fully offline |
+
+Under those surfaces sit the parts a product repo is actually judged on: the OIDC
+relying-party flow (PKCE, single-use state, back-channel logout), the entitlement
+resolver with its cache-invalidation discipline, the HMAC-verified provisioning
+webhook with idempotency and sequence ordering, the usage buffer/flush pipeline,
+a least-privilege database with column-level write locks, and a tag-to-production
+deploy chain with a required-reviewer gate.
 
 Authority for the design lives in the platform repo, not here:
 
 - Governance (WHAT): `140-repo-governance-standard.md`
-- Template design (batches/content/parameters): `product_240_repo-template.md`
+- Product-repo design: `product_240_repo-template.md`
 - Self-rectify runbook (HOW + per-step machine checks): `20-self-rectify-runbook.md`
 - Docs numbering: `070-docs-taxonomy.md`
 
-This repo carries thin indices under `docs/10-standards/` that point at those
-org standards rather than copying their text.
+This repo carries thin indices under `docs/10-standards/` that point at those org
+standards rather than copying their text.
 
 ---
 
-## Build status (batches)
-
-This repository is built incrementally. Each batch is one PR with machine-checked
-acceptance. See `docs/70-workplan/` for the live tracker.
-
-| Batch | Scope | State |
-|-------|-------|-------|
-| 1 (A-D) | Governance base, secret hygiene, SCA gate, docs skeleton, placeholder + instantiate script, bootstrap checklists | in progress |
-| 2 | Platform integration layer (OIDC RP, C2/C3 channels) + business-face DB baseline + offline Mock verification | later |
-| 3 | Online integration testing against real platform endpoints | later |
-| 4 | First real product instantiation, full end-to-end | later |
-
-Batch 1 delivers the governance shell only: no application source, no deployment
-pipeline (batch E), and no business-face database (batch F) yet.
-
----
-
-## Instantiating a product repo
+## Running it locally
 
 ```bash
-node scripts/init/instantiate.mjs <product_code>
+pnpm install
+cp .env.example .env       # then fill in what you need
+pnpm dev                   # http://localhost:4000
 ```
 
-This replaces `__PRODUCT_CODE__` throughout the repo, derives the cascaded names
-(compose prefix `<code>-app`/`-redis`/`-db`, image `<code>-app`, database
-`vxturebiz_<code>_<env>`, role `<code>_svc`, package scope `@<code>/*`, OIDC
-clients `<code>`/`<code>-beta`, secret names `<CODE>_DB_SVC_PASSWORD`, etc.),
-and writes a `.env.example` skeleton. It is pure Node with zero dependencies.
+A `NODE_AUTH_TOKEN` with read access to GitHub Packages must be set so
+`pnpm install` can resolve the `@vxture` scope (see root `.npmrc`).
 
-Then follow the two checklists in `docs/50-deployment/`:
+With an empty `.env` everything still runs: entitlement and chat fall back to
+offline mock resolvers, and chat resolves against a local dev workspace instead
+of requiring sign-in, so the whole UI is explorable with no credentials. Set
+`MOCK_TIER=pro` (or any tier) to see the entitlement gating actually bite.
+
+Those affordances are **local-dev and CI only**. Both are keyed on
+`DEPLOY_STAGE`, which the image always sets: on `production` or `beta` the mock
+resolvers refuse to start and chat requires a real session, so a deployed stack
+can never silently serve mock entitlements or resolve a workspace nobody owns.
+`.env.example` documents every variable, which ones a real Atlas or Runos call
+needs, and where each secret is procured.
+
+Gates, the same ones CI runs:
+
+```bash
+pnpm type-check:all
+pnpm test
+pnpm lint:docs-numbering
+pnpm lint:data-design
+```
+
+---
+
+## Creating a new product from vxtpl
+
+```bash
+git clone https://github.com/vxture/vxture-vxtpl.git vxture-<code>
+cd vxture-<code>
+node scripts/init/rename-product.mjs <code>        # --dry-run to preview
+```
+
+The rename script rewrites the whole name cascade - OIDC clients, compose project
+and containers, image name, database and service role, workspace package scope,
+secret names, the public vhost - in file contents *and* in file and directory
+names, then reports what a human still has to do. It is pure Node with zero
+dependencies. See `docs/40-implementation/20-creating-a-product-from-vxtpl.md`
+for the full procedure, and the two checklists in `docs/50-deployment/`:
 
 1. Platform-side registration (owner / platform-line actions)
 2. GitHub bootstrap (create public repo, enable secret scanning + push
@@ -76,23 +99,9 @@ Then follow the two checklists in `docs/50-deployment/`:
 
 ---
 
-## Local development
-
-```bash
-pnpm install
-pnpm type-check:all
-pnpm lint
-pnpm lint:docs-numbering
-```
-
-A `NODE_AUTH_TOKEN` with read access to GitHub Packages must be set so
-`pnpm install` can resolve the `@vxture` scope (see root `.npmrc`).
-
----
-
 ## Working agreement
 
 See [CLAUDE.md](CLAUDE.md) for the full repository working agreement: branch
 model, tag-triggered release flow, the five required CI checks, secret hygiene,
-SCA policy, docs taxonomy, and the rigid-zone / blank-zone boundary that keeps
-the template domain-neutral.
+SCA policy, docs taxonomy, and the rigid-zone / exemplar-zone boundary that says
+which parts of vxtpl a copy is expected to replace.

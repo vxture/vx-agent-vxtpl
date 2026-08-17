@@ -1,9 +1,10 @@
 import type { Entitlement, QuotaPool } from "./types";
 
-// Generic quota/limits accessors over the C2 envelope. Domain-neutral: the
-// template keeps limits as an open `metric -> number` map and consumable
-// `quota_pools`; the concrete metric keys (e.g. member.max, storage.bytes) are a
-// product concern, not baked here.
+// Quota/limits accessors over the C2 envelope. Limits stay an open
+// `metric -> number` map with consumable `quota_pools` rather than a fixed set
+// of fields, because the metric keys are the product's (vxtpl meters
+// `vxtpl.chat.messages`; another product meters something else entirely) while
+// the accessors below are shared.
 
 export const UNLIMITED = -1;
 

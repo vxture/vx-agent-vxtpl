@@ -1,4 +1,4 @@
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 import { verifySignature, webhookSecrets } from "../lib/verify";
 import { handleProvisioning, type ProvisioningEvent } from "../lib/handler";
 import { getProvisioningStore } from "../lib/store";
@@ -10,8 +10,31 @@ import { getEntitlementResolver } from "../../entitlement/resolver";
 // retries; a valid-but-duplicate/stale event still acks 2xx.
 export const dynamic = "force-dynamic";
 
+// The product this webhook accepts events for. BRAND, never OIDC_CLIENT_ID: the
+// beta client is `vxtpl-beta` while the product code stays `vxtpl`, so deriving
+// it from the client id would make a beta stack reject every event as
+// wrong-product.
 function productCode(): string {
-  return process.env.OIDC_CLIENT_ID ?? BRAND.productCode;
+  return BRAND.productCode;
+}
+
+/**
+ * Evict the C2 cache for a workspace whose subscription changed.
+ *
+ * Deliberately swallowing: this runs inside a webhook whose contract is "2xx
+ * means recorded". Constructing the entitlement resolver can throw (a deployed
+ * stage with no platform config refuses the mock resolver), and letting that
+ * escape would turn a correctly-verified, correctly-recorded delivery into a
+ * 500 - which the platform retries forever, on an event that already succeeded.
+ * A missed eviction costs at most 45 seconds of stale tier; a retry storm costs
+ * more.
+ */
+function evictEntitlement(workspaceId: string): void {
+  try {
+    getEntitlementResolver().invalidate(workspaceId);
+  } catch (err) {
+    console.error(`[provisioning] entitlement cache eviction failed for ${workspaceId}:`, err);
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -47,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
     await handleProvisioning(event, {
       store: getProvisioningStore(),
       product: productCode(),
-      onSubscriptionChanged: (ws) => getEntitlementResolver().invalidate(ws),
+      onSubscriptionChanged: evictEntitlement,
     });
   } catch {
     return new Response("processing error", { status: 500 }); // platform will retry

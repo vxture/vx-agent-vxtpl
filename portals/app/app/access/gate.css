@@ -1,0 +1,190 @@
+/* The product front door.
+ *
+ * Every value here is a design-system token, reached through the package's
+ * published stylesheet (`@vxture/design-system/styles/globals.css`). Nothing
+ * picks a hex, a radius or a duration of its own, and nothing reaches into the
+ * package's files - which is what lets a copied product inherit its own brand
+ * by swapping one import line.
+ *
+ * NO FALLBACKS IN `var()`, deliberately. The DS 2.x -> 5.x migration renamed
+ * every semantic token (`--vx-color-primary` -> `--primary`), and the fallbacks
+ * this file used to carry turned that into a silent downgrade: the gate still
+ * rendered, in the wrong colours, with nothing to notice. Without a fallback a
+ * missing token invalidates the declaration outright, which is visible in one
+ * glance. `gate.test.ts` turns the same drift into a failing test, so it does
+ * not depend on someone looking - and it is what caught the shadows below:
+ * `--vxtpl-shadow-sm` resolves, but it is TAILWIND's default, not a DS decision. The
+ * DS's shadow vocabulary is an elevation scale (flat / raised / sticky /
+ * overlay / dialog / notification), so a button at rest is `raised` and lifts
+ * to `sticky`. Spending a Tailwind default here would have looked correct and
+ * quietly opted the gate out of the design system.
+ *
+ * WHAT IS LEFT HERE, now that the DS components are usable: the backdrop, the
+ * panel box, and the action. The brand lockup is `ShellBrand` and the verifying
+ * screen is `ShellBootScreen` - both real components, so their styling is not
+ * this file's business any more.
+ *
+ * The action stays because the DS has no link-shaped button. `AuthPrimaryButton`
+ * is a `type="submit"` control and the umbrella does not re-export the `Button`
+ * primitive, so the gate's three navigating states (sign in, subscribe, retry)
+ * have nothing to be. An anchor built from DS tokens is the honest version of
+ * that; wrapping a DS button in an anchor would be a link inside a button.
+ *
+ * The drifting flow lines are the one decorative element kept from the original
+ * template. They are aria-hidden, stop entirely under prefers-reduced-motion,
+ * and sit behind a radial wash so text contrast never depends on where a line
+ * happens to fall.
+ */
+
+.vx-gate {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.vx-gate__flow {
+  position: absolute;
+  inset: -8%;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.vx-gate__flow svg {
+  width: 100%;
+  height: 100%;
+}
+
+.vx-gate__flow path {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  animation: vx-gate-drift 18s var(--ease-standard) infinite alternate;
+}
+
+.vx-gate__flow path:nth-child(2) {
+  animation-delay: -5s;
+  opacity: 0.7;
+}
+.vx-gate__flow path:nth-child(3) {
+  animation-delay: -9s;
+  opacity: 0.45;
+}
+.vx-gate__flow path:nth-child(4) {
+  animation-delay: -13s;
+  opacity: 0.3;
+}
+
+@keyframes vx-gate-drift {
+  from {
+    transform: translate3d(-12px, 8px, 0);
+  }
+  to {
+    transform: translate3d(12px, -8px, 0);
+  }
+}
+
+/* Keeps the panel legible over the lines without hiding them. */
+.vx-gate__wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 48%,
+    var(--background) 0%,
+    color-mix(in srgb, var(--background) 78%, transparent) 27%,
+    color-mix(in srgb, var(--background) 25%, transparent) 58%,
+    transparent 76%
+  );
+}
+
+.vx-gate__panel {
+  position: relative;
+  width: min(390px, calc(100vw - 48px));
+  text-align: center;
+  /* Optically centred rather than mathematically: the eye reads a lone panel as
+     sitting low when it is exactly halfway. */
+  transform: translateY(-3vh);
+}
+
+.vx-gate__brand {
+  justify-content: center;
+  margin-bottom: clamp(2.5rem, 9vh, 4.75rem);
+}
+
+.vx-gate__message {
+  margin: 0 auto var(--space-2xl);
+  max-width: 30ch;
+  color: var(--muted-foreground);
+  font-size: var(--body-md-font-size);
+  line-height: 1.7;
+}
+
+/* --- the action ---------------------------------------------------------
+ * One element with two jobs: a disabled button while verifying, an anchor once
+ * there is somewhere to go. Both wear this class so the box does not resize as
+ * the gate resolves.
+ */
+.vx-gate__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 var(--space-lg);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-family: inherit;
+  font-size: var(--body-md-font-size);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-raised);
+  transition:
+    background var(--transition-duration-base) var(--ease-standard),
+    box-shadow var(--transition-duration-base) var(--ease-standard),
+    transform var(--transition-duration-base) var(--ease-standard);
+}
+
+a.vx-gate__action:hover {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-sticky);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+a.vx-gate__action:active {
+  transform: translateY(0);
+}
+
+.vx-gate__action:disabled {
+  cursor: default;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.vx-gate__action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.vx-gate__hint {
+  /* Holds its line even when empty, so the panel does not jump as the gate
+     moves from verifying to resolved. */
+  min-height: 1.5em;
+  margin: var(--space-lg) 0 0;
+  font-size: var(--label-sm-font-size);
+  color: var(--content-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vx-gate__flow path {
+    animation: none;
+  }
+}

@@ -47,10 +47,9 @@ jobs:
       ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
       ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
       VXTURE_NPM_REGISTRY: ${{ vars.VXTURE_NPM_REGISTRY }}
-      # Product code source: the PRODUCT_CODE repo variable (the template sets it
-      # to the demo code `vxtpl`), falling back to the __PRODUCT_CODE__ literal an
-      # instantiated product repo has already replaced with its real code.
-      IMAGE: ${{ vars.PRODUCT_CODE || '__PRODUCT_CODE__' }}-app
+      # vxtpl's owned image. The product code is baked into the source tree, so
+      # there is no build-time substitution and no repo-variable indirection.
+      IMAGE: vxtpl-app
       IMAGE_CONTEXT: .
       IMAGE_DOCKERFILE: ./portals/app/Dockerfile
     steps:
@@ -85,29 +84,36 @@ jobs:
         with:
           ref: ${{ steps.sha.outputs.sha }}
 
-      # Build-time instantiation: bake the real product code into the image
-      # source (brand, package scope, DDL, OIDC client, ...) so the deployed app
-      # identifies as PRODUCT_CODE, not the __PRODUCT_CODE__ placeholder. Runs on
-      # the ephemeral CI checkout only; the repo stays a template. A no-op for an
-      # already-instantiated product repo (no placeholders left to replace).
-      - name: Instantiate for PRODUCT_CODE
-        if: ${{ vars.PRODUCT_CODE != '' }}
-        shell: bash
-        env:
-          PRODUCT_CODE: ${{ vars.PRODUCT_CODE }}
-        run: node scripts/init/instantiate.mjs "$PRODUCT_CODE"
-
       - name: Compute image metadata
         id: meta
         shell: bash
         env:
           PASSED_SHA: ${{ steps.sha.outputs.sha }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
+          # vxtpl ships prod-only (ADR-002); a non-v tag never reaches deploy.yml,
+          # so anything but a v*.*.* tag is a local/manual build and stages as dev.
+          case "$REF_TYPE:$REF_NAME" in
+            tag:v*) stage="production" ;;
+            *)      stage="dev" ;;
+          esac
+          # The immutable tag carries the STAGE as well as the commit, because
+          # DEPLOY_STAGE is baked into the image and the retag-by-digest path
+          # below keys on this tag alone. Without the suffix, a manual dispatch
+          # build of some commit (stage=dev) would be retagged and shipped when
+          # that same commit is later released - putting an image whose
+          # DEPLOY_STAGE says "dev" into production, where it would silently
+          # disable the guard that refuses mock resolvers.
           short_sha="${PASSED_SHA::7}"
-          echo "image_tag=sha-$short_sha" >> "$GITHUB_OUTPUT"
+          if [ "$stage" = "production" ]; then
+            echo "image_tag=sha-$short_sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=sha-$short_sha-$stage" >> "$GITHUB_OUTPUT"
+          fi
           echo "ref_tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
 
       # Health provenance (025 section 4.2): derive the four build-injected values
       # from git tag / sha / date, with honest fallbacks. gitSha is BARE (no
@@ -119,15 +125,11 @@ jobs:
           PASSED_SHA: ${{ steps.sha.outputs.sha }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
+          STAGE: ${{ steps.meta.outputs.stage }}
         run: |
           set -euo pipefail
           if [ "$REF_TYPE" = "tag" ]; then app_version="$REF_NAME"; else app_version="dev"; fi
-          case "$REF_TYPE:$REF_NAME" in
-            tag:v*)    stage="production" ;;
-            tag:beta-*) stage="beta" ;;
-            tag:dev-*) stage="dev" ;;
-            *)         stage="dev" ;;
-          esac
+          stage="$STAGE"
           {
             echo "app_version=$app_version"
             echo "git_sha=${PASSED_SHA::8}"

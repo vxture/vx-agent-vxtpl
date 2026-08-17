@@ -1,4 +1,4 @@
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 import { serviceIdentity } from "@vxture/shared";
 
 // Integration-status surface (the /status dashboard + /api/status). Summarizes
@@ -54,11 +54,20 @@ export interface IntegrationStatus {
     webhookRotationConfigured: boolean;
     internalJobTokenConfigured: boolean;
   };
+  s2s: {
+    /** All three are needed to mint a token; the OIDC client doubles as the S2S credential. */
+    configured: boolean;
+    issuer: string | null;
+  };
   chat: {
     resolver: "atlas" | "mock";
     atlasApiConfigured: boolean;
-    atlasTokenConfigured: boolean;
   };
+  capability: {
+    runosApiConfigured: boolean;
+  };
+  /** True when a mock resolver is standing in on a stage that should not have one. */
+  mockOnDeployedStage: boolean;
   data: { database: DbInfo; redis: RedisInfo };
   showInfra: boolean;
 }
@@ -118,11 +127,27 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
       webhookRotationConfigured: Boolean(env.PROVISION_WEBHOOK_SECRET_NEXT),
       internalJobTokenConfigured: Boolean(env.INTERNAL_JOB_TOKEN),
     },
-    chat: {
-      resolver: env.ATLAS_API_URL && env.ATLAS_S2S_TOKEN ? "atlas" : "mock",
-      atlasApiConfigured: Boolean(env.ATLAS_API_URL),
-      atlasTokenConfigured: Boolean(env.ATLAS_S2S_TOKEN),
+    s2s: {
+      configured: Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET),
+      issuer: env.OIDC_ISSUER ?? null,
     },
+    chat: {
+      // Only the base URL: the bearer is minted per call from the OIDC client
+      // above, so there is no chat-specific token to report on.
+      resolver: env.ATLAS_API_URL ? "atlas" : "mock",
+      atlasApiConfigured: Boolean(env.ATLAS_API_URL),
+    },
+    capability: {
+      runosApiConfigured: Boolean(env.RUNOS_API_URL),
+    },
+    // A deployed stack serving mock entitlement or chat data is a
+    // misconfiguration someone chose to keep running - surface it, loudly.
+    // Both C2 variables matter: the entitlement resolver falls back to the mock
+    // when EITHER is missing, so testing only the URL would leave the banner
+    // hidden while tiers are being fabricated.
+    mockOnDeployedStage:
+      (env.DEPLOY_STAGE === "production" || env.DEPLOY_STAGE === "beta") &&
+      (!env.PLATFORM_API_URL || !env.PLATFORM_INTERNAL_AUTH_TOKEN || !env.ATLAS_API_URL),
     data: {
       database: {
         configured: Boolean(env.DATABASE_URL),

@@ -11,6 +11,22 @@ import { toAuthUser, type AccessClaims, type AuthUser } from "./claims";
 const REFRESH_SKEW_SECONDS = 60;
 
 export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthUser | null> {
+  return (await getAuthContext(cfg, rpsid))?.user ?? null;
+}
+
+/**
+ * The same resolution, keeping the verified access token alongside the user.
+ *
+ * The raw token is needed for on-behalf-of S2S exchange (lib/s2s-token.ts): the
+ * platform reads workspace and subject FROM the presented token rather than
+ * trusting the request body, which is what makes OBO safe - and is also why the
+ * token cannot be reconstructed from AuthUser. It stays server-side; nothing
+ * here ever puts it on a response.
+ */
+export async function getAuthContext(
+  cfg: OidcConfig,
+  rpsid: string,
+): Promise<{ user: AuthUser; accessToken: string } | null> {
   let session = await getSession(cfg.clientId, rpsid);
   if (!session) return null;
 
@@ -26,7 +42,7 @@ export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthU
   } catch {
     return null;
   }
-  return toAuthUser(claims);
+  return { user: toAuthUser(claims), accessToken: session.accessToken };
 }
 
 async function tryRefresh(

@@ -1,63 +1,86 @@
-/* Design tokens + base styles for the vxtpl product surface. Plain CSS
-   (no framework) - keeps the template dependency-light. Light/dark aware via
-   prefers-color-scheme; no manual toggle exists yet. */
+/* vxtpl's stylesheet, layered on the Vxture design system.
+ *
+ * ORDER IS CONTRACTUAL. The DS globals entry must come first and exactly ONE
+ * brand entry after it - never two, and never a local copy of brand tokens.
+ *
+ * These two lines are the whole dependency. The DS is never reached by a path
+ * into its files, only through the specifiers it publishes - see ADR-004, and
+ * `design-system.test.ts` for the rules that keep it honest.
+ */
+@config "../tailwind.config.mjs";
+@import "@vxture/design-system/styles/globals.css";
+@import "@vxture/design-system/styles/brands/vxture.css";
+
+/* --- vxtpl's own surface -------------------------------------------------
+ * Everything below is vxtpl's, loaded after the DS so it wins on the classes
+ * it owns. It is being migrated onto DS components; what remains here is the
+ * part that has not moved yet.
+ *
+ * EVERY token below is `--vxtpl-*`, and that prefix is load-bearing rather than
+ * tidy. This block used to name them `--border`, `--radius`, `--accent`; DS 5
+ * moved its own semantic layer onto exactly those names, and since vxtpl loads
+ * last, vxtpl won - the design system was being overridden on every surface,
+ * and the only symptom was that adopting it changed nothing. `--border`,
+ * `--radius` and `--radius-sm` are gone from here entirely: the DS means the
+ * same thing by them, so it should be the one that says what they are.
+ */
 
 :root {
-  --paper: #f6f7f9;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --border: #e3e6eb;
-  --border-strong: #cbd0d9;
-  --ink: #14171f;
-  --ink-soft: #3d4451;
-  --slate: #636b78;
-  --slate-faint: #8b93a0;
-  --accent: #3457d5;
-  --accent-soft: #eaeefc;
-  --accent-ink: #23399e;
-  --accent-hover: #2a46b8;
-  --success: #1e7a4c;
-  --success-soft: #e1f3e8;
-  --warn: #a8622c;
-  --warn-soft: #f5e9dd;
-  --danger: #b3261e;
-  --danger-soft: #fbe6e4;
-  --code-bg: #10131a;
-  --code-ink: #d9dee6;
-  --shadow: 0 1px 2px rgba(20, 23, 31, 0.04), 0 8px 24px -12px rgba(20, 23, 31, 0.12);
-  --shadow-sm: 0 1px 2px rgba(20, 23, 31, 0.06);
-  --radius: 12px;
-  --radius-sm: 7px;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Sarasa Mono SC", monospace;
+  --vxtpl-paper: #f6f7f9;
+  --vxtpl-surface: #ffffff;
+  --vxtpl-surface-raised: #ffffff;
+  --vxtpl-border-strong: #cbd0d9;
+  --vxtpl-ink: #14171f;
+  --vxtpl-ink-soft: #3d4451;
+  --vxtpl-slate: #636b78;
+  --vxtpl-slate-faint: #8b93a0;
+  --vxtpl-accent: #3457d5;
+  --vxtpl-accent-soft: #eaeefc;
+  --vxtpl-accent-ink: #23399e;
+  --vxtpl-accent-hover: #2a46b8;
+  --vxtpl-success: #1e7a4c;
+  --vxtpl-success-soft: #e1f3e8;
+  --vxtpl-warn: #a8622c;
+  --vxtpl-warn-soft: #f5e9dd;
+  --vxtpl-danger: #b3261e;
+  --vxtpl-danger-soft: #fbe6e4;
+  --vxtpl-code-bg: #10131a;
+  --vxtpl-code-ink: #d9dee6;
+  --vxtpl-shadow: 0 1px 2px rgba(20, 23, 31, 0.04), 0 8px 24px -12px rgba(20, 23, 31, 0.12);
+  --vxtpl-shadow-sm: 0 1px 2px rgba(20, 23, 31, 0.06);
+  --vxtpl-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --vxtpl-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Sarasa Mono SC", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0c0e13;
-    --surface: #14171f;
-    --surface-raised: #1a1e28;
-    --border: #272c37;
-    --border-strong: #383f4d;
-    --ink: #e9ebf0;
-    --ink-soft: #c2c8d3;
-    --slate: #99a1af;
-    --slate-faint: #6b7280;
-    --accent: #7d92f5;
-    --accent-soft: #1c2340;
-    --accent-ink: #c2cdfb;
-    --accent-hover: #93a5ff;
-    --success: #4ade80;
-    --success-soft: #16281e;
-    --warn: #e0954f;
-    --warn-soft: #2b2113;
-    --danger: #f87171;
-    --danger-soft: #2b1414;
-    --code-bg: #0a0c11;
-    --code-ink: #d9dee6;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.65);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  }
+/* Keyed on `.dark`, not `prefers-color-scheme`, because that is the signal the
+ * design system answers to - it sets the class on <html> from localStorage
+ * (defaulting to system) before first paint and never reads the media query.
+ * A media query here would flip vxtpl's surfaces while the DS's tokens stayed
+ * light, which is the half-dark page this repo shipped briefly after the 5.x
+ * migration. `design-system.test.ts` pins it. */
+.dark {
+  --vxtpl-paper: #0c0e13;
+  --vxtpl-surface: #14171f;
+  --vxtpl-surface-raised: #1a1e28;
+  --vxtpl-border-strong: #383f4d;
+  --vxtpl-ink: #e9ebf0;
+  --vxtpl-ink-soft: #c2c8d3;
+  --vxtpl-slate: #99a1af;
+  --vxtpl-slate-faint: #6b7280;
+  --vxtpl-accent: #7d92f5;
+  --vxtpl-accent-soft: #1c2340;
+  --vxtpl-accent-ink: #c2cdfb;
+  --vxtpl-accent-hover: #93a5ff;
+  --vxtpl-success: #4ade80;
+  --vxtpl-success-soft: #16281e;
+  --vxtpl-warn: #e0954f;
+  --vxtpl-warn-soft: #2b2113;
+  --vxtpl-danger: #f87171;
+  --vxtpl-danger-soft: #2b1414;
+  --vxtpl-code-bg: #0a0c11;
+  --vxtpl-code-ink: #d9dee6;
+  --vxtpl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.65);
+  --vxtpl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -70,9 +93,9 @@ html {
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--sans);
+  background: var(--vxtpl-paper);
+  color: var(--vxtpl-ink);
+  font-family: var(--vxtpl-sans);
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -82,11 +105,11 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: var(--sans);
+  font-family: var(--vxtpl-sans);
   font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0;
-  color: var(--ink);
+  color: var(--vxtpl-ink);
 }
 
 p {
@@ -94,7 +117,7 @@ p {
 }
 
 a {
-  color: var(--accent);
+  color: var(--vxtpl-accent);
   text-decoration: none;
 }
 a:hover {
@@ -103,7 +126,7 @@ a:hover {
 
 code,
 .mono {
-  font-family: var(--mono);
+  font-family: var(--vxtpl-mono);
   font-size: 0.9em;
 }
 
@@ -120,11 +143,11 @@ select {
 }
 
 ::selection {
-  background: var(--accent);
+  background: var(--vxtpl-accent);
   color: #fff;
 }
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--vxtpl-accent);
   outline-offset: 2px;
 }
 
@@ -142,7 +165,7 @@ select {
   gap: 1.5rem;
   padding: 0.9rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--vxtpl-surface);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -152,7 +175,7 @@ select {
   font-weight: 800;
   letter-spacing: -0.02em;
   font-size: 1.02rem;
-  color: var(--ink);
+  color: var(--vxtpl-ink);
 }
 
 .topnav nav {
@@ -162,16 +185,53 @@ select {
 }
 
 .topnav nav a {
-  color: var(--slate);
+  color: var(--vxtpl-slate);
   font-size: 0.88rem;
   font-weight: 600;
   padding: 0.3rem 0;
   border-bottom: 2px solid transparent;
 }
 .topnav nav a:hover {
-  color: var(--ink);
+  color: var(--vxtpl-ink);
   text-decoration: none;
-  border-bottom-color: var(--border-strong);
+  border-bottom-color: var(--vxtpl-border-strong);
+}
+
+/* Session control sits at the far end of the nav, away from the page links. */
+.topnav nav {
+  flex: 1;
+}
+
+.nav-session {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  color: var(--vxtpl-slate-faint);
+  max-width: 22ch;
+}
+
+.nav-session > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-session button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--vxtpl-slate);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.nav-session button:hover {
+  color: var(--vxtpl-ink);
+  border-bottom-color: var(--vxtpl-border-strong);
 }
 
 .page {
@@ -187,11 +247,11 @@ select {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--vxtpl-accent);
 }
 
 .lede {
-  color: var(--slate);
+  color: var(--vxtpl-slate);
   font-size: 0.95rem;
   max-width: 62ch;
   margin-top: 0.6rem;
@@ -199,25 +259,6 @@ select {
 }
 
 /* --- cards / surfaces --- */
-
-.card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  padding: 1.2rem 1.35rem;
-}
-.card + .card {
-  margin-top: 0.9rem;
-}
-.card h3 {
-  font-size: 0.98rem;
-  margin: 0 0 0.7rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  flex-wrap: wrap;
-}
 
 .field-row {
   display: flex;
@@ -227,100 +268,94 @@ select {
   font-size: 0.87rem;
 }
 .field-row .k {
-  color: var(--slate);
+  color: var(--vxtpl-slate);
 }
 .field-row .v {
-  font-family: var(--mono);
-  color: var(--ink-soft);
+  font-family: var(--vxtpl-mono);
+  color: var(--vxtpl-ink-soft);
   text-align: right;
   word-break: break-word;
 }
 
-/* --- badges / status dots --- */
+/* The tier band inside the matrix. A `th scope="colgroup"` rather than a styled
+ * `td`, so a screen reader announces which tier the following rows belong to
+ * instead of reading a stray cell. */
+.ref .tier-heading {
+  background: var(--accent);
+  color: var(--primary-text);
+  font-weight: 700;
+  font-size: var(--label-sm-font-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+}
 
-.badge {
+/* --- chat composer ---------------------------------------------------------
+ * The bottom block: the input row, and under it the model/skill pills. That
+ * order is the one every major assistant arrived at, and the reason is reading
+ * order - these are the last decision before Send, so they belong at the end of
+ * the path rather than above the transcript, where they read as settings fixed
+ * before the conversation began.
+ *
+ * The whole block is one bordered region so it reads as a single composer
+ * rather than an input with a stray strip beneath it.
+ *
+ * The pill is deliberately not a DS control: the DS's NativeSelect is a form
+ * field with a field's weight, and two of them under an input read as a form
+ * the chat happens to sit above. Values are DS tokens even so, so the pills
+ * re-brand with everything else.
+ */
+
+.chat-composer {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.chat-composer__row {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.pill-select {
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
-  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  padding: 0.28rem 0.75rem 0.28rem 0.85rem;
+  font-size: var(--label-sm-font-size);
+  color: var(--foreground);
+}
+.pill-select .pill-label {
+  color: var(--muted-foreground);
   font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 0.22rem 0.6rem;
-  border-radius: 20px;
-  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.badge-ok {
-  background: var(--success-soft);
-  color: var(--success);
-}
-.badge-warn {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-.badge-bad {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-.badge-neutral {
-  background: var(--paper);
-  color: var(--slate-faint);
-  border: 1px dashed var(--border-strong);
-}
-.badge-accent {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex: none;
-}
-
-/* --- form controls --- */
-
-.select,
-.input {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  padding: 0.5rem 0.65rem;
-  font-size: 0.88rem;
-}
-.select:disabled,
-.input:disabled {
-  opacity: 0.6;
-}
-
-.btn {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  padding: 0.5rem 1rem;
-  font-size: 0.88rem;
-  font-weight: 600;
+.pill-select select {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
   cursor: pointer;
+  max-width: 160px;
 }
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #fff;
+.pill-select select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+  border-radius: 4px;
 }
 
 /* --- table --- */
@@ -329,8 +364,8 @@ select {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  background: var(--vxtpl-surface);
+  box-shadow: var(--vxtpl-shadow-sm);
 }
 table.ref {
   font-size: 0.85rem;
@@ -341,8 +376,8 @@ table.ref th {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: var(--paper);
+  color: var(--vxtpl-slate);
+  background: var(--vxtpl-paper);
   padding: 0.6rem 0.85rem;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
@@ -350,7 +385,7 @@ table.ref th {
 table.ref td {
   padding: 0.55rem 0.85rem;
   border-bottom: 1px solid var(--border);
-  color: var(--ink-soft);
+  color: var(--vxtpl-ink-soft);
 }
 table.ref tr:last-child td {
   border-bottom: none;

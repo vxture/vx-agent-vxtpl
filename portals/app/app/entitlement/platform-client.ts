@@ -1,4 +1,4 @@
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 import { assertInternalTarget } from "../lib/internal-target";
 import { EMPTY_ENTITLEMENT, type Entitlement, type QuotaPool } from "./types";
 

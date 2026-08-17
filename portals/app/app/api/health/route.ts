@@ -1,5 +1,5 @@
 import { buildHealthIdentity } from "@vxture/shared";
-import { BRAND } from "@product-code/shared/brand";
+import { BRAND } from "@vxtpl/shared/brand";
 
 // Liveness endpoint. 020: zero-dependency (no DB/Redis/upstream), the container
 // healthcheck target, app bound to 0.0.0.0 (Dockerfile). 025: returns the full

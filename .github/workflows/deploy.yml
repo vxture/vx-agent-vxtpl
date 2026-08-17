@@ -1,8 +1,9 @@
 name: deploy
 
-# Tag-triggered production deploy. This template deploys PROD ONLY (owner
-# decision): a v*.*.* tag builds the image and deploys the production stack on
-# the deploy host (worker02, tailnet, non-VPC -> GHCR primary + ACR fallback).
+# Tag-triggered production deploy. vxtpl runs PROD ONLY (owner decision - see
+# docs/30-design/decisions/ADR-002-prod-only-deployment.md): a v*.*.* tag builds
+# the image and deploys the production stack on the deploy host (worker02,
+# tailnet, non-VPC -> GHCR primary + ACR fallback).
 # The production GitHub Environment carries a required-reviewer gate, so the
 # deploy job pauses until approved.
 on:
@@ -31,9 +32,7 @@ permissions:
   packages: write
 
 env:
-  # Product code source: PRODUCT_CODE repo variable (template=vxtpl), else the
-  # __PRODUCT_CODE__ literal an instantiated product repo already replaced.
-  PRODUCT_CODE: ${{ vars.PRODUCT_CODE || '__PRODUCT_CODE__' }}
+  PRODUCT_CODE: vxtpl
 
 jobs:
   detect:
@@ -178,9 +177,11 @@ jobs:
             "$stage/" "$DEPLOY_USER@$DEPLOY_HOST:$deploy_dir/"
           rm -rf "$stage"
 
-          # Confirm the delivered compose carries the expected db service.
+          # Confirm the delivered compose carries the expected db service. This is
+          # a hard gate: a truncated or wrong-product compose must not reach `up -d`.
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "grep -q '${PRODUCT_CODE}-db' '$deploy_dir/docker-compose.yml' && echo '[deliver] compose has ${PRODUCT_CODE}-db' || echo '[deliver] WARN: ${PRODUCT_CODE}-db missing'"
+            "grep -q '${PRODUCT_CODE}-db' '$deploy_dir/docker-compose.yml' || { echo '[deliver] FATAL: ${PRODUCT_CODE}-db missing from delivered compose' >&2; exit 1; }"
+          echo "[deliver] compose has ${PRODUCT_CODE}-db"
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "printf '%s\n' '$PASSED_SHA' > '$deploy_dir/VERSION'"
 
           # Remote deploy script: GHCR primary (non-VPC host), ACR fallback.
