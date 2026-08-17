@@ -100,6 +100,12 @@ jobs:
       - name: Data architecture guardrail (DDL <-> Prisma lockstep)
         run: node scripts/guardrails/check-data-architecture.mjs --strict
 
+      # ADR-001 removed the build-time substitution step so the deployed
+      # artifact IS the repo. Without a check that stays true only as long as
+      # everyone remembers it - and this repo is copied.
+      - name: Placeholder guardrail (no build-time substitution tokens)
+        run: node scripts/guardrails/check-no-placeholders.mjs --strict
+
   # -- Quality gate (aggregator; stable required-check name) ------------------
   quality-gate:
     name: quality-gate

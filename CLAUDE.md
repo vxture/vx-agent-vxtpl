@@ -16,9 +16,11 @@ inference, and calls Runos for capability execution. What ships here is the
 working shape of a Vxture product, not a diagram of one.
 
 There are no placeholders. Every name is the concrete `vxtpl` value that runs in
-production. A new product repo is created by copying this one and running
-`node scripts/init/rename-product.mjs <new_code>`, which rewrites the name cascade
-below (including file and directory names) in one pass.
+production, and that is enforced rather than asked for:
+`scripts/guardrails/check-no-placeholders.mjs` fails CI on any `__TOKEN__`
+outside the frozen liaison letters. A new product repo is created by copying this
+one and running `node scripts/init/rename-product.mjs <new_code>`, which rewrites
+the name cascade below (including file and directory names) in one pass.
 
 **Package manager: pnpm** (whole-stack, owner-decided 2026-07-20). CI cache keys,
 the Dockerfile deps stage, and the osv `--lockfile=pnpm-lock.yaml` path are all
