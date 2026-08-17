@@ -1,5 +1,6 @@
 import { assertInternalTarget } from "../lib/internal-target";
 import { mintS2SToken, type MintOptions } from "../lib/s2s-token";
+import type { PlatformErrorBody } from "../lib/platform-error";
 
 // Runos client - the commercial capability plane (L1). vxtpl uses it two ways:
 // a read-only well-known probe on /platform-check, and a real
@@ -16,13 +17,10 @@ import { mintS2SToken, type MintOptions } from "../lib/s2s-token";
 // equality - a space-delimited scope is rejected. Tokens live 300 seconds and
 // are minted per use (see lib/s2s-token.ts), never configured.
 //
-// Production Runos (v0.5.0) requires a `sub` claim, which only OBO-mode tokens
-// carry, so every call must ride a real user session. Runos ADR-013 relaxes
-// that - `sub` becomes OBO-only and service-mode audit falls back to `act.sub` -
-// but it is merged-unreleased and ships with v0.6.0. Until then a service-mode
-// token answers 401 S2S_TOKEN_MISSING_SUB. `identity` therefore takes the full
-// MintOptions shape (which will work unchanged after v0.6.0) while callers pass
-// the OBO form today.
+// `identity` takes the full MintOptions shape: Runos accepts both modes since
+// its v0.6.0 (service-mode audit attributes to `act.sub` instead of a user).
+// vxtpl's only caller today is a chat turn, which is user-initiated and so
+// mints OBO - that is also what lets Runos attribute the call to a real person.
 
 export const RUNOS_AUDIENCE = "runos";
 
@@ -46,22 +44,19 @@ export class RunosError extends Error {
 }
 
 /**
- * A capability that refused to run. This is NOT an HTTP failure: runos answers
- * 200 with result.isError and puts the envelope in structuredContent, because
+ * A capability that refused to run. This is NOT an HTTP failure: Runos answers
+ * 200 with `result.isError` and puts the envelope in structuredContent, because
  * the JSON-RPC call itself succeeded - only the capability behind it did not.
+ *
+ * The shape is the platform-wide one (product_251 X-1), the same envelope Atlas
+ * answers with: `code` is always present, and `retryable` is Runos's answer
+ * rather than ours to infer. The older `{error_class, error_code}` pair is gone
+ * - `error_class` is now derived server-side for the audit row and never
+ * appears on the wire.
  */
-export interface RunosFailure {
-  error_class:
-    | "caller_error"
-    | "capability_error"
-    | "capability_timeout"
-    | "gateway_timeout"
-    | "gateway_error"
-    | "authz_rejected"
-    | "cancelled";
-  error_code?: string; // omitted for the two timeout classes
-  retryable: boolean;
-  call_id?: string; // only once the call resolved to an operation
+export interface RunosFailure extends PlatformErrorBody {
+  /** Present only once the call resolved to a concrete operation. */
+  call_id?: string;
 }
 
 /** Per-call metadata the gateway attaches to a successful invoke. */
@@ -163,14 +158,13 @@ async function callTool<T>(
   const result = rpc.result ?? {};
   if (result.isError) return { ok: false, failure: result.structuredContent as RunosFailure };
 
-  const structured = result.structuredContent as
-    | (T & { _meta_vxture?: RunosCallMeta; _meta?: { vxture?: RunosCallMeta } })
-    | undefined;
-  // The gateway emits a FLAT `_meta_vxture` key inside structuredContent while
-  // the published contract documents a nested `_meta.vxture`. Read both: the
-  // flat form is what production answers with today, and the nested form is
-  // where the contract says it is heading.
-  const meta = structured?._meta_vxture ?? structured?._meta?.vxture;
+  const structured = result.structuredContent as (T & { _meta?: { vxture?: RunosCallMeta } }) | undefined;
+  // `_meta.vxture`, nested, matching the request side. The gateway briefly
+  // emitted a flat `_meta_vxture` instead; that was a bug on their side, fixed
+  // in v0.7.0, and the compatibility branch is gone with it. Note `_meta` is
+  // MCP's namespaced metadata slot - the capability's own keys live there too,
+  // so read only `vxture` out of it and never assume the object is ours.
+  const meta = structured?._meta?.vxture;
   const text = result.content?.find((c) => c.type === "text")?.text;
   return { ok: true, data: structured as T, meta, text, callId: meta?.call_id };
 }

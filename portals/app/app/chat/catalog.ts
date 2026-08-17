@@ -6,11 +6,15 @@ import type { Entitlement, Tier } from "../entitlement/types";
 //
 // The model codes are Atlas `endpointCode` values, and they have to be real: an
 // unknown code answers 404 ENDPOINT_NOT_ROUTABLE at call time, not at deploy
-// time. The three below are the chat endpoints Atlas actually routes today.
-// There is no runtime way to validate this list - GET /v1/models is not
-// grant-filtered and returns the whole global catalog, and the endpoint registry
-// is operator-only - so this catalog is kept in sync by liaison. Adding an entry
-// means asking the platform line to create the endpoint AND grant it to vxtpl.
+// time. This list used to be unverifiable - kept in sync by liaison, with the
+// first signal of a wrong code being a user clicking a model in production,
+// which is how vxtpl shipped three codes that existed nowhere.
+//
+// `GET /v1/endpoints` closed that (Atlas #201, asked for in vxtpl's #198), so
+// the list is now checkable: `/platform-check` reconciles it against what vxtpl
+// is actually granted and names any entry that would 404. Adding an entry here
+// still needs the platform line to create the endpoint AND grant it - the
+// difference is that forgetting is now visible before a user finds it.
 //
 // The skill codes are vxtpl's own labels. skill-runner.ts maps each to a Runos
 // catalog search rather than a hard-coded capability id, because the entitled

@@ -79,9 +79,10 @@ The script prints this list when it finishes. In order of when it bites:
 5. **GitHub bootstrap** (`docs/50-deployment/20-github-bootstrap-checklist.md`).
    Apply the branch-protection ruleset **last** - a restrictive ruleset applied
    before the first push blocks that push.
-6. **Re-point the edge vhost.** `configs/edge/<code>.vxture.com.conf` still carries
-   vxtpl's upstream port 3210; set your allocated port and hand it to the edge
-   operator.
+6. **Get a port allocation and re-point the edge vhost.** Ports come from the org
+   port registry and nowhere else - do not pick one. `configs/edge/<code>.vxture.com.conf`
+   still carries vxtpl's upstream port; set yours there and in `APP_PUBLISH_PORT`
+   (one number, both places), then hand the vhost to the edge operator.
 
 ## Adding a beta tier
 

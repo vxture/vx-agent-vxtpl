@@ -28,7 +28,7 @@ value domains. Import from it rather than re-implementing - a local copy of
 ```bash
 pnpm install                 # needs NODE_AUTH_TOKEN for the @vxture scope
 cp .env.example .env
-pnpm dev                     # http://localhost:3000
+pnpm dev                     # http://localhost:4000
 ```
 
 An empty `.env` works: entitlement and chat fall back to mock resolvers, and
@@ -96,9 +96,11 @@ whole integration chain:
   cannot resolve on public DNS, so `http://worker-02:3100` is internal by
   construction - and that is exactly how the platform line publishes the Atlas
   and Runos base URLs.
-- **Runos calls need a signed-in user.** Service-mode tokens carry no `sub` and
-  Runos's guard requires one, so there is no background path to the capability
-  plane. This is a platform contract, not a local choice.
+- **A chat turn's Runos call mints on-behalf-of.** Not because service mode is
+  unavailable (Runos accepts it since v0.6.0) but because the call is made by a
+  person: OBO is what lets the platform derive the workspace from a verified
+  token instead of trusting our claim, and what gives Runos a real end user to
+  attribute the capability call to.
 - **`usage` is absent rather than zero when Atlas reports nothing.** Zeros there
   would be a claim about consumption rather than the absence of one.
 - **A Runos Skill returns instructions, not a result.** Runos distributes skills

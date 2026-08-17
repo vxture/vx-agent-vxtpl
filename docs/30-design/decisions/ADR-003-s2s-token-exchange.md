@@ -38,14 +38,17 @@ only their base URLs.
 Consequences that fall out of the exchange contract, each of which shapes code
 elsewhere:
 
-1. **On-behalf-of is the default, not an option.** In service mode the platform
-   omits `sub` entirely, and Runos v0.5.0's S2S guard rejects a token without one
-   (`S2S_TOKEN_MISSING_SUB`). Every Runos call therefore rides a signed-in user
-   session, which is part of why `/api/chat` had to become session-bound. Runos
-   ADR-013 relaxes this - `sub` becomes OBO-only and service-mode audit falls
-   back to `act.sub` - but it is merged-unreleased and ships with Runos v0.6.0.
-   Our client takes the general identity shape, so the OBO path keeps working and
-   a service-mode path becomes available without a code change.
+1. **On-behalf-of is the default for a user-initiated call.** A chat turn is
+   made by a person, so it mints OBO: the platform reads workspace and subject
+   from the presented token, which is what makes the workspace claim
+   unforgeable. Runos additionally uses the resulting `sub` as the end-user
+   attribution on its audit trail.
+
+   This started as a hard constraint rather than a choice - Runos v0.5.0's guard
+   required `sub`, which service-mode tokens do not carry. Runos ADR-013 lifted
+   that in their v0.6.0, which is live, so a background path to the capability
+   plane now exists. vxtpl has no scheduled capability work today, but the client
+   takes the general identity shape, so adding one is a caller-side change only.
 2. **Cache keys carry identity.** An OBO token is scoped to one user and one
    workspace. The cache is keyed by audience plus mode plus context, so one
    user's token can never be handed to another's request.
@@ -72,8 +75,9 @@ elsewhere:
   `PROVISION_WEBHOOK_SECRET`) are ones vxtpl already had.
 - Liaison letters 60 and 70 asked for the wrong thing. They stay as written -
   they are dated records - and a new letter states the corrected ask.
-- Background work cannot reach Runos until its v0.6.0. That is a known upstream
-  fix in flight, not something to work around locally.
+- A background path to Runos exists as of their v0.6.0. vxtpl does not use one
+  yet; when it needs one, the change is a service-mode identity at the call site,
+  not new machinery.
 - The C2 entitlement client still uses the older `x-vxture-internal-auth` shared
   header. The platform now dual-accepts a Bearer S2S token with `audience=vxture`
   and intends to retire the shared-secret path. Migrating it is tracked as tech

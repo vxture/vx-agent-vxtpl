@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { assertInternalTarget } from "../lib/internal-target";
 import { invalidateS2SToken, mintS2S, type MintOptions, type S2SToken } from "../lib/s2s-token";
+import { isRetryable, type PlatformErrorBody } from "../lib/platform-error";
 import type { ChatMessage } from "./types";
 
 // Atlas client - the model supply plane (L1). Contract verified against the
@@ -34,16 +35,50 @@ export function getAtlasClientConfig(): AtlasClientConfig | null {
   return { baseUrl };
 }
 
-// ModelRuntimeException envelope (covers /v1/* and /tenancy/*).
-export interface AtlasErrorEnvelope {
-  code: string;
-  message: string;
+/**
+ * An Atlas `/v1` error as this client holds it.
+ *
+ * On the wire `retryable` is mandatory (product_251 X-1, and Atlas types it
+ * non-optional). It is optional HERE because this type also describes the
+ * envelope we synthesize when a response is not parseable at all - a proxy page,
+ * a truncated body - where inventing a retry answer would be worse than
+ * admitting we do not have one. `AtlasError.retryable` resolves that case from
+ * the code table below.
+ */
+export interface AtlasErrorEnvelope extends Omit<PlatformErrorBody, "retryable"> {
+  retryable?: boolean;
   requestId?: string;
   modelCode?: string;
   provider?: string;
-  retryAfterMs?: number;
   resetAt?: string;
 }
+
+/**
+ * Codes whose retry answer we hold locally, for the window before every Atlas
+ * error carries `retryable` of its own.
+ *
+ * A status range cannot express this. `MODEL_NOT_IMPLEMENTED` is a 501 and must
+ * NEVER be retried - the upstream simply does not have the capability, so
+ * retrying re-pays the timeout forever. `QUOTA_EXCEEDED` can arrive as a 429 and
+ * must not be retried either: a commercial ceiling only an operator can raise
+ * looks exactly like a capacity gate that clears on its own, and only the code
+ * tells them apart.
+ */
+const ATLAS_RETRYABLE: Record<string, boolean> = {
+  RATE_LIMITED: true,
+  PROVIDER_UNAVAILABLE: true,
+  MODEL_RUNTIME_STREAM_FAILED: true,
+  UPSTREAM_FRAME_UNPARSEABLE: true,
+  MODEL_NOT_IMPLEMENTED: false,
+  MODEL_NOT_ROUTABLE: false,
+  ENDPOINT_NOT_ROUTABLE: false,
+  TASK_PROFILE_NOT_ROUTABLE: false,
+  NOT_ENTITLED: false,
+  QUOTA_EXCEEDED: false,
+  INVALID_TENANT_ID: false,
+  INVALID_APPLICATION_ID: false,
+  CANDIDATE_POOL_TOO_LARGE: false,
+};
 
 export class AtlasError extends Error {
   constructor(
@@ -53,36 +88,39 @@ export class AtlasError extends Error {
     super(`atlas ${envelope.code}: ${envelope.message}`);
   }
 
-  /** Transient conditions worth one retry; a routing or auth error is not one. */
+  /**
+   * Whether backing off could help. Precedence: the callee's own answer, then
+   * our table, then the status. A 401 is absent from all three on purpose -
+   * re-minting and calling again is standard token handling, and a different
+   * thing from the back-off this describes.
+   */
   get retryable(): boolean {
-    if (this.status === 429) return true;
-    return this.status >= 500 && this.status < 600;
+    if (typeof this.envelope.retryable === "boolean") return this.envelope.retryable;
+    const known = ATLAS_RETRYABLE[this.envelope.code];
+    if (typeof known === "boolean") return known;
+    return isRetryable(undefined, this.status);
+  }
+
+  /** How long the callee asked us to wait, when it said. */
+  get retryAfterMs(): number | undefined {
+    return this.envelope.retryAfterMs;
   }
 }
 
 /**
- * Atlas answers in three different error shapes, and a client that reads `code`
- * unconditionally reports `undefined` for the whole validation class - which is
- * exactly the class a new integration hits first:
- *
- *   {code, message, ...}          ModelRuntimeException (the documented one)
- *   {statusCode, message, error}  Nest request validation - no `code` at all
- *   {code, message}               the S2S guard
+ * One envelope on `/v1` now: `code` on every error, guard and runtime alike.
+ * Atlas used to answer request-validation failures with a bare Nest body
+ * (`{statusCode, message, error}` and no `code` at all), which was the shape a
+ * new integration met first and the one that made a client report `undefined`.
+ * That is gone; the `?? "UNKNOWN"` below is a defensive floor for a non-JSON
+ * body, not a second shape we expect.
  */
 async function throwAtlasError(res: Response): Promise<never> {
   let envelope: AtlasErrorEnvelope;
   try {
-    const body = (await res.json()) as Partial<AtlasErrorEnvelope> & {
-      statusCode?: number;
-      error?: string;
-      message?: unknown;
-    };
+    const body = (await res.json()) as Partial<AtlasErrorEnvelope> & { message?: unknown };
     const message = Array.isArray(body.message) ? body.message.join("; ") : String(body.message ?? "");
-    envelope = {
-      ...body,
-      code: body.code ?? (body.error ? `VALIDATION_${body.error.toUpperCase().replace(/\s+/g, "_")}` : "UNKNOWN"),
-      message: message || `HTTP ${res.status}`,
-    };
+    envelope = { ...body, code: body.code ?? "UNKNOWN", message: message || `HTTP ${res.status}` };
   } catch {
     envelope = { code: "UNKNOWN", message: `HTTP ${res.status}` };
   }
@@ -153,12 +191,26 @@ async function atlasFetch(
   return send();
 }
 
+export interface ChatCallOptions {
+  /**
+   * The agent task this call belongs to. REQUIRED by Atlas since v0.15.0
+   * (`400 TASK_ID_REQUIRED` without it), and deliberately the SAME value vxtpl
+   * sends to Runos for the same turn: Atlas is the only inference-metering
+   * entry point, so a task that spans a capability call and a model call can
+   * only be totalled back up if both carry one id. `requestId` does not
+   * substitute - that identifies one call, not the work it belongs to.
+   */
+  taskId: string;
+  endpointCode?: string;
+}
+
 export async function fetchChatCompletion(
   cfg: AtlasClientConfig,
   identity: MintOptions,
   messages: ChatMessage[],
-  endpointCode: string = DEFAULT_ENDPOINT_CODE,
+  opts: ChatCallOptions,
 ): Promise<AtlasCompletion> {
+  const endpointCode = opts.endpointCode ?? DEFAULT_ENDPOINT_CODE;
   // Also Atlas's C3 idempotency key, and the only way to correlate this call in
   // its request log - so it is generated here rather than left to the server.
   const requestId = randomUUID();
@@ -168,13 +220,12 @@ export async function fetchChatCompletion(
     identity,
     "/v1/chat",
     (minted) => {
-      // Atlas takes the tenant from the token when it is there and falls back to
-      // the body otherwise; the body is never allowed to override a verified
-      // claim. Sending the claim back means the two always agree. When the token
-      // carries neither, the field is OMITTED rather than sent empty: an empty
-      // string trips a "must be a non-empty string" validation error that reads
-      // like a client bug, where omitting it produces Atlas's real "no tenant
-      // anywhere" 400.
+      // The tenant comes from the token, never from anything vxtpl declares -
+      // Atlas UUID-asserts it up front now, so a product code here is a plain
+      // `400 INVALID_TENANT_ID` rather than the delayed, misleading failure it
+      // used to be. Omitted when the token carries neither, which Atlas answers
+      // with `TENANT_ID_REQUIRED`: a missing tenant is a real condition and its
+      // own error is clearer than an empty string we invented.
       const tenantId = minted.claims.tenant_id ?? minted.claims.org_id ?? null;
       if (!minted.claims.workspace_id) {
         // Not fatal, and Atlas will not complain - which is the problem. Without
@@ -192,6 +243,7 @@ export async function fetchChatCompletion(
           endpointCode,
           messages,
           ...(tenantId ? { tenantId } : {}),
+          taskId: opts.taskId,
           requestId,
         }),
       };
@@ -217,15 +269,20 @@ export interface AtlasModel {
   provider: string;
   protocol: string;
   capabilities: string[];
+  /**
+   * `inactive` wins over `deprecated`; `active` means live and not scheduled for
+   * removal. This pair is the ONLY advance warning a consumer gets that a model
+   * is going away - without reading it, the notification is a 404 at call time.
+   */
+  state: "active" | "deprecated" | "inactive";
+  deprecatedAt: string | null;
 }
 
 /**
- * The global model catalog. NOT grant-filtered, so this is an auth and
- * connectivity probe rather than a model picker - it lists every model Atlas
- * knows about, not the ones vxtpl may route to. There is deliberately no way to
- * discover our own endpoint codes at runtime: `/capability/endpoints` is
- * operator-only and rejects a `tool:atlas` token, so the catalog in catalog.ts
- * is kept in sync by liaison, not by introspection.
+ * The global model catalog. NOT grant-filtered - it lists every model Atlas
+ * knows about, not the ones vxtpl may route to - so it is an auth and
+ * connectivity probe, not a model picker. For "what may I actually call", use
+ * `listGrantedEndpoints` below.
  */
 export async function listAtlasModels(cfg: AtlasClientConfig, identity: MintOptions): Promise<AtlasModel[]> {
   const res = await atlasFetch(cfg, identity, "/v1/models", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
@@ -240,4 +297,41 @@ export async function verifyAtlasConnectivity(
   identity: MintOptions,
 ): Promise<{ modelCount: number }> {
   return { modelCount: (await listAtlasModels(cfg, identity)).length };
+}
+
+/**
+ * What this caller may actually route to.
+ *
+ * The calling product comes from the token's `act.sub`; there is deliberately no
+ * `productCode` parameter, since letting a caller name a product would let it
+ * enumerate a sibling's grants. Atlas answers this with the same resolution the
+ * call path uses, so the catalog cannot drift from what a call would be
+ * authorized under - a catalog that drifts is worse than none, because it gets
+ * believed.
+ */
+export interface GrantedEndpoint {
+  endpointCode: string;
+  /** Null only when `state` is "missing" - there is no row to read it from. */
+  category: string | null;
+  /**
+   * - `active`   granted, and the entry point routes
+   * - `inactive` granted, but an operator deactivated or withdrew the endpoint
+   * - `missing`  granted, but no such endpoint exists - a dangling grant,
+   *              usually an operator typo
+   *
+   * The last two are listed rather than filtered out. A call gets the same 404
+   * for either, but only one of them is ours to fix; omitting them would read as
+   * "you were never granted this".
+   */
+  state: "active" | "inactive" | "missing";
+}
+
+export async function listGrantedEndpoints(
+  cfg: AtlasClientConfig,
+  identity: MintOptions,
+): Promise<GrantedEndpoint[]> {
+  const res = await atlasFetch(cfg, identity, "/v1/endpoints", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
+  if (!res.ok) await throwAtlasError(res);
+  const raw = (await res.json()) as { endpoints?: GrantedEndpoint[] };
+  return raw.endpoints ?? [];
 }

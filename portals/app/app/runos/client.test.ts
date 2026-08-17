@@ -2,6 +2,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { getRunosClientConfig, runosDiscover, runosInvoke, verifyRunosConnectivity } from "./client";
 import { resetS2STokenCache } from "../lib/s2s-token";
+import { SHARED_REJECTION_CODES, isEntitlementRejection, isSharedRejection } from "../lib/platform-error";
 
 // These pin the wire details that are easy to get subtly wrong and impossible to
 // notice locally: the accept header (a missing media type is a 406 with no hint),
@@ -129,23 +130,42 @@ test("a capability failure arrives as HTTP 200 with isError, not an error status
     id: 1,
     result: {
       isError: true,
-      structuredContent: { error_class: "capability_error", error_code: "provider_unavailable", retryable: true },
+      structuredContent: {
+        code: "CAPABILITY_PROVIDER_UNAVAILABLE",
+        message: "the capability has no reachable endpoint right now",
+        retryable: true,
+      },
     },
   });
   const res = await runosInvoke(getRunosClientConfig()!, "x.y", "op", {}, CALL);
   assert.equal(res.ok, false);
   if (res.ok) return;
-  assert.equal(res.failure.error_class, "capability_error");
+  assert.equal(res.failure.code, "CAPABILITY_PROVIDER_UNAVAILABLE");
   assert.equal(res.failure.retryable, true);
 });
 
-test("a success unwraps structuredContent and lifts the FLAT _meta_vxture call id", async () => {
+test("the cross-plane rejection codes are recognised without a per-callee branch", async () => {
+  // These five mean the same thing on Atlas, Runos, and any future plane, which
+  // is why they carry no module prefix - one constant, not one branch each.
+  for (const code of SHARED_REJECTION_CODES) {
+    assert.equal(isSharedRejection(code), true, code);
+  }
+  assert.equal(isSharedRejection("CAPABILITY_PROVIDER_UNAVAILABLE"), false);
+  // RATE_LIMITED is shared but is NOT an entitlement problem - it clears on its
+  // own, which is the whole reason it is the one retryable member of the set.
+  assert.equal(isEntitlementRejection("QUOTA_EXCEEDED"), true);
+  assert.equal(isEntitlementRejection("RATE_LIMITED"), false);
+});
+
+test("a success unwraps structuredContent and lifts the call id from _meta.vxture", async () => {
   stub({
     jsonrpc: "2.0",
     id: 1,
-    // The published contract documents `_meta.vxture`; the server emits this
-    // flat key, and the server is what answers.
-    result: { structuredContent: { stdout: "42", _meta_vxture: { call_id: "c-1", version_resolved: "1.0.0" } } },
+    // Nested, matching the request side. The gateway briefly emitted a flat
+    // `_meta_vxture` instead; that was fixed in Runos v0.7.0.
+    result: {
+      structuredContent: { stdout: "42", _meta: { vxture: { call_id: "c-1", version_resolved: "1.0.0" } } },
+    },
   });
   const res = await runosInvoke(getRunosClientConfig()!, "x.y", "op", {}, CALL);
   assert.equal(res.ok, true);
@@ -154,16 +174,20 @@ test("a success unwraps structuredContent and lifts the FLAT _meta_vxture call i
   assert.equal(res.data.stdout, "42");
 });
 
-test("the nested _meta.vxture form is read too, since doc and code disagree", async () => {
+test("a capability's own _meta keys survive - the namespace is not ours", async () => {
   stub({
     jsonrpc: "2.0",
     id: 1,
-    result: { structuredContent: { stdout: "42", _meta: { vxture: { call_id: "c-2" } } } },
+    result: {
+      structuredContent: { _meta: { vxture: { call_id: "c-2" }, "acme.io/trace": "t-9" } },
+    },
   });
   const res = await runosInvoke(getRunosClientConfig()!, "x.y", "op", {}, CALL);
   assert.equal(res.ok, true);
   if (!res.ok) return;
   assert.equal(res.callId, "c-2");
+  const meta = res.data._meta as Record<string, unknown>;
+  assert.equal(meta["acme.io/trace"], "t-9", "we own only the vxture key inside _meta");
 });
 
 test("a distributed Skill result exposes its content, not a result payload", async () => {
@@ -174,7 +198,9 @@ test("a distributed Skill result exposes its content, not a result payload", asy
       // Runos distributes skills and never executes them (ADR-006): what comes
       // back is the SKILL.md for the caller's own runtime.
       content: [{ type: "text", text: "# How to summarize\n1. Read it." }],
-      structuredContent: { _meta_vxture: { call_id: "c-3", result_kind: "distributed", content_digest: "sha256:x" } },
+      structuredContent: {
+        _meta: { vxture: { call_id: "c-3", result_kind: "distributed", content_digest: "sha256:x" } },
+      },
     },
   });
   const res = await runosInvoke(getRunosClientConfig()!, "x.y", "op", {}, CALL);

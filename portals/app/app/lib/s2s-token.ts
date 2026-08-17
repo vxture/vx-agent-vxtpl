@@ -24,10 +24,11 @@ import { assertInternalTarget } from "./internal-target";
 //           400 invalid_target when the coverage is absent. Service-mode tokens
 //           carry NO `sub` by design.
 //
-// That last line has a consequence worth stating plainly: Runos's S2S guard
-// requires `sub`, so a service-mode token is rejected there with
-// S2S_TOKEN_MISSING_SUB. Runos calls must therefore run OBO, on a real user
-// session. Atlas and the platform's own endpoints accept either.
+// Every callee accepts both modes. Which one to mint is therefore a question
+// about the CALL, not about the callee: work a person initiated should be OBO,
+// so the workspace is derived from their verified token and the callee has a
+// real end user to attribute to; work nobody initiated has no subject to speak
+// for and uses service mode.
 
 export const PLATFORM_AUDIENCE = "vxture";
 

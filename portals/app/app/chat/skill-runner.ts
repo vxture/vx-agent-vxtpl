@@ -7,7 +7,9 @@ import {
   RunosError,
   type CallToolOptions,
   type RunosCapability,
+  type RunosFailure,
 } from "../runos/client";
+import { isEntitlementRejection } from "../lib/platform-error";
 import { findSkill } from "./catalog";
 import type { ChatMessage, SkillOutcome } from "./types";
 
@@ -22,8 +24,12 @@ import type { ChatMessage, SkillOutcome } from "./types";
 //             correct way to find one is to ask.
 //   resolve   the operation name and its input schema come from the capability's
 //             own contract, not from an assumption here.
-//   invoke    the actual call. Billed and audited - including retries, which is
-//             why this never retries a non-idempotent operation.
+//   invoke    the actual call. This never retries, and that is a decision, not
+//             an omission: every attempt is separately billed and audited, the
+//             gateway never retries on your behalf, and the operations most
+//             worth retrying are exactly the ones that are not idempotent
+//             (`runos.code-sandbox/run_code` runs code - twice is not once).
+//             A retryable failure is reported to the user, who can ask again.
 //   report    closes the task so Runos can attribute the outcome.
 //
 // A skill that cannot run is NOT an error for the chat turn. The production
@@ -31,7 +37,14 @@ import type { ChatMessage, SkillOutcome } from "./types";
 // `unavailable` is the expected answer in production right now - and reporting
 // that honestly is more useful than pretending the skill ran.
 
-/** Search terms per skill. The catalog is keyword-ranked, so these are queries, not ids. */
+/**
+ * Search terms per skill. These are queries, not ids - the entitled catalog is
+ * per-caller and changes without vxtpl redeploying, so it has to be asked.
+ *
+ * Ranking is keyword overlap, not embeddings (Runos's vector provider is still a
+ * stub), so these must SHARE WORDS with how a capability describes itself.
+ * Semantically-close-but-lexically-different phrasing scores zero.
+ */
 const SKILL_QUERIES: Record<string, { query: string; category?: string }> = {
   summarize: { query: "summarize document text" },
   "web-search": { query: "web search retrieve pages" },
@@ -187,10 +200,17 @@ function summarize(payload: Record<string, unknown> | undefined): string {
   return text.length > 4000 ? `${text.slice(0, 4000)}...(truncated)` : text;
 }
 
-function describeFailure(failure: { error_class: string; error_code?: string; retryable: boolean }): string {
-  // `unknown_capability` covers both "no such id" and "outside your entitled
-  // set" on purpose - the two are deliberately indistinguishable, so it reads as
-  // "does not exist" and is never probed further.
-  const code = failure.error_code ? `/${failure.error_code}` : "";
-  return `${failure.error_class}${code}${failure.retryable ? " (retryable)" : ""}`;
+/**
+ * Turn a rejection into something worth showing a person.
+ *
+ * The entitlement rejections are the only ones a user can act on, so they get
+ * the callee's own message; everything else is a fault on our side or the
+ * capability's, and the code is what an operator needs. `CALLER_UNKNOWN_CAPABILITY`
+ * covers both "no such id" and "outside your entitled set" on purpose - the two
+ * are deliberately indistinguishable, so it reads as "does not exist" and is
+ * never probed further.
+ */
+function describeFailure(failure: RunosFailure): string {
+  if (isEntitlementRejection(failure.code)) return failure.message || failure.code;
+  return `${failure.code}${failure.retryable ? " (retryable)" : ""}`;
 }

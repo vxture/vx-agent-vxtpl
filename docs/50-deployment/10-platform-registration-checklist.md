@@ -64,11 +64,12 @@ no hint about which of these steps is missing.
       (`GET /v1/models` is not grant-filtered and the endpoint registry is
       operator-only), so it is liaison-maintained: adding a model to
       `chat/catalog.ts` means asking for the endpoint to exist AND be granted.
-- [ ] **Runos**: a `POST /commerce/grants` row per capability, with
-      `subjectType: "product"` and `subjectRef` = the product code (the same
-      vocabulary as the token's `act.sub`). Required only when the Runos
-      deployment enforces entitlement. A product cannot self-grant; this is an
-      operator action.
+- [x] **Runos**: not required today. Grants live at
+      `POST /commerce/capability-grants` (`subjectType: "product"`, `subjectRef` =
+      the product code, the same vocabulary as the token's `act.sub`) and are
+      consulted only when the deployment sets `RUNOS_ENTITLEMENT_ENFORCED`, which
+      production does not (vxture-runos#116). A product cannot self-grant in any
+      case; it is an operator action. Revisit if enforcement is turned on.
 
 ## Secrets transport
 

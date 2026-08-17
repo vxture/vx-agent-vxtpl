@@ -48,7 +48,7 @@ standards rather than copying their text.
 ```bash
 pnpm install
 cp .env.example .env       # then fill in what you need
-pnpm dev                   # http://localhost:3000
+pnpm dev                   # http://localhost:4000
 ```
 
 A `NODE_AUTH_TOKEN` with read access to GitHub Packages must be set so

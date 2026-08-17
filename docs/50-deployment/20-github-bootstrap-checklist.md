@@ -39,15 +39,18 @@ variable in the path any more.
 
 ### Configured for vxtpl
 
-- [x] `APP_PUBLISH_PORT` = `3210` (reassigned from `3232` on 2026-07-24; see
-      `docs/80-liaison/40-2607241900-vxtpl-port-reassignment.md`). It lives in the
-      host `.env`; no workflow reads the repo variable.
+- [ ] `APP_PUBLISH_PORT` in the host `.env`, set to vxtpl's allocation from the
+      port registry (the repo does not restate the number - see CLAUDE.md). It is
+      one number: the app listens on it and is published on it. No workflow reads
+      the repo variable. **Pending: the registry has reassigned vxtpl and the
+      cutover is not executed** - the host `.env` and the edge vhost move in the
+      same window, or the site 502s the way it did in liaison letter 50.
 - [x] `production` GitHub Environment + required reviewer (deploy pauses until
       approved). No `beta` environment - prod only.
 - [x] Non-secret host secrets: `DEPLOY_HOST` = `vx-worker-02` (tailnet MagicDNS,
       IP `100.76.219.48`), `DEPLOY_USER` = `stone`, `DEPLOY_PORT` = `22`.
-- [x] Domain `vxtpl.vxture.com` created and resolving (shared edge ->
-      `vx-worker-02:3210`); vhost source in `configs/edge/`.
+- [x] Domain `vxtpl.vxture.com` created and resolving (shared edge -> worker02
+      over the tailnet); vhost source in `configs/edge/`.
 - [x] Org-level shared credentials available to the repo: `NODE_AUTH_TOKEN`,
       `ALIYUN_ACR_USERNAME/PASSWORD`, `TAILSCALE_OAUTH_*`; org vars
       `ALIYUN_ACR_REGISTRY/NAMESPACE`, `VXTURE_NPM_REGISTRY`,

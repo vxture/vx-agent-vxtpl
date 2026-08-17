@@ -6,6 +6,7 @@ Deployment and bootstrap material for this repo.
 |------------|---------|
 | `10-platform-registration-checklist.md` | platform-side registration a product needs before any real call succeeds |
 | `20-github-bootstrap-checklist.md` | one-time GitHub bootstrap: create public repo, enable scanning, first-push main, run CI once, apply the ruleset (in that order) |
+| `30-l1-integration-plan.md` | where vxtpl stands against Atlas and Runos, the version pins it is written against, and what is left |
 | `rebuild/` | rebuild artifacts; holds `main-ruleset.json` (the branch-protection ruleset) |
 
 ## The deploy chain

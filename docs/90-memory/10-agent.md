@@ -4,9 +4,9 @@ Start here if you are an AI agent working in this repo.
 
 ## What this repo is
 
-This is `vxtpl`: a Vxture product deployed at `https://vxtpl.vxture.com` (worker02,
-host port 3210, container port 3000) AND the reference build new product repos are
-copied from (ADR-001). Both, on purpose - see `docs/20-specs/10-product-definition.md`.
+This is `vxtpl`: a Vxture product deployed at `https://vxtpl.vxture.com` (worker02)
+AND the reference build new product repos are copied from (ADR-001). Both, on
+purpose - see `docs/20-specs/10-product-definition.md`.
 
 Three things follow that will save you a wrong assumption:
 

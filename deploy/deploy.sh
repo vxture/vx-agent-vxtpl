@@ -22,7 +22,10 @@ PRODUCT_CODE="${PRODUCT_CODE:-vxtpl}"
 PRODUCT_CODE_SNAKE="${PRODUCT_CODE//-/_}"
 IMAGE_NAME="${PRODUCT_CODE}-app"
 PROJECT_NAME="${PRODUCT_CODE}"
-APP_PORT="3000"
+# One number: the app listens on, and is published on, the port the registry
+# allocated. The operator .env carries it; this default only keeps a bare
+# on-host run working.
+APP_PORT="${APP_PUBLISH_PORT:-4000}"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
 # next deploy's rsync. Absolute path under the stack root.

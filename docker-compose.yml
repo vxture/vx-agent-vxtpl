@@ -1,8 +1,13 @@
 # Three-container stack for vxtpl: vxtpl-app (Next.js) + vxtpl-redis (RP session
 # store) + vxtpl-db (business data). PROJECT_NAME drives the compose project +
 # container-name prefix, so a second stack on the same host never collides.
-# Backing services are internal-only; only the app publishes a port - 3210 on
-# worker02, from the operator .env (the container always listens on 3000).
+# Backing services are internal-only; only the app publishes a port.
+#
+# ONE NUMBER, NOT TWO. The published port, the container-internal port, and the
+# in-code fallback default are all the same value, per the port registry's rule
+# R3 - the earlier split (publish X, listen 3000) is what made it possible for a
+# repo to state a port that was true nowhere. The number itself is allocated by
+# the registry, which is the only source that may assign one.
 name: ${PROJECT_NAME:-vxtpl}
 
 services:
@@ -28,16 +33,16 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      PORT: "3000"
+      PORT: "${APP_PUBLISH_PORT:-4000}"
       REDIS_URL: redis://${PROJECT_NAME:-vxtpl}-redis:6379
       DATABASE_URL: ${DATABASE_URL:-}
     ports:
-      - "${APP_PUBLISH_PORT:-3000}:3000"
+      - "${APP_PUBLISH_PORT:-4000}:${APP_PUBLISH_PORT:-4000}"
     depends_on:
       - redis
       - db
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:${APP_PUBLISH_PORT:-4000}/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3

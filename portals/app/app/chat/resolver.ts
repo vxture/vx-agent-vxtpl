@@ -77,8 +77,11 @@ export class AtlasChatResolver implements ChatResolver {
 
   async reply(history: ChatMessage[], identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
     const modelCode = options.modelCode ?? DEFAULT_ENDPOINT_CODE;
-    // One task id spans the whole turn: the skill invocation, and the outcome
-    // report that closes it out. Runos correlates its audit trail on this.
+    // ONE task id spans the whole turn - the Runos skill invocation, the outcome
+    // report that closes it, and the Atlas inference call. Both planes require
+    // it and both store it verbatim, so a turn that spent a capability call and
+    // model tokens can be totalled back up as one unit of work. Two ids would
+    // make that impossible, and neither side would complain.
     const taskId = `vxtpl-${randomUUID()}`;
 
     let skill: SkillOutcome | undefined;
@@ -106,7 +109,10 @@ export class AtlasChatResolver implements ChatResolver {
       }
     }
 
-    const completion = await fetchChatCompletion(this.cfg, identity.mint, messages, modelCode);
+    const completion = await fetchChatCompletion(this.cfg, identity.mint, messages, {
+      taskId,
+      endpointCode: modelCode,
+    });
 
     return {
       mode: "atlas",

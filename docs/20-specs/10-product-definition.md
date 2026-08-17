@@ -51,9 +51,11 @@ they should, and are worth stating where a reader will meet them:
   claim. A token without `workspace_id` does not fail - it skips the quota check
   and records usage against no workspace, dropping the call out of the
   tenant-by-workspace rollup that billing is computed from.
-- **Runos calls need a user.** Its production guard requires a `sub` claim, which
-  only on-behalf-of tokens carry, so the capability plane is reachable only from
-  a signed-in session. Runos ADR-013 lifts this in its v0.6.0.
+- **A user-initiated call mints on-behalf-of.** The workspace and subject come
+  from the presented session token rather than anything vxtpl declares, which is
+  what makes the claim unforgeable - and Runos uses the resulting `sub` as the
+  end-user on its audit trail. Service mode is available too (Runos v0.6.0), so
+  a background path exists; vxtpl has no scheduled capability work today.
 - **Skills are distributed, not executed.** A Runos Skill answers with its own
   content for the caller's runtime to run (Runos ADR-006); only Connectors and
   Executors return a result. vxtpl handles both shapes.

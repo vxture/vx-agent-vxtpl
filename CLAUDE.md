@@ -6,8 +6,8 @@ governance base that every product repo copied from here inherits unchanged.
 
 ## What vxtpl is
 
-`vxtpl` is a real, deployed Vxture product (`https://vxtpl.vxture.com`, worker02,
-host port 3210) AND the reference build every new Vxture product is copied from.
+`vxtpl` is a real, deployed Vxture product (`https://vxtpl.vxture.com`, worker02)
+AND the reference build every new Vxture product is copied from.
 Those are one thing, not two: the only way to keep a template honest is to run it
 in production, so vxtpl proves the platform integration surface by actually
 consuming it - it signs users in against the central accounts service, gates them
@@ -45,7 +45,15 @@ downstream name in the repo. These are literals in the source, not substitutions
 | workspace package scope | `@vxtpl/*` |
 | platform-side secret names | `VXTPL_DB_SVC_PASSWORD`, `VXTPL_PROVISION_WEBHOOK_SECRET`, `VXTPL_WEBHOOK_BASE_URL` |
 | stack root on the deploy host | `/srv/md0/vxtpl` |
-| public vhost / host port | `vxtpl.vxture.com` / `3210` |
+| public vhost | `vxtpl.vxture.com` (beta `beta-vxtpl.vxture.com`, reserved) |
+
+**Ports are not in this table, and not anywhere else in the repo.** They are
+allocated by the org port registry, which is the only source permitted to assign
+one - a repo that restates a port becomes a second source, and the second source
+is the one that goes stale. The runtime value lives where it has to: the
+`APP_PUBLISH_PORT` default in `docker-compose.yml` / `deploy.sh` and the edge
+vhost's `$upstream`. Those are configuration, not documentation. If you need to
+know vxtpl's number, read the registry, not this file.
 
 `BRAND.productCode` (`portals/packages/shared/src/brand.ts`) is the single source
 of product identity in application code. Never derive the product code from
