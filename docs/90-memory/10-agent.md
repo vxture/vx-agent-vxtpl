@@ -12,7 +12,10 @@ Three things follow that will save you a wrong assumption:
 
 - **There are no placeholders.** Every name is the literal `vxtpl` value that runs
   in production. If you find a `__SOMETHING__` token outside `docs/80-liaison/`
-  (frozen historical letters), it is a bug.
+  (frozen historical letters), it is a bug - and CI will say so:
+  `scripts/guardrails/check-no-placeholders.mjs` runs in `static-checks`. Prose
+  may still NAME a token, but only as inline code, which is how ADR-001 explains
+  what it removed without tripping the check it argued for.
 - **A new product is a copy, not an instantiation.**
   `scripts/init/rename-product.mjs <code>` rewrites the name cascade in contents
   and in path names. `instantiate.mjs` is gone; so is the build-time substitution
