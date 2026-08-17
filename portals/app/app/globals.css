@@ -290,20 +290,39 @@ select {
   text-align: left;
 }
 
-/* --- chat toolbar ---------------------------------------------------------
- * Model and skill live inside the conversation card, on one row, as pills. The
- * pill is deliberately not a DS control: the DS's NativeSelect is a form field
- * with a field's weight, and two of them in a toolbar read as a settings panel
- * that happens to sit above a chat. Values are DS tokens even so, so the pills
+/* --- chat composer ---------------------------------------------------------
+ * The bottom block: the input row, and under it the model/skill pills. That
+ * order is the one every major assistant arrived at, and the reason is reading
+ * order - these are the last decision before Send, so they belong at the end of
+ * the path rather than above the transcript, where they read as settings fixed
+ * before the conversation began.
+ *
+ * The whole block is one bordered region so it reads as a single composer
+ * rather than an input with a stray strip beneath it.
+ *
+ * The pill is deliberately not a DS control: the DS's NativeSelect is a form
+ * field with a field's weight, and two of them under an input read as a form
+ * the chat happens to sit above. Values are DS tokens even so, so the pills
  * re-brand with everything else.
  */
+
+.chat-composer {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.chat-composer__row {
+  display: flex;
+  gap: 8px;
+}
 
 .chat-toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0.65rem 1rem;
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 

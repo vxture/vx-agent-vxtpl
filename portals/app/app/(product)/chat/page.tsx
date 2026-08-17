@@ -201,38 +201,20 @@ export default function ChatPage() {
         </Card>
       )}
 
-      {/* One conversation column, model and skill as a toolbar inside the card -
-          the layout every chat product converged on, and for a reason: a model
-          picker parked in a sidebar reads as configuration you set once, when it
-          is really a per-turn choice that belongs next to the thing it changes.
-          The transcript scrolls to the card's own edges and the composer sits
-          flush against its bottom rule, so the card contributes the frame only -
-          its padding and inter-child gap are zeroed rather than worked around. */}
+      {/* One conversation column; model and skill sit UNDER the composer, which
+          is where every major assistant put them and not by coincidence. They
+          are the last thing you touch before sending, so they belong at the end
+          of the reading path, next to Send - not above the transcript, where
+          they read as settings you configured before the conversation started.
+          Keeping them adjacent to the input also means the choice and its effect
+          are in one glance when a locked option explains itself.
+
+          The transcript scrolls to the card's own edges and the composer block
+          sits flush against its bottom rule, so the card contributes the frame
+          only - its padding and inter-child gap are zeroed rather than worked
+          around. */}
       <div style={{ marginTop: "1.4rem" }}>
         <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden" }}>
-          <div className="chat-toolbar">
-            {ctx ? (
-              <>
-                <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
-                <PillSelect
-                  label="Skill"
-                  options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
-                  value={skillCode}
-                  onChange={setSkillCode}
-                />
-              </>
-            ) : (
-              <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
-            )}
-            {turn && (
-              <span style={{ marginLeft: "auto" }}>
-                <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
-                  {turn.mode === "atlas" ? "Atlas" : "Mock"}
-                </StatusBadge>
-              </span>
-            )}
-          </div>
-
           <div
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
@@ -261,18 +243,43 @@ export default function ChatPage() {
             ))}
             {busy && <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
           </div>
-          <div style={{ borderTop: "1px solid var(--border)", padding: "0.75rem", display: "flex", gap: 8 }}>
-            <Input
-              style={{ flex: 1 }}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Type a message"
-              disabled={busy}
-            />
-            <Button onClick={send} disabled={busy || !input.trim()}>
-              {busy ? "..." : "Send"}
-            </Button>
+          <div className="chat-composer">
+            <div className="chat-composer__row">
+              <Input
+                style={{ flex: 1 }}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
+                placeholder="Type a message"
+                disabled={busy}
+              />
+              <Button onClick={send} disabled={busy || !input.trim()}>
+                {busy ? "..." : "Send"}
+              </Button>
+            </div>
+
+            <div className="chat-toolbar">
+              {ctx ? (
+                <>
+                  <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
+                  <PillSelect
+                    label="Skill"
+                    options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
+                    value={skillCode}
+                    onChange={setSkillCode}
+                  />
+                </>
+              ) : (
+                <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
+              )}
+              {turn && (
+                <span style={{ marginLeft: "auto" }}>
+                  <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
+                    {turn.mode === "atlas" ? "Atlas" : "Mock"}
+                  </StatusBadge>
+                </span>
+              )}
+            </div>
           </div>
         </Card>
 
