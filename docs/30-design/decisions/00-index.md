@@ -12,3 +12,5 @@ vxtpl's decisions, not inherited ones.
 | [ADR-001](ADR-001-product-grade-exemplar.md) | vxtpl is a deployed product, not a placeholder skeleton | accepted | 2026-08-16 |
 | [ADR-002](ADR-002-prod-only-deployment.md) | vxtpl deploys production only | accepted | 2026-08-16 |
 | [ADR-003](ADR-003-s2s-token-exchange.md) | S2S tokens are minted per call, never configured | accepted | 2026-08-16 |
+| [ADR-004](ADR-004-design-system-adoption.md) | vxtpl consumes the Vxture design system | accepted | 2026-08-17 |
+| [ADR-005](ADR-005-product-front-door.md) | A product verifies access at its front door | accepted | 2026-08-17 |

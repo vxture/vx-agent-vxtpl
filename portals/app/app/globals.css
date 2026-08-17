@@ -1,7 +1,25 @@
-/* Design tokens + base styles for the vxtpl product surface. Plain CSS, no
-   framework - one less dependency in the image and one less thing a product
-   copied from here has to adopt. Light/dark aware via prefers-color-scheme;
-   no manual toggle exists yet. */
+/* vxtpl's stylesheet, layered on the Vxture design system.
+ *
+ * ORDER IS CONTRACTUAL. The DS globals entry must come first and exactly ONE
+ * brand entry after it - never two, and never a local copy of brand tokens.
+ *
+ * `@source` is not a precaution. Tailwind v4 only generates utilities it can
+ * see in scanned sources, and the DS components carry their utilities inside
+ * their own compiled dist - which Tailwind does not scan by default. Without
+ * this line the DS's BEM rules still land but every utility its components put
+ * on the DOM (p-6, flex-col-reverse, ...) is silently absent, so components
+ * render unstyled in a way that looks like a broken import rather than a
+ * missing scan path.
+ */
+@import "@vxture/design-system/styles/globals.css";
+@import "@vxture/design-system/styles/brands/vxture.css";
+@source "../node_modules/@vxture/design-system/dist";
+
+/* --- vxtpl's own surface -------------------------------------------------
+ * Everything below is vxtpl's, loaded after the DS so it wins on the classes
+ * it owns. It is being migrated onto DS components; what remains here is the
+ * part that has not moved yet.
+ */
 
 :root {
   --paper: #f6f7f9;

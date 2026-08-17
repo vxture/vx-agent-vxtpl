@@ -19,6 +19,7 @@ reintroduce npm workspaces.
 
 | Surface | What it demonstrates |
 |---------|----------------------|
+| `/gate` | The product front door: verifies access on entry, redirects a signed-in visitor straight through, and otherwise shows the one action that helps |
 | `/chat` | A tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
 | `/status` | Every integration channel's live configuration state, with no secret ever leaving the server |
 | `/platform-check` | Read-only connectivity probes against Atlas and Runos |

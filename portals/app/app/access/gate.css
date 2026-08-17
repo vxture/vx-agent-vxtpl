@@ -1,0 +1,125 @@
+/* The product front door.
+ *
+ * Colour, radius, shadow and type all come from DS tokens - nothing here picks
+ * a hex value. That is what makes the gate inherit a product's brand when the
+ * repo is copied and its brand entry swapped: the layout is vxtpl's, the palette
+ * is never vxtpl's.
+ *
+ * The drifting flow lines are the one decorative element kept from the original
+ * template. They are `aria-hidden`, they stop entirely under
+ * `prefers-reduced-motion`, and they sit behind a radial wash so text contrast
+ * never depends on where a line happens to fall.
+ */
+
+.vx-gate {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--color-background, var(--paper));
+}
+
+.vx-gate__flow {
+  position: absolute;
+  inset: -8%;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.vx-gate__flow svg {
+  width: 100%;
+  height: 100%;
+}
+
+.vx-gate__flow path {
+  fill: none;
+  stroke: var(--color-border, var(--border-strong));
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  animation: vx-gate-drift 18s ease-in-out infinite alternate;
+}
+
+.vx-gate__flow path:nth-child(2) {
+  animation-delay: -5s;
+  opacity: 0.7;
+}
+.vx-gate__flow path:nth-child(3) {
+  animation-delay: -9s;
+  opacity: 0.45;
+}
+.vx-gate__flow path:nth-child(4) {
+  animation-delay: -13s;
+  opacity: 0.3;
+}
+
+@keyframes vx-gate-drift {
+  from {
+    transform: translate3d(-12px, 8px, 0);
+  }
+  to {
+    transform: translate3d(12px, -8px, 0);
+  }
+}
+
+/* The wash keeps the panel legible over the lines without hiding them. */
+.vx-gate__wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 48%,
+    var(--color-background, var(--paper)) 0%,
+    color-mix(in srgb, var(--color-background, var(--paper)) 78%, transparent) 27%,
+    color-mix(in srgb, var(--color-background, var(--paper)) 25%, transparent) 58%,
+    transparent 76%
+  );
+}
+
+.vx-gate__panel {
+  position: relative;
+  width: min(390px, calc(100vw - 48px));
+  text-align: center;
+  /* Sits slightly above centre: optically centred rather than mathematically,
+     since the eye reads a lone panel as low when it is exactly halfway. */
+  transform: translateY(-3vh);
+}
+
+.vx-gate__brand {
+  display: inline-flex;
+  margin-bottom: clamp(2.5rem, 9vh, 4.75rem);
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.vx-gate__message {
+  margin: 0 auto 2.5rem;
+  max-width: 30ch;
+  color: var(--color-muted-foreground, var(--slate));
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.vx-gate__action {
+  display: block;
+  text-decoration: none;
+}
+.vx-gate__action:hover {
+  text-decoration: none;
+}
+
+.vx-gate__hint {
+  /* Reserves its line even when empty, so the panel does not jump as the gate
+     moves from verifying to resolved. */
+  min-height: 1.5em;
+  margin: 1.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-muted-foreground, var(--slate-faint));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vx-gate__flow path {
+    animation: none;
+  }
+}
