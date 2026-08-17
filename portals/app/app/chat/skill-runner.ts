@@ -32,10 +32,12 @@ import type { ChatMessage, SkillOutcome } from "./types";
 //             A retryable failure is reported to the user, who can ask again.
 //   report    closes the task so Runos can attribute the outcome.
 //
-// A skill that cannot run is NOT an error for the chat turn. The production
-// catalog is empty today (no third-party connector has been registered), so
-// `unavailable` is the expected answer in production right now - and reporting
-// that honestly is more useful than pretending the skill ran.
+// A skill that cannot run is NOT an error for the chat turn. The catalog is
+// per-caller and sparse - for a long time it was empty, and `unavailable` was
+// the only honest answer production could give. It is no longer empty (Runos
+// registered MarkItDown, `providerId` markitdown, 2026-08-17), but a skill with
+// no matching capability is still the normal case rather than a fault, and
+// saying so beats pretending the skill ran.
 
 /**
  * Search terms per skill. These are queries, not ids - the entitled catalog is
@@ -192,12 +194,32 @@ function buildArguments(inputSchema: unknown, text: string): Record<string, unkn
   return target ? { [target]: text } : { input: text };
 }
 
-/** Reduce a capability payload to something a model can read inside a prompt. */
+/**
+ * Reduce a capability payload to something a model can read inside a prompt.
+ *
+ * The gateway's own bookkeeping - `call_id`, `version_resolved` - is routing
+ * exhaust, not an answer, so it is stripped before the payload reaches the
+ * model. It lives at `_meta.vxture`, and ONLY that key is ours to remove:
+ * `_meta` is MCP's namespaced metadata slot, so anything else a capability put
+ * there belongs to the capability and we are not the ones to decide it is
+ * worthless. If `vxture` was the only key, the now-empty `_meta` goes too,
+ * rather than showing the model an empty object.
+ */
 function summarize(payload: Record<string, unknown> | undefined): string {
-  if (!payload) return "";
-  const { _meta_vxture: _ignored, ...rest } = payload as Record<string, unknown>;
-  const text = JSON.stringify(rest);
+  const text = JSON.stringify(withoutGatewayMeta(payload));
+  // `undefined` in, `undefined` out - JSON.stringify does not return a string.
+  if (!text) return "";
   return text.length > 4000 ? `${text.slice(0, 4000)}...(truncated)` : text;
+}
+
+function withoutGatewayMeta(payload: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!payload) return undefined;
+  const meta = payload._meta;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return payload;
+
+  const { vxture: _ours, ...theirs } = meta as Record<string, unknown>;
+  const { _meta: _dropped, ...rest } = payload;
+  return Object.keys(theirs).length > 0 ? { ...rest, _meta: theirs } : rest;
 }
 
 /**
