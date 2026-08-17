@@ -63,13 +63,20 @@ function dsTokens(): Set<string> {
   return out;
 }
 
-/** vxtpl's own stylesheets - whatever they are, discovered not listed. */
+/**
+ * vxtpl's own stylesheets - whatever they are, discovered not listed.
+ *
+ * The extension filter is applied here rather than as a git pathspec on
+ * purpose. `git ls-files portals -- *.css` looks like a narrowing but is a
+ * UNION of two pathspecs, so it returns every file under portals as well; this
+ * test caught itself doing that, matching the `--x:` in its own doc comment.
+ */
 function ourStylesheets(): string[] {
   const repoRoot = resolvePath(import.meta.dirname, "../../..");
-  return execSync("git ls-files portals -- *.css", { cwd: repoRoot, encoding: "utf8" })
+  return execSync("git ls-files portals", { cwd: repoRoot, encoding: "utf8" })
     .trim()
     .split("\n")
-    .filter(Boolean)
+    .filter((f) => f.endsWith(".css"))
     .map((f) => resolvePath(repoRoot, f));
 }
 
