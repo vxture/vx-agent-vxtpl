@@ -180,7 +180,7 @@ jobs:
 
       - name: Build and push image
         if: ${{ steps.decide.outputs.build == 'true' }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ env.IMAGE_CONTEXT }}
           file: ${{ env.IMAGE_DOCKERFILE }}
