@@ -112,6 +112,11 @@ jobs:
       - name: Port guardrail (every site states the same port)
         run: node scripts/guardrails/check-port-consistency.mjs --strict
 
+      # main-ruleset.json is applied verbatim to every repo bootstrapped from
+      # vxtpl, so a weakened protection here is inherited, not contained (#37).
+      - name: Ruleset guardrail (no bypass, five checks still required)
+        run: node scripts/guardrails/check-ruleset.mjs --strict
+
   # -- Quality gate (aggregator; stable required-check name) ------------------
   quality-gate:
     name: quality-gate
