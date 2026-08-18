@@ -29,6 +29,7 @@
     "lint:docs-numbering": "node scripts/guardrails/check-docs-numbering.mjs --strict",
     "lint:data-design": "node scripts/guardrails/check-data-architecture.mjs --strict",
     "lint:placeholders": "node scripts/guardrails/check-no-placeholders.mjs --strict",
-    "lint:ports": "node scripts/guardrails/check-port-consistency.mjs --strict"
+    "lint:ports": "node scripts/guardrails/check-port-consistency.mjs --strict",
+    "lint:ruleset": "node scripts/guardrails/check-ruleset.mjs --strict"
   }
 }
