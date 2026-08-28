@@ -40,7 +40,7 @@ const CI = ".github/workflows/ci.yml";
 const WATCH = ".github/workflows/sca-watch.yml";
 
 /** The authoritative set, same list as check-ruleset.mjs. */
-const REQUIRED_CONTEXTS = ["quality-gate", "build", "test-coverage", "audit", "gitleaks"];
+const REQUIRED_CONTEXTS = new Set(["quality-gate", "build", "test-coverage", "audit", "gitleaks"]);
 
 const problems = [];
 
@@ -93,7 +93,7 @@ if (ci && watch) {
       problems.push(`${file}: could not find the osv-scanner invocation`);
       return null;
     }
-    return m[1].replace(/\\\s*$/, "").trim().split(/\s+/).join(" ");
+    return m[1].replace(/\\\s*$/, "").trim().replaceAll(/\s+/g, " ");
   };
   const ciArgs = invocation(ci, CI);
   const watchArgs = invocation(watch, WATCH);
@@ -112,7 +112,7 @@ if (watch) {
   const ids = [...jobsBlock.matchAll(/^ {2}([A-Za-z0-9_-]+):$/gm)].map((m) => m[1]);
   const names = [...jobsBlock.matchAll(/^ {4}name:\s*(\S+)\s*$/gm)].map((m) => m[1]);
   for (const context of [...ids, ...names]) {
-    if (REQUIRED_CONTEXTS.includes(context)) {
+    if (REQUIRED_CONTEXTS.has(context)) {
       problems.push(
         `${WATCH} declares a job producing the check context "${context}", which is one of the ` +
           `five required checks. Two contexts with one name is not a state branch protection ` +

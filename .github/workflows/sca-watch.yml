@@ -75,7 +75,10 @@ jobs:
           sha256=15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0
           url="https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
           mkdir -p /tmp/osv-bin
-          curl -fsSL "$url" -o /tmp/osv-bin/osv-scanner
+          # --proto/--proto-redir: -L follows redirects, and without these a
+          # redirect to http:// would be followed silently. The sha256 below
+          # catches a swapped artifact; this stops the plaintext hop.
+          curl -fsSL --proto "=https" --proto-redir "=https" --tlsv1.2 "$url" -o /tmp/osv-bin/osv-scanner
           echo "${sha256}  /tmp/osv-bin/osv-scanner" | sha256sum -c -
           chmod +x /tmp/osv-bin/osv-scanner
 
