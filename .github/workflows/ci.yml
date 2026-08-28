@@ -117,6 +117,13 @@ jobs:
       - name: Ruleset guardrail (no bypass, five checks still required)
         run: node scripts/guardrails/check-ruleset.mjs --strict
 
+      # The `audit` job above is the gate on incoming change; sca-watch.yml is
+      # the scheduled scan of the idle trunk, which the gate cannot see. Two
+      # copies of one scan can drift, and a watcher pinned to an older scanner
+      # reports clean on findings the gate blocks.
+      - name: SCA consistency guardrail (the watch scans like the gate)
+        run: node scripts/guardrails/check-sca-consistency.mjs --strict
+
   # -- Quality gate (aggregator; stable required-check name) ------------------
   quality-gate:
     name: quality-gate

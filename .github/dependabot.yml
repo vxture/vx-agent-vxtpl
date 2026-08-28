@@ -1,10 +1,44 @@
 version: 2
+
+# @vxture/* lives on GitHub Packages, and Dependabot cannot read it without
+# being told how.
+#
+# WITHOUT THIS BLOCK THE ENTIRE NPM HALF FAILS, silently and permanently. The
+# failure is not obvious from the outside because version detection succeeds:
+# Dependabot finds the latest release of every dependency, then shells out to
+# `corepack pnpm update <pkg> --lockfile-only`, and pnpm re-resolves the WHOLE
+# workspace - including the @vxture/* packages. Those come from
+# npm.pkg.github.com, Dependabot holds no credential for it, and pnpm dies with
+#
+#   ERR_PNPM_FETCH_401  GET https://npm.pkg.github.com/@vxture%2Fshared
+#   Handled error whilst updating react: private_source_authentication_failure
+#
+# for every dependency in turn. The job ends with zero PRs and a green-looking
+# "no updates needed" as far as anyone glancing at the repo is concerned.
+#
+# IGNORING @vxture/* DOES NOT HELP, and this is the counter-intuitive part. The
+# `ignore` entry below stops Dependabot PROPOSING a @vxture bump; it does not
+# stop pnpm NEEDING to resolve one to build a lockfile. Ignore governs the
+# output, the resolver governs the input.
+#
+# The credential is a Dependabot secret, which is a DIFFERENT NAMESPACE from
+# Actions secrets - the repo's existing NODE_AUTH_TOKEN is invisible here. It
+# must be a CLASSIC PAT with `read:packages`; the GitHub Packages npm registry
+# does not accept fine-grained tokens.
+registries:
+  vxture-github-packages:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{secrets.VXTURE_PACKAGES_READ_TOKEN}}
+
 updates:
   # pnpm workspace root (repo root - pnpm-lock.yaml lives here, covering
   # portals/app and portals/packages/shared). Dependabot's "npm" ecosystem
   # reads pnpm-lock.yaml too.
   - package-ecosystem: npm
     directory: /
+    registries:
+      - vxture-github-packages
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
@@ -15,11 +49,13 @@ updates:
           - '@vxture/*'
     ignore:
       # @vxture/* moves on its own release cadence from a different repo -
-      # bump it deliberately, not via an automated PR.
+      # bump it deliberately, not via an automated PR. This governs what gets
+      # PROPOSED; the registry above is what makes resolution possible at all.
       - dependency-name: '@vxture/*'
 
   # Keep pinned Action versions (docker/build-push-action@v6, actions/checkout@v4,
   # etc.) current - these live outside npm and would otherwise drift silently.
+  # This half has always worked: it needs no private registry.
   - package-ecosystem: github-actions
     directory: /
     schedule:
