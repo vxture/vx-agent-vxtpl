@@ -144,6 +144,14 @@ lands on main is a new SHA, so it gets its own gate run); it does NOT deploy.
 None of these run on a tag push - cutting a release tag ships whatever is already
 at that commit on `main`, it does not re-verify the gates.
 
+`sca-watch.yml` is separate and is NOT a required check. It runs osv-scanner on a
+daily cron plus manual dispatch, against `main` as it already stands, and files
+the result as an ISSUE (closing it again when the trunk comes back clean). It
+exists because `audit` triggers on change and therefore cannot see an advisory
+published against an unchanged lockfile - see the SCA section below. Its job is
+deliberately not named `audit`; `check-sca-consistency.mjs` enforces both that
+and the pin lockstep between the two.
+
 The deploy chain is `deploy.yml` (tag -> production Environment -> approval) ->
 `build.yml` (reusable; GHCR primary + ACR fallback, dedup by `sha-<short>` tag) ->
 `deploy/deploy.sh` over the tailnet (`tailnet-ssh-connect` composite action).
@@ -181,6 +189,38 @@ override / exact pin for peer-only deps) or record a named `[[PackageOverrides]]
 exception with a reason - never widen the gate (no `continue-on-error`, never
 removed from required). vxtpl ships an empty ignore baseline, and a product
 copied from it starts empty too; do not copy another repo's named ignores.
+
+**Three mechanisms, and each covers a case the others cannot.** Losing any one of
+them is not a reduction in redundancy, it is a blind spot:
+
+| Mechanism | Answers | Blind to |
+|-----------|---------|----------|
+| `audit` in `ci.yml` | does THIS CHANGE bring a hole in | anything on an idle trunk |
+| `sca-watch.yml` | is there a hole in what is ALREADY there | nothing lockfile-shaped, but it only reports - it cannot fix |
+| Dependabot npm | is there a NEWER version, with a PR to take it | needs `registries:` to work at all |
+
+This was learned the hard way in a repo built from this template: `audit` was the
+only one running, a high advisory landed 98 minutes after the last push to a
+then-idle `main`, and it sat unseen for ten days. The gate had not missed it. The
+gate had never run again.
+
+**Dependabot's npm half needs `registries:` or it does nothing, silently.**
+`@vxture/*` comes from `npm.pkg.github.com`, and Dependabot holds no credential
+for it unless `.github/dependabot.yml` names one. Version detection still
+succeeds, so the job looks like it worked; the failure is at the next step, where
+`pnpm update --lockfile-only` re-resolves the whole workspace and dies with
+`ERR_PNPM_FETCH_401`. Two traps in this:
+
+1. **`ignore: '@vxture/*'` does not avoid it.** Ignore governs what gets
+   PROPOSED; the resolver governs what must be FETCHED.
+2. **Dependabot secrets are a different namespace from Actions secrets.** The
+   `NODE_AUTH_TOKEN` that CI uses is invisible to Dependabot. The registry token
+   must be added under Settings -> Secrets -> Dependabot, and it must be a
+   CLASSIC PAT - the GitHub Packages npm registry does not accept fine-grained
+   tokens.
+
+The symptom to watch for is not an error. It is `github-actions` producing PRs
+while `npm` produces none, forever.
 
 ## Docs taxonomy
 

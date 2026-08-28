@@ -27,6 +27,22 @@ this list from the top.
         required checks include the five contexts.
 - [ ] `NODE_AUTH_TOKEN` with read access to GitHub Packages, so CI can resolve
       `@vxture/*`. The `build` and `test-coverage` jobs both need it.
+- [ ] `VXTURE_PACKAGES_READ_TOKEN` as a **Dependabot** secret (Settings ->
+      Secrets and variables -> **Dependabot**, not Actions - they are separate
+      namespaces and neither can see the other). A **classic** PAT with
+      `read:packages` and nothing else; the GitHub Packages npm registry does
+      not accept fine-grained tokens.
+
+      Without it the entire npm half of Dependabot fails permanently and
+      quietly: `pnpm update --lockfile-only` re-resolves `@vxture/*`, gets a
+      401, and every dependency ends in
+      `private_source_authentication_failure`. Nothing is reported as broken -
+      the repo simply never receives an npm update PR again.
+
+      **Verify rather than assume.** After adding it, run "Check for updates" on
+      the npm entry (Insights -> Dependency graph -> Dependabot) and confirm the
+      job log has no `ERR_PNPM_FETCH_401`. A repo where `github-actions`
+      produces PRs and `npm` produces none is showing you this failure.
 
 ## Deployment - prod only on worker02
 
