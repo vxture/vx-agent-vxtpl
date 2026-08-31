@@ -4,7 +4,8 @@ import { makeEntitlement } from "../entitlement/resolver";
 import { UNLIMITED } from "../entitlement/quota";
 import {
   FREE_DAILY_RUNS,
-  RUN_DURATION_MS,
+  MAX_SCORE_MS,
+  QUALIFY_MS,
   callSign,
   dailyRunCap,
   dailyTrend,
@@ -66,18 +67,21 @@ test("history window widens with the ladder", () => {
   assert.deepEqual(historyWindowFor(makeEntitlement("ws", "p", { tier: null })), { kind: "none" });
 });
 
-test("score validation bounds to the run duration", () => {
+test("score validation is open above the bar, bounded by the sanity cap", () => {
   assert.equal(isValidScoreMs(0), true);
-  assert.equal(isValidScoreMs(RUN_DURATION_MS), true);
-  assert.equal(isValidScoreMs(RUN_DURATION_MS + 1), false);
+  assert.equal(isValidScoreMs(QUALIFY_MS), true);
+  assert.equal(isValidScoreMs(QUALIFY_MS + 1), true);
+  assert.equal(isValidScoreMs(MAX_SCORE_MS), true);
+  assert.equal(isValidScoreMs(MAX_SCORE_MS + 1), false);
   assert.equal(isValidScoreMs(-1), false);
   assert.equal(isValidScoreMs(12.5), false);
   assert.equal(isValidScoreMs("12000"), false);
 });
 
-test("only the full duration counts as survived", () => {
-  assert.equal(outcomeForScore(RUN_DURATION_MS), "survived");
-  assert.equal(outcomeForScore(RUN_DURATION_MS - 1), "hit");
+test("reaching the bar makes the run qualified (stored as survived)", () => {
+  assert.equal(outcomeForScore(QUALIFY_MS), "survived");
+  assert.equal(outcomeForScore(QUALIFY_MS * 2), "survived");
+  assert.equal(outcomeForScore(QUALIFY_MS - 1), "hit");
   assert.equal(outcomeForScore(0), "hit");
 });
 
@@ -87,7 +91,7 @@ test("a score cannot exceed the observed wall clock plus slack", () => {
   assert.equal(scoreFitsWallClock(19000, start, finishFast), false);
   assert.equal(scoreFitsWallClock(5000, start, finishFast), true);
   const finishSlow = new Date("2026-08-31T10:00:25.000Z");
-  assert.equal(scoreFitsWallClock(RUN_DURATION_MS, start, finishSlow), true);
+  assert.equal(scoreFitsWallClock(QUALIFY_MS, start, finishSlow), true);
 });
 
 test("call signs are deterministic, anonymous, and ASCII", () => {

@@ -3,7 +3,7 @@ import { getEntitlementResolver } from "../../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../../entitlement/capability";
 import { isCallerError, resolveGameCaller } from "../../../game/api-caller";
 import { getGameStore } from "../../../game/store";
-import { LEADERBOARD_SIZE, RUN_DURATION_MS, callSign } from "../../../game/rules";
+import { LEADERBOARD_SIZE, QUALIFY_MS, callSign } from "../../../game/rules";
 
 // GET /api/game/leaderboard - the global board (pro). The one surface that
 // deliberately crosses workspaces, so it is stripped to what a board needs:
@@ -33,7 +33,7 @@ export async function GET(): Promise<Response> {
       rank: i + 1,
       callSign: callSign(r.sub),
       scoreMs: r.scoreMs,
-      survived: r.scoreMs >= RUN_DURATION_MS,
+      qualified: r.scoreMs >= QUALIFY_MS,
       achievedAt: r.achievedAt.toISOString(),
       you: r.sub === caller.sub,
     })),

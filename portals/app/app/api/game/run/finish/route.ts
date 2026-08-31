@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
   const scoreMs = raw?.scoreMs;
   if (!runId) return NextResponse.json({ error: "runId is required" }, { status: 400 });
   if (!isValidScoreMs(scoreMs)) {
-    return NextResponse.json({ error: "scoreMs must be an integer within the run duration" }, { status: 400 });
+    return NextResponse.json({ error: "scoreMs must be an integer within the score ceiling" }, { status: 400 });
   }
 
   const store = getGameStore();

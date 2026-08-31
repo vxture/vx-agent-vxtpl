@@ -11,7 +11,7 @@ import {
   type EngineState,
   type Vec,
 } from "../../game/engine";
-import { RUN_DURATION_MS, formatScoreMs } from "../../game/rules";
+import { QUALIFY_MS, formatScoreMs } from "../../game/rules";
 
 // The arena renderer. All game LOGIC lives in game/engine.ts (pure, seeded,
 // tested); this component owns exactly three things - input, drawing, and the
@@ -37,6 +37,7 @@ const PLAYER_CORE = "#fff8e7";
 const HUD_INK = "rgba(255, 244, 214, 0.95)";
 const HUD_TRACK = "rgba(245, 166, 35, 0.16)";
 const HUD_BAR = "#f5a623";
+const QUALIFIED_INK = "#6fdc8f";
 const HIT_RING = "#ff5a3c";
 
 const COUNTDOWN_MS = 1800; // 3 - 2 - 1, 600ms each
@@ -104,16 +105,22 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
       ctx.fill();
 
       // HUD: elapsed clock + progress bar, inside the canvas so it shares the
-      // deck's fixed contrast and never reflows the page.
-      const shown = state.status === "hit" ? state.t : Math.min(state.t, RUN_DURATION_MS);
-      ctx.fillStyle = HUD_INK;
+      // deck's fixed contrast and never reflows the page. 20s is the bar, not
+      // the end: past it the clock turns qualified-green and the bar WRAPS,
+      // refilling every 20s lap.
+      const qualified = state.t >= QUALIFY_MS;
+      ctx.fillStyle = qualified ? QUALIFIED_INK : HUD_INK;
       ctx.font = "600 26px ui-monospace, 'Cascadia Code', Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(formatScoreMs(shown), ARENA_W / 2, 40);
+      ctx.fillText(formatScoreMs(state.t), ARENA_W / 2, 40);
+      if (qualified) {
+        ctx.font = "700 10px ui-monospace, 'Cascadia Code', Consolas, monospace";
+        ctx.fillText("QUALIFIED", ARENA_W / 2, 56);
+      }
       ctx.fillStyle = HUD_TRACK;
       ctx.fillRect(0, 0, ARENA_W, 2);
-      ctx.fillStyle = HUD_BAR;
-      ctx.fillRect(0, 0, ARENA_W * Math.min(1, shown / RUN_DURATION_MS), 2);
+      ctx.fillStyle = qualified ? QUALIFIED_INK : HUD_BAR;
+      ctx.fillRect(0, 0, ARENA_W * ((state.t % QUALIFY_MS) / QUALIFY_MS), 2);
 
       if (state.status === "hit") {
         ctx.beginPath();
@@ -223,9 +230,11 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
       // over: hold the final frame briefly so the hit reads, then report once.
       if (!finished && now - phaseStart >= 550) {
         finished = true;
+        const scoreMs = Math.round(engine.t);
         finishRef.current({
-          scoreMs: Math.min(Math.round(engine.t), RUN_DURATION_MS),
-          outcome: engine.status === "survived" ? "survived" : "hit",
+          scoreMs,
+          // 'survived' is the stored name for a QUALIFIED run (>= the bar).
+          outcome: scoreMs >= QUALIFY_MS ? "survived" : "hit",
         });
         return;
       }

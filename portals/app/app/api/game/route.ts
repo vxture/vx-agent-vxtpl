@@ -5,7 +5,7 @@ import { ctaFor } from "../../entitlement/types";
 import { isCallerError, resolveGameCaller } from "../../game/api-caller";
 import { getGameStore } from "../../game/store";
 import {
-  RUN_DURATION_MS,
+  QUALIFY_MS,
   dailyRunCap,
   nextUtcMidnight,
   remainingRuns,
@@ -32,7 +32,7 @@ export async function GET(): Promise<Response> {
   return NextResponse.json({
     tier: entitlement.tier,
     cta: ctaFor(entitlement),
-    runDurationMs: RUN_DURATION_MS,
+    qualifyMs: QUALIFY_MS,
     gates: {
       play: canUseFeature(entitlement, "game:play"),
       history: canUseFeature(entitlement, "game:history"),

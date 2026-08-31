@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { RUN_DURATION_MS, formatScoreMs, type TrendPoint } from "../../game/rules";
+import { QUALIFY_MS, formatScoreMs, type TrendPoint } from "../../game/rules";
 
 // The pro trend: daily best survival over the 30-day window, one line.
 //
@@ -35,7 +35,15 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
     const end = Date.parse(new Date().toISOString().slice(0, 10)); // today, UTC midnight
     const start = end - (windowDays - 1) * DAY_MS;
     const x = (day: string) => M.left + ((Date.parse(day) - start) / (end - start || 1)) * PLOT_W;
-    const y = (ms: number) => M.top + (1 - ms / RUN_DURATION_MS) * PLOT_H;
+    // The y domain is open at the top - 20s qualifies, it does not cap. Grow
+    // to fit the best run, in 5s steps, and thin the gridlines as it grows.
+    const maxBest = points.reduce((m, p) => Math.max(m, p.bestMs), 0);
+    const yTop = Math.max(QUALIFY_MS, Math.ceil((maxBest * 1.05) / 5000) * 5000);
+    const y = (ms: number) => M.top + (1 - ms / yTop) * PLOT_H;
+    const gridStep = yTop <= 30000 ? 5000 : yTop <= 60000 ? 10000 : 20000;
+    const grid: number[] = [];
+    for (let ms = 0; ms <= yTop; ms += gridStep) grid.push(ms);
+    if (!grid.includes(QUALIFY_MS)) grid.push(QUALIFY_MS);
     const dots = points.map((p) => ({ ...p, px: x(p.day), py: y(p.bestMs) }));
     // ~5 date ticks across the window, first and last always present.
     const tickCount = 5;
@@ -44,7 +52,7 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
       const d = new Date(t);
       return { px: M.left + (PLOT_W * i) / (tickCount - 1), label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}` };
     });
-    return { dots, ticks, y };
+    return { dots, ticks, y, grid };
   }, [points, windowDays]);
 
   const path = useMemo(
@@ -79,23 +87,23 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
-        {/* recessive grid: one line per 5s, labels in muted ink */}
-        {[0, 5000, 10000, 15000, 20000].map((ms) => (
+        {/* recessive grid, labels in muted ink; the qualify line is dashed */}
+        {geo.grid.map((ms) => (
           <g key={ms}>
             <line
               x1={M.left}
               x2={VB_W - M.right}
               y1={geo.y(ms)}
               y2={geo.y(ms)}
-              className={ms === RUN_DURATION_MS ? "trend-goal" : "trend-grid"}
+              className={ms === QUALIFY_MS ? "trend-goal" : "trend-grid"}
             />
             <text x={M.left - 8} y={geo.y(ms) + 3.5} textAnchor="end" className="trend-tick">
               {ms / 1000}s
             </text>
           </g>
         ))}
-        <text x={VB_W - M.right} y={geo.y(RUN_DURATION_MS) - 5} textAnchor="end" className="trend-goal-label">
-          survive
+        <text x={VB_W - M.right} y={geo.y(QUALIFY_MS) - 5} textAnchor="end" className="trend-goal-label">
+          qualify
         </text>
 
         {geo.ticks.map((t) => (

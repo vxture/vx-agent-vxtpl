@@ -34,7 +34,7 @@ interface BoardEntry {
   rank: number;
   callSign: string;
   scoreMs: number;
-  survived: boolean;
+  qualified: boolean;
   achievedAt: string;
   you: boolean;
 }
@@ -199,7 +199,7 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
                   {e.rank}
                 </span>
                 <span className="deck-row__sign">{e.callSign}</span>
-                <span className={e.survived ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
+                <span className={e.qualified ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
                   {formatScoreMs(e.scoreMs)}s
                 </span>
               </div>
