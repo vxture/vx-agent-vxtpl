@@ -1,0 +1,292 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { subscribeUrl } from "../../entitlement/deeplink";
+import { formatScoreMs, type TrendPoint } from "../../game/rules";
+import type { Tier } from "../../entitlement/types";
+import { TrendChart } from "./trend-chart";
+
+// The deck's side modules: records and the global board, folded into the one
+// screen the app has (owner decision 2026-08-31 - single interface; the old
+// /records and /leaderboard pages are gone). Each module is self-contained:
+// it fetches its own API on first open and again when `epoch` bumps (a
+// finished run), and renders its own locked state - the tier ladder is sold
+// where the data would be, not on a separate page.
+
+interface RunJson {
+  scoreMs: number | null;
+  outcome: "survived" | "hit" | null;
+  playedAt: string;
+}
+
+interface RecordsData {
+  allowed: boolean;
+  requiredTier?: Tier | null;
+  requiredTierForTrend?: Tier | null;
+  window?: { kind: "last10"; limit: number } | { kind: "days30"; days: number };
+  top?: RunJson[];
+  recent?: RunJson[];
+  trend?: TrendPoint[] | null;
+  trendAllowed?: boolean;
+}
+
+interface BoardEntry {
+  rank: number;
+  callSign: string;
+  scoreMs: number;
+  survived: boolean;
+  achievedAt: string;
+  you: boolean;
+}
+
+interface BoardData {
+  allowed: boolean;
+  requiredTier?: Tier | null;
+  entries?: BoardEntry[];
+  me?: { callSign: string; bestMs: number | null };
+}
+
+const RANKS = ["1st", "2nd", "3rd"];
+
+/** Module shell: glowing-dot header bar with a fold toggle, deck-styled. */
+export function DeckModule({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="deck-mod">
+      <button className="deck-mod__head" onClick={onToggle} aria-expanded={open}>
+        <i className="deck-mod__dot" aria-hidden />
+        <span className="deck-mod__title">{title}</span>
+        <span className="deck-mod__toggle" aria-hidden>
+          {open ? "-" : "+"}
+        </span>
+      </button>
+      {open && <div className="deck-mod__body">{children}</div>}
+    </section>
+  );
+}
+
+function LockNote({ note, tier, cta }: { note: string; tier: Tier | null | undefined; cta: string }) {
+  return (
+    <div className="deck-lock">
+      <p className="deck-lock__note">{note}</p>
+      <a className="deck-btn deck-btn-solid" href={subscribeUrl({ intent: "upgrade", targetTier: tier ?? undefined })}>
+        {cta}
+      </a>
+    </div>
+  );
+}
+
+function playedAtLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+/** Fetch-on-open with an epoch: a finished run bumps it and an OPEN module
+ * refetches; a closed one just forgets its cache and refetches on next open. */
+function useModuleData<T>(url: string, open: boolean, epoch: number): T | null {
+  const [data, setData] = useState<T | null>(null);
+  const fetchedEpoch = useRef(-1);
+  useEffect(() => {
+    if (!open || fetchedEpoch.current === epoch) return;
+    fetchedEpoch.current = epoch;
+    fetch(url, { cache: "no-store" })
+      .then(async (r) => (r.ok || r.status === 200 ? ((await r.json()) as T) : null))
+      .then((d) => d && setData(d))
+      .catch(() => undefined);
+  }, [url, open, epoch]);
+  return data;
+}
+
+export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onToggle: () => void; epoch: number }) {
+  const data = useModuleData<RecordsData>("/api/game/records", open, epoch);
+
+  return (
+    <DeckModule title="Your record" open={open} onToggle={onToggle}>
+      {!data && <div className="deck-mod__loading">SYNCING...</div>}
+
+      {data && !data.allowed && (
+        <LockNote
+          note="Free plays every day, but nothing is kept. Starter records your last 10 runs with the best three pinned."
+          tier={data.requiredTier}
+          cta="MOVE TO STARTER"
+        />
+      )}
+
+      {data?.allowed && (
+        <>
+          <div className="deck-rows">
+            {[0, 1, 2].map((i) => {
+              const run = data.top?.[i];
+              return (
+                <div key={i} className="deck-row">
+                  <span className="deck-row__rank">{RANKS[i]}</span>
+                  {run ? (
+                    <>
+                      <span className="deck-row__value">{formatScoreMs(run.scoreMs ?? 0)}s</span>
+                      <span className="deck-row__meta">{playedAtLabel(run.playedAt)}</span>
+                    </>
+                  ) : (
+                    <span className="deck-row__meta">unclaimed</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {data.trendAllowed ? (
+            <div className="deck-trend">
+              <div className="deck-mod__sub">Daily best - last 30 days</div>
+              <TrendChart points={data.trend ?? []} windowDays={30} />
+            </div>
+          ) : (
+            <LockNote
+              note="Pro widens the window to 30 days and draws the daily-best curve - plus the global board."
+              tier={data.requiredTierForTrend}
+              cta="MOVE TO PRO"
+            />
+          )}
+
+          <div className="deck-mod__sub">
+            Recent ({data.window?.kind === "days30" ? "last 30 days" : "last 10 runs"})
+          </div>
+          <div className="deck-rows">
+            {(data.recent ?? []).slice(0, 8).map((r, i) => (
+              <div key={i} className="deck-row">
+                <span className={r.outcome === "survived" ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
+                  {formatScoreMs(r.scoreMs ?? 0)}s
+                </span>
+                <span className="deck-row__meta">{playedAtLabel(r.playedAt)}</span>
+              </div>
+            ))}
+            {data.recent?.length === 0 && <div className="deck-row__meta">no finished runs yet</div>}
+          </div>
+        </>
+      )}
+    </DeckModule>
+  );
+}
+
+export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle: () => void; epoch: number }) {
+  const data = useModuleData<BoardData>("/api/game/leaderboard", open, epoch);
+
+  return (
+    <DeckModule title="Global board" open={open} onToggle={onToggle}>
+      {!data && <div className="deck-mod__loading">SYNCING...</div>}
+
+      {data && !data.allowed && (
+        <LockNote
+          note="Pro puts your best run up against everyone's. Players appear as call signs - the board is global, identities are not."
+          tier={data.requiredTier}
+          cta="MOVE TO PRO"
+        />
+      )}
+
+      {data?.allowed && (
+        <>
+          <div className="deck-rows">
+            {(data.entries ?? []).map((e) => (
+              <div key={e.rank} className={e.you ? "deck-row deck-row-you" : "deck-row"}>
+                <span className={e.rank <= 3 ? "deck-row__rank" : "deck-row__rank deck-row__rank--plain"}>
+                  {e.rank}
+                </span>
+                <span className="deck-row__sign">{e.callSign}</span>
+                <span className={e.survived ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
+                  {formatScoreMs(e.scoreMs)}s
+                </span>
+              </div>
+            ))}
+            {data.entries?.length === 0 && (
+              <div className="deck-row__meta">nobody has finished a run yet - the board is one survivor away</div>
+            )}
+          </div>
+          {data.me && (
+            <div className="deck-mod__sub">
+              you are <span className="deck-row__sign">{data.me.callSign}</span>
+              {data.me.bestMs != null ? ` - best ${formatScoreMs(data.me.bestMs)}s` : ""}
+            </div>
+          )}
+        </>
+      )}
+    </DeckModule>
+  );
+}
+
+// --- identity corner: avatar with the utility menu -------------------------
+
+interface SessionUser {
+  sub?: string;
+  email?: string;
+  activeWorkspace?: string;
+}
+
+/** Debug/reference surfaces stay routable but live behind the avatar - the
+ * app is one screen, and these are the template's service hatches, not
+ * player destinations. */
+const SERVICE_LINKS = [
+  { href: "/chat", label: "CHAT" },
+  { href: "/status", label: "STATUS" },
+  { href: "/platform-check", label: "PLATFORM CHECK" },
+  { href: "/entitlement-matrix", label: "ENTITLEMENT MATRIX" },
+];
+
+export function AvatarMenu() {
+  const [state, setState] = useState<{ authenticated: boolean; user?: SessionUser } | null>(null);
+  const [openMenu, setOpenMenu] = useState(false);
+
+  useEffect(() => {
+    fetch("/auth/session", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setState)
+      .catch(() => setState({ authenticated: false }));
+  }, []);
+
+  if (state && !state.authenticated) {
+    return (
+      <a className="deck-btn deck-btn-solid" href="/auth/login?returnTo=/">
+        SIGN IN
+      </a>
+    );
+  }
+
+  const who = state?.user?.email ?? state?.user?.sub ?? "";
+  const initial = (who || "P").charAt(0).toUpperCase();
+
+  return (
+    <div className="deck-avatar-wrap">
+      <button
+        className="deck-avatar"
+        onClick={() => setOpenMenu((v) => !v)}
+        aria-expanded={openMenu}
+        aria-label="Account and service menu"
+        title={who || undefined}
+      >
+        {initial}
+      </button>
+      {openMenu && (
+        <div className="deck-menu">
+          {who && <div className="deck-menu__who">{who}</div>}
+          {SERVICE_LINKS.map((l) => (
+            <a key={l.href} className="deck-menu__item" href={l.href}>
+              {l.label}
+            </a>
+          ))}
+          {/* POST, not a link, so a prefetch cannot sign the player out. */}
+          <form method="post" action="/auth/logout">
+            <button type="submit" className="deck-menu__item deck-menu__item--danger">
+              SIGN OUT
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

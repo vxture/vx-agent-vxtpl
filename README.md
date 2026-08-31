@@ -24,14 +24,12 @@ reintroduce npm workspaces.
 
 | Surface | What it demonstrates |
 |---------|----------------------|
-| `/challenge` | The game: seeded runs, the free tier's daily quota spent server-side at start, scores recorded within server bounds |
-| `/records` | Tier-windowed personal record - best 3 pinned all-time, starter's last 10, pro's 30 days with a daily-best trend curve |
-| `/leaderboard` | The global board (pro), cross-workspace by design and anonymous by construction (call signs, never identifiers) |
+| `/` | THE app - a fullscreen command deck: seeded runs (daily quota spent server-side at start, scores recorded within server bounds), the tier-windowed record with pro's 30-day trend, and the anonymous global board, all as collapsible side-rail modules around the arena |
 | `/gate` | The product front door: verifies access on entry, redirects a signed-in visitor straight through, and otherwise shows the one action that helps |
-| `/chat` | A tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
-| `/status` | Every integration channel's live configuration state, with no secret ever leaving the server |
-| `/platform-check` | Read-only connectivity probes against Atlas and Runos |
-| `/entitlement-matrix` | Every tier x status combination and the gate/CTA outcome it produces, fully offline |
+| `/chat` | Debug/reference: a tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
+| `/status` | Debug/reference: every integration channel's live configuration state, with no secret ever leaving the server |
+| `/platform-check` | Debug/reference: read-only connectivity probes against Atlas and Runos |
+| `/entitlement-matrix` | Debug/reference: every tier x status combination and the gate/CTA outcome it produces, fully offline |
 
 Under those surfaces sit the parts a product repo is actually judged on: the OIDC
 relying-party flow (PKCE, single-use state, back-channel logout), the entitlement

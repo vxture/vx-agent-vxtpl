@@ -7,14 +7,23 @@ that keep the module copyable.
 ## Layering
 
 ```
-(product)/challenge/page.tsx     surface: the fullscreen deck - context, quota, result, CTAs
-(product)/challenge/game-view.tsx  renderer: arrow-key input, canvas, countdown ONLY
+(product)/page.tsx               THE app: the deck at `/` - phase machine, rails, quota, CTAs
+(product)/deck/game-view.tsx     renderer: arrow-key input, canvas, countdown ONLY
+(product)/deck/panels.tsx        side modules: record, board, avatar menu (self-fetching)
+(product)/deck/trend-chart.tsx   the daily-best curve (deck-grounded via .deck token override)
+(product)/challenge/page.tsx     redirect to `/` (old links only)
 game/engine.ts                   pure sim: seeded RNG, spawn curves, collision
 game/rules.ts                    pure product rules: quota, windows, trend, call signs
 game/store.ts / prisma-store.ts  persistence port: in-memory | vxtpl_game.run
 game/api-caller.ts               session -> (workspaceId, sub), chat-route posture
 api/game/*                       gate -> count -> write -> meter, per route
 ```
+
+The deck is the only player surface (owner decision 2026-08-31): records and
+board are collapsible rail modules that fetch their own API on first open and
+refetch when the page bumps `epoch` after a finished run. Starting a run
+auto-folds both rails; the result auto-unfolds them - the collapse pattern
+from the reference design, made self-acting.
 
 Three rules, in copy-priority order:
 
