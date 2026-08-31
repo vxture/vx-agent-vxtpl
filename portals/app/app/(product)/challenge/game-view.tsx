@@ -5,6 +5,7 @@ import {
   ARENA_H,
   ARENA_W,
   PLAYER_R,
+  PLAYER_SPEED,
   advance,
   createEngine,
   type EngineState,
@@ -16,24 +17,30 @@ import { RUN_DURATION_MS, formatScoreMs } from "../../game/rules";
 // tested); this component owns exactly three things - input, drawing, and the
 // countdown - and reports one number upward when the run ends.
 //
-// The arena draws its own dark palette in BOTH themes rather than reading the
-// page tokens: it is a screen-within-a-screen, like the code block, and a
-// bullet field on white paper reads as a diagram, not a game. Every color kept
-// here is arena-only; the page around it stays on DS tokens.
+// Input is the four arrow keys and nothing else (owner decision 2026-08-31):
+// no pointer follow, no WASD. Direct velocity movement at PLAYER_SPEED - the
+// old pointer-chase let the cursor teleport the player, which made speed the
+// skill; fixed-speed keys make POSITIONING the skill.
+//
+// The palette is the command-deck amber-on-charcoal of the owner's reference
+// design (Figma "data visualization dashboard"): warm near-black ground, gold
+// orbit rings, glowing amber orbs. Fixed in both themes - the deck is a
+// screen-within-a-screen. Every color kept here is arena-only.
 
-const ARENA_BG = "#0b0e15";
-const TRAIL_FADE = "rgba(11, 14, 21, 0.32)";
-const BULLET_HALO = "rgba(125, 146, 245, 0.28)";
-const BULLET_CORE = "#cdd8ff";
-const PLAYER_RING = "#7d92f5";
-const PLAYER_CORE = "#ffffff";
-const HUD_INK = "rgba(233, 235, 240, 0.92)";
-const HUD_BAR = "#7d92f5";
-const HIT_RING = "#f87171";
+const ARENA_BG = "#0d0b08";
+const TRAIL_FADE = "rgba(13, 11, 8, 0.3)";
+const ORBIT_RING = "rgba(245, 166, 35, 0.09)";
+const BULLET_HALO = "rgba(245, 158, 35, 0.2)";
+const BULLET_CORE = "#ffb340";
+const PLAYER_RING = "#f5a623";
+const PLAYER_CORE = "#fff8e7";
+const HUD_INK = "rgba(255, 244, 214, 0.95)";
+const HUD_TRACK = "rgba(245, 166, 35, 0.16)";
+const HUD_BAR = "#f5a623";
+const HIT_RING = "#ff5a3c";
 
 const COUNTDOWN_MS = 1800; // 3 - 2 - 1, 600ms each
-const KEY_SPEED = 340; // logical px/s
-const TOUCH_Y_OFFSET = 56; // keep the player visible above the finger
+const ARROW_KEYS = ["arrowup", "arrowdown", "arrowleft", "arrowright"] as const;
 const MAX_FRAME_MS = 50; // background-tab clamp: drop time, never fast-forward
 
 export interface GameFinish {
@@ -65,9 +72,19 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
       }
       ctx.fillRect(0, 0, ARENA_W, ARENA_H);
 
+      // Faint concentric orbit rings, the deck's centerpiece motif - and a
+      // real dodging aid: fixed reference circles to judge lanes against.
+      ctx.strokeStyle = ORBIT_RING;
+      ctx.lineWidth = 1;
+      for (const r of [110, 200]) {
+        ctx.beginPath();
+        ctx.arc(ARENA_W / 2, ARENA_H / 2, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       for (const b of state.bullets) {
         ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r * 2.1, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, b.r * 2.2, 0, Math.PI * 2);
         ctx.fillStyle = BULLET_HALO;
         ctx.fill();
         ctx.beginPath();
@@ -77,32 +94,32 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
       }
 
       ctx.beginPath();
-      ctx.arc(player.x, player.y, PLAYER_R + 3, 0, Math.PI * 2);
+      ctx.arc(player.x, player.y, PLAYER_R + 2.5, 0, Math.PI * 2);
       ctx.strokeStyle = state.status === "hit" ? HIT_RING : PLAYER_RING;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(player.x, player.y, PLAYER_R - 1.5, 0, Math.PI * 2);
+      ctx.arc(player.x, player.y, PLAYER_R - 1, 0, Math.PI * 2);
       ctx.fillStyle = PLAYER_CORE;
       ctx.fill();
 
-      // HUD: elapsed clock + progress bar. Inside the canvas so it shares the
-      // arena's fixed contrast and never reflows the page.
+      // HUD: elapsed clock + progress bar, inside the canvas so it shares the
+      // deck's fixed contrast and never reflows the page.
       const shown = state.status === "hit" ? state.t : Math.min(state.t, RUN_DURATION_MS);
       ctx.fillStyle = HUD_INK;
-      ctx.font = "600 30px ui-monospace, 'Cascadia Code', Consolas, monospace";
+      ctx.font = "600 26px ui-monospace, 'Cascadia Code', Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(formatScoreMs(shown), ARENA_W / 2, 44);
-      ctx.fillStyle = "rgba(233, 235, 240, 0.14)";
-      ctx.fillRect(0, 0, ARENA_W, 3);
+      ctx.fillText(formatScoreMs(shown), ARENA_W / 2, 40);
+      ctx.fillStyle = HUD_TRACK;
+      ctx.fillRect(0, 0, ARENA_W, 2);
       ctx.fillStyle = HUD_BAR;
-      ctx.fillRect(0, 0, ARENA_W * Math.min(1, shown / RUN_DURATION_MS), 3);
+      ctx.fillRect(0, 0, ARENA_W * Math.min(1, shown / RUN_DURATION_MS), 2);
 
       if (state.status === "hit") {
         ctx.beginPath();
-        ctx.arc(player.x, player.y, PLAYER_R + 14, 0, Math.PI * 2);
+        ctx.arc(player.x, player.y, PLAYER_R + 12, 0, Math.PI * 2);
         ctx.strokeStyle = HIT_RING;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.stroke();
       }
     },
@@ -120,7 +137,8 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
 
     let scale = 1;
     const fit = () => {
-      const cssWidth = Math.min(wrap.clientWidth, ARENA_W);
+      // Contain within the wrapper: the deck letterboxes around the arena.
+      const cssWidth = Math.min(wrap.clientWidth, (wrap.clientHeight / ARENA_H) * ARENA_W || Infinity);
       const cssHeight = (cssWidth / ARENA_W) * ARENA_H;
       const dpr = window.devicePixelRatio || 1;
       canvas.style.width = `${cssWidth}px`;
@@ -135,7 +153,6 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
 
     const engine = createEngine(seed);
     const player: Vec = { x: ARENA_W / 2, y: ARENA_H * 0.72 };
-    const target: Vec = { ...player };
     const keys = new Set<string>();
     let raf = 0;
     let last = performance.now();
@@ -143,57 +160,32 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
     let phase: "countdown" | "running" | "over" = "countdown";
     let finished = false;
 
-    const toLogical = (e: PointerEvent): Vec => {
-      const rect = canvas.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * ARENA_W;
-      let y = ((e.clientY - rect.top) / rect.height) * ARENA_H;
-      if (e.pointerType === "touch") y -= TOUCH_Y_OFFSET;
-      return { x, y };
-    };
-
-    const onPointer = (e: PointerEvent) => {
-      const p = toLogical(e);
-      target.x = p.x;
-      target.y = p.y;
-    };
     const onKey = (e: KeyboardEvent, down: boolean) => {
       const k = e.key.toLowerCase();
-      if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) {
-        if (down) e.preventDefault();
+      if ((ARROW_KEYS as readonly string[]).includes(k)) {
+        e.preventDefault();
         if (down) keys.add(k);
         else keys.delete(k);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => onKey(e, true);
     const onKeyUp = (e: KeyboardEvent) => onKey(e, false);
-
-    canvas.addEventListener("pointermove", onPointer);
-    canvas.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
     const movePlayer = (dt: number) => {
-      const s = dt / 1000;
       let kx = 0;
       let ky = 0;
-      if (keys.has("arrowleft") || keys.has("a")) kx -= 1;
-      if (keys.has("arrowright") || keys.has("d")) kx += 1;
-      if (keys.has("arrowup") || keys.has("w")) ky -= 1;
-      if (keys.has("arrowdown") || keys.has("s")) ky += 1;
-      if (kx !== 0 || ky !== 0) {
-        const len = Math.hypot(kx, ky);
-        target.x += (kx / len) * KEY_SPEED * s;
-        target.y += (ky / len) * KEY_SPEED * s;
-      }
-      // Critically-damped chase: responsive but never teleporting through a
-      // bullet - the engine only ever sees positions the player passed through.
-      const chase = 1 - Math.exp(-14 * s);
-      player.x += (target.x - player.x) * chase;
-      player.y += (target.y - player.y) * chase;
-      player.x = Math.max(PLAYER_R, Math.min(ARENA_W - PLAYER_R, player.x));
-      player.y = Math.max(PLAYER_R, Math.min(ARENA_H - PLAYER_R, player.y));
-      target.x = Math.max(PLAYER_R, Math.min(ARENA_W - PLAYER_R, target.x));
-      target.y = Math.max(PLAYER_R, Math.min(ARENA_H - PLAYER_R, target.y));
+      if (keys.has("arrowleft")) kx -= 1;
+      if (keys.has("arrowright")) kx += 1;
+      if (keys.has("arrowup")) ky -= 1;
+      if (keys.has("arrowdown")) ky += 1;
+      if (kx === 0 && ky === 0) return;
+      // Fixed speed, diagonals included: direction changes, pace never does.
+      const len = Math.hypot(kx, ky);
+      const s = (PLAYER_SPEED * dt) / 1000;
+      player.x = Math.max(PLAYER_R, Math.min(ARENA_W - PLAYER_R, player.x + (kx / len) * s));
+      player.y = Math.max(PLAYER_R, Math.min(ARENA_H - PLAYER_R, player.y + (ky / len) * s));
     };
 
     let firstFrame = true;
@@ -244,22 +236,20 @@ export function GameView({ seed, onFinish }: { seed: string; onFinish: (f: GameF
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
-      canvas.removeEventListener("pointermove", onPointer);
-      canvas.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
   }, [seed, draw]);
 
   return (
-    <div ref={wrapRef} className="arena-wrap">
+    <div ref={wrapRef} className="deck-arena">
       <canvas
         ref={canvasRef}
-        className="arena-canvas"
-        aria-label="Bullet-dodging arena. Move with the mouse, touch, or arrow keys."
+        className="deck-arena__canvas"
+        aria-label="Bullet-dodging arena. Move with the arrow keys."
       />
       {countdown > 0 && (
-        <div className="arena-countdown" aria-hidden>
+        <div className="deck-countdown" aria-hidden>
           {countdown}
         </div>
       )}

@@ -7,8 +7,8 @@ that keep the module copyable.
 ## Layering
 
 ```
-(product)/challenge/page.tsx     surface: context, quota, result, CTAs
-(product)/challenge/game-view.tsx  renderer: input, canvas, countdown ONLY
+(product)/challenge/page.tsx     surface: the fullscreen deck - context, quota, result, CTAs
+(product)/challenge/game-view.tsx  renderer: arrow-key input, canvas, countdown ONLY
 game/engine.ts                   pure sim: seeded RNG, spawn curves, collision
 game/rules.ts                    pure product rules: quota, windows, trend, call signs
 game/store.ts / prisma-store.ts  persistence port: in-memory | vxtpl_game.run
@@ -19,10 +19,13 @@ api/game/*                       gate -> count -> write -> meter, per route
 Three rules, in copy-priority order:
 
 1. **The engine never touches the DOM and the renderer never decides.** Every
-   gameplay number (curves, burst times, arena size) lives in `engine.ts` where
-   node:test can reach it; `game-view.tsx` owns pointer/keyboard/canvas and
-   reports one `{scoreMs, outcome}` upward. A copy that swaps the game swaps
-   the engine and keeps the surface wiring.
+   gameplay number (curves, burst times, speeds, arena size) lives in
+   `engine.ts` where node:test can reach it; `game-view.tsx` owns the
+   arrow-key input and the canvas, and reports one `{scoreMs, outcome}`
+   upward. Input is the four arrow keys ONLY (owner decision 2026-08-31 -
+   the old pointer-chase made speed the skill; fixed-speed keys make
+   positioning the skill). A copy that swaps the game swaps the engine and
+   keeps the surface wiring.
 2. **Rules are functions over the C2 envelope.** `dailyRunCap`,
    `historyWindowFor`, `remainingRuns` take an `Entitlement` and return plain
    values; routes render the server's answer and the client re-derives

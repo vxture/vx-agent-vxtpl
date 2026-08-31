@@ -17,10 +17,12 @@ the score is the survival time either way.
 |-----------|------|
 | Core loop | real-time dodging, elimination on first hit, scored by survival time |
 | Run length | 20.000 seconds, fixed (`RUN_DURATION_MS`) |
-| Difficulty | ramps within the run: spawn cadence 420ms -> 85ms, bullet speed 130 -> 330 logical px/s, plus four converging ring bursts at 6.0 / 11.0 / 15.5 / 18.2s |
-| Controls | mouse, touch (finger offset so the player stays visible), or arrow/WASD keys - zero learning curve |
+| Skill model | dodging craft, not reflexes (owner decision 2026-08-31): everything is SLOW and AIMED. Bullets fire exactly at the player's position and fly straight (no jitter, no homing), so standing still is lethal and any deliberate move invalidates every shot in the air. The ramp raises density (spawn cadence 320ms -> 70ms), barely speed (60 -> 130 logical px/s); slow bullets live longer, so the field thickens on its own. Four converging ring bursts at 6.0 / 11.0 / 15.5 / 18.2s |
+| Player | fixed 150 px/s - slightly faster than the fastest bullet, so every death is a positioning mistake, never a speed check. Small marks throughout (player r4, bullets r2-3.2): the read is lanes, not blobs |
+| Controls | the four arrow keys, nothing else (owner decision 2026-08-31; desktop-first, no pointer follow, no touch) |
+| Presentation | a fullscreen command deck in the owner's reference style (amber-on-charcoal data-viz dashboard): fixed overlay, gold panel chrome, the glowing center orb as start control and score display |
 | Determinism | every run is seeded server-side; the engine (`game/engine.ts`) is pure and replayable from the seed |
-| Cross-device | one logical 800x520 arena, scaled to the canvas - a phone shrinks the picture, not the game |
+| Cross-device | one logical 800x520 arena, letterboxed into the viewport - a smaller screen shrinks the picture, not the game |
 
 ## The tier ladder
 

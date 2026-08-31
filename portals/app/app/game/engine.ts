@@ -10,27 +10,35 @@ import { RUN_DURATION_MS } from "./rules";
 
 export const ARENA_W = 800;
 export const ARENA_H = 520;
-export const PLAYER_R = 7;
+export const PLAYER_R = 4;
 
-const BULLET_R_MIN = 3.5;
-const BULLET_R_MAX = 6;
+/** Arrow-key movement speed (logical px/s). Slightly faster than the fastest
+ * bullet, and that margin IS the game: you can always outrun a shot you saw,
+ * so every death is a positioning mistake, never a speed check. Owner-tuned
+ * 2026-08-31: the fun is dodging craft, not reflexes. */
+export const PLAYER_SPEED = 150;
+
+const BULLET_R_MIN = 2;
+const BULLET_R_MAX = 3.2;
 const CULL_MARGIN = 48;
 
-// Aimed-spawn cadence: linear ramp over the run.
-const SPAWN_INTERVAL_START_MS = 420;
-const SPAWN_INTERVAL_END_MS = 85;
-const SPEED_START = 130; // logical px/s
-const SPEED_END = 330;
-const AIM_JITTER_RAD = 0.35;
+// Cadence and speed, owner-tuned 2026-08-31: everything SLOW and AIMED. The
+// ramp raises density (spawn interval), barely speed - slow bullets live
+// longer on screen, so the field thickens on its own and the difficulty
+// becomes reading converging lanes, not outrunning them.
+const SPAWN_INTERVAL_START_MS = 320;
+const SPAWN_INTERVAL_END_MS = 70;
+const SPEED_START = 60; // logical px/s
+const SPEED_END = 130;
 
 // Ring bursts: converging circles at fixed moments - the run's set pieces. A
 // player who has seen one run knows when to brace, which is what makes a 20s
 // game replayable rather than random.
 const BURSTS: { at: number; count: number; speed: number }[] = [
-  { at: 6000, count: 12, speed: 150 },
-  { at: 11000, count: 16, speed: 170 },
-  { at: 15500, count: 20, speed: 190 },
-  { at: 18200, count: 24, speed: 210 },
+  { at: 6000, count: 12, speed: 80 },
+  { at: 11000, count: 16, speed: 88 },
+  { at: 15500, count: 20, speed: 96 },
+  { at: 18200, count: 24, speed: 105 },
 ];
 
 export interface Vec {
@@ -92,7 +100,11 @@ export function createEngine(seedHex: string): EngineState {
   };
 }
 
-/** A bullet on the arena edge, aimed at the player with a little jitter. */
+/** A bullet on the arena edge, aimed EXACTLY at the player's position at fire
+ * time, then flying straight - no jitter, no homing. Aimed fire is what makes
+ * the field readable: standing still is lethal, and any deliberate move
+ * invalidates every shot already in the air. Randomness stays where it
+ * belongs - in WHERE the shot comes from, never in where it goes. */
 function spawnAimed(state: EngineState, player: Vec): void {
   const rand = state.rand;
   const edge = Math.floor(rand() * 4);
@@ -110,8 +122,8 @@ function spawnAimed(state: EngineState, player: Vec): void {
     x = -CULL_MARGIN / 2;
     y = rand() * ARENA_H;
   }
-  const angle = Math.atan2(player.y - y, player.x - x) + (rand() * 2 - 1) * AIM_JITTER_RAD;
-  const speed = bulletSpeedAt(state.t) * (0.85 + rand() * 0.3);
+  const angle = Math.atan2(player.y - y, player.x - x);
+  const speed = bulletSpeedAt(state.t) * (0.9 + rand() * 0.2);
   state.bullets.push({
     x,
     y,
