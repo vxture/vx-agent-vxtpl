@@ -4,17 +4,20 @@
  *
  * The DDL under deploy/database/ddl/ is the single structure authority
  * (product_240 section 2.4 E); the Prisma schema is only a client-generation
- * source and MUST stay in lockstep. This asserts that the set of tables declared
- * in the baseline DDL equals the set of Prisma models (matched by @@schema +
+ * source and MUST stay in lockstep. The authoritative table set is the UNION of
+ * the create-once baseline and the numbered incr/ increments (the baseline is
+ * frozen, so every table added after it exists only as an increment). This
+ * asserts that union equals the set of Prisma models (matched by @@schema +
  * @@map). Any drift fails under --strict (CI).
  *
  * Pure node, zero dependencies.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const DDL = "deploy/database/ddl/00_baseline.sql";
+const INCR_DIR = "deploy/database/ddl/incr";
 const PRISMA = "portals/app/prisma/schema.prisma";
 const STRICT = process.argv.includes("--strict");
 
@@ -43,11 +46,24 @@ function diff(a, b) {
   return [...a].filter((x) => !b.has(x)).sort();
 }
 
+/** Baseline + every numbered increment, in one set. */
+export function allDdlSql() {
+  let sql = readFileSync(DDL, "utf8");
+  let names = [];
+  try {
+    names = readdirSync(INCR_DIR).filter((f) => f.endsWith(".sql")).sort();
+  } catch {
+    // no incr dir is a valid state (fresh copy)
+  }
+  for (const f of names) sql += `\n${readFileSync(`${INCR_DIR}/${f}`, "utf8")}`;
+  return sql;
+}
+
 // Run only when invoked directly (not when imported by a test).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   let ddl, prisma;
   try {
-    ddl = ddlTables(readFileSync(DDL, "utf8"));
+    ddl = ddlTables(allDdlSql());
     prisma = prismaTables(readFileSync(PRISMA, "utf8"));
   } catch (e) {
     console.log(`[data-architecture] skip: ${e.message}`);

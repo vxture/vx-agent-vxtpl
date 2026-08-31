@@ -17,11 +17,14 @@ import { SessionControl } from "../session-control";
  * else?" at exactly the moment we are asking someone to trust the sign-in.
  */
 
+// The game surfaces lead; the reference surfaces that did not fit stay one
+// click away on the home page's reference cards and the page-links footers.
 const NAV_LINKS = [
+  { href: "/challenge", label: "Play" },
+  { href: "/records", label: "Records" },
+  { href: "/leaderboard", label: "Leaderboard" },
   { href: "/chat", label: "Chat" },
   { href: "/status", label: "Status" },
-  { href: "/platform-check", label: "Platform check" },
-  { href: "/entitlement-matrix", label: "Entitlement matrix" },
 ];
 
 export default function ProductLayout({ children }: { children: ReactNode }) {

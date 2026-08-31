@@ -124,6 +124,19 @@ a:hover {
   text-decoration: underline;
 }
 
+/* A DS `Button asChild` renders an <a> carrying the button's own utility
+ * classes - but those live in Tailwind's cascade layer, and the unlayered
+ * bare-element rule above beats ANY layered rule regardless of specificity.
+ * The observable failure is accent-on-accent: a primary button whose label is
+ * link-blue on button-blue. `revert-layer` hands color back to the layered
+ * button variant, whichever variant it is. */
+a[data-slot="button"] {
+  color: revert-layer;
+}
+a[data-slot="button"]:hover {
+  text-decoration: none;
+}
+
 code,
 .mono {
   font-family: var(--vxtpl-mono);
@@ -409,4 +422,345 @@ footer.page-links {
   gap: 1rem;
   flex-wrap: wrap;
   font-size: 0.86rem;
+}
+
+/* --- challenge game --------------------------------------------------------
+ * The arena canvas paints its own fixed dark palette (a screen within the
+ * screen); everything AROUND it is themed with the page. The one data color -
+ * the trend series - is validated per mode with the dataviz palette validator:
+ * light #3457d5 passes on #ffffff, dark #6d84ec passes on #14171f. The darker
+ * dark-mode step is deliberate: the accent used for text (#7d92f5) sits above
+ * the chart lightness band, and a line has no text contrast requirement.
+ */
+
+:root {
+  --vxtpl-chart-series: #3457d5;
+}
+.dark {
+  --vxtpl-chart-series: #6d84ec;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.hero-play {
+  display: inline-block;
+  background: var(--vxtpl-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.65rem 1.6rem;
+  border-radius: 999px;
+  box-shadow: var(--vxtpl-shadow);
+}
+.hero-play:hover {
+  background: var(--vxtpl-accent-hover);
+  text-decoration: none;
+}
+
+.hero-secondary {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--vxtpl-slate);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.hero-secondary:hover {
+  color: var(--vxtpl-ink);
+  text-decoration: none;
+  border-color: var(--vxtpl-border-strong);
+}
+
+/* status strip above the arena: quota left, personal best right */
+.arena-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.quota-pips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.quota-pips .pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--vxtpl-accent);
+}
+.quota-pips .pip--spent {
+  background: var(--vxtpl-border-strong);
+}
+.quota-pips .quota-text {
+  margin-left: 6px;
+}
+.quota-text {
+  font-size: 0.82rem;
+  color: var(--vxtpl-slate);
+}
+
+.arena-wrap {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #0b0e15; /* arena palette, both themes */
+  box-shadow: var(--vxtpl-shadow);
+  line-height: 0; /* the canvas is the only child; kill the baseline gap */
+}
+.arena-canvas {
+  display: block;
+  margin: 0 auto;
+  touch-action: none; /* the finger drives the player, not the scroll */
+  cursor: crosshair;
+}
+.arena-countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 5rem;
+  font-weight: 800;
+  font-family: var(--vxtpl-mono);
+  color: rgba(233, 235, 240, 0.92);
+  pointer-events: none;
+}
+
+/* idle / exhausted panel: same footprint feel as the arena, page-themed */
+.arena-idle {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--vxtpl-surface);
+  box-shadow: var(--vxtpl-shadow-sm);
+  padding: 3.2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+.arena-idle__title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.arena-idle__body {
+  color: var(--vxtpl-slate);
+  font-size: 0.92rem;
+  max-width: 44ch;
+  line-height: 1.6;
+}
+
+.arena-result {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--vxtpl-surface);
+  box-shadow: var(--vxtpl-shadow-sm);
+  padding: 2.4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+.arena-result__score {
+  font-family: var(--vxtpl-mono);
+  font-size: 3.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.arena-result__score--win {
+  color: var(--vxtpl-success);
+}
+.arena-result__unit {
+  font-size: 1.4rem;
+  color: var(--vxtpl-slate-faint);
+  margin-left: 2px;
+}
+
+/* --- podium (records) --- */
+
+.podium {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.9rem;
+}
+.podium__card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--vxtpl-surface);
+  box-shadow: var(--vxtpl-shadow-sm);
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+.podium__card--first {
+  border-color: var(--vxtpl-accent);
+  box-shadow: var(--vxtpl-shadow);
+}
+.podium__rank {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vxtpl-accent);
+}
+.podium__score {
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.podium__unit {
+  font-size: 0.95rem;
+  color: var(--vxtpl-slate-faint);
+  margin-left: 1px;
+}
+.podium__meta {
+  font-size: 0.78rem;
+  color: var(--vxtpl-slate);
+}
+.podium__empty {
+  font-size: 0.85rem;
+  color: var(--vxtpl-slate-faint);
+  font-style: italic;
+}
+.podium--ghost {
+  opacity: 0.55;
+  filter: saturate(0.4);
+}
+
+/* --- leaderboard --- */
+
+.board {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--vxtpl-surface);
+  box-shadow: var(--vxtpl-shadow-sm);
+  overflow: hidden;
+}
+.board--ghost {
+  opacity: 0.55;
+  filter: saturate(0.4);
+}
+.board-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.95rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.board-row:last-child {
+  border-bottom: none;
+}
+.board-row--you {
+  background: var(--vxtpl-accent-soft);
+}
+.board-row__rank {
+  width: 2ch;
+  text-align: right;
+  font-family: var(--vxtpl-mono);
+  color: var(--vxtpl-slate);
+  flex-shrink: 0;
+}
+.board-row__rank--medal {
+  color: var(--vxtpl-accent);
+  font-weight: 700;
+}
+.board-row__sign {
+  font-weight: 600;
+  color: var(--vxtpl-ink-soft);
+}
+.board-row__date {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--vxtpl-slate-faint);
+}
+.board-row__score {
+  min-width: 6.5ch;
+  text-align: right;
+  font-weight: 700;
+}
+.board-me {
+  font-size: 0.86rem;
+  color: var(--vxtpl-slate);
+}
+
+/* --- trend chart (pro) --- */
+
+.trend-wrap {
+  position: relative;
+}
+.trend-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.trend-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.trend-goal {
+  stroke: var(--vxtpl-success);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.7;
+}
+.trend-goal-label {
+  fill: var(--vxtpl-success);
+  font-size: 10px;
+  font-weight: 600;
+}
+.trend-tick {
+  fill: var(--vxtpl-slate-faint);
+  font-size: 10px;
+}
+.trend-crosshair {
+  stroke: var(--vxtpl-border-strong);
+  stroke-width: 1;
+}
+.trend-line {
+  fill: none;
+  stroke: var(--vxtpl-chart-series);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.trend-dot {
+  fill: var(--vxtpl-chart-series);
+  stroke: var(--vxtpl-surface); /* 2px surface ring: dots stay separable when close */
+  stroke-width: 2;
+}
+.trend-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  background: var(--vxtpl-surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: var(--vxtpl-shadow);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--vxtpl-ink-soft);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.trend-tooltip__day {
+  font-weight: 700;
+  color: var(--vxtpl-ink);
+}
+.trend-empty {
+  color: var(--vxtpl-slate-faint);
+  font-size: 0.88rem;
 }

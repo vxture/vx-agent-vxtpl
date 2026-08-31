@@ -2,32 +2,40 @@
 
 ## What vxtpl is
 
-vxtpl is a Vxture product whose domain is the platform integration surface itself.
-Where another product would sell knowledge retrieval or geospatial analysis, vxtpl
-sells nothing: its subject matter is the correct consumption of the platform, made
-visible and exercised in production.
+vxtpl is a Vxture product with a real business domain: the 20-Second Challenge,
+a bullet-dodging reaction game whose three subscription tiers exercise the
+platform's quota / subscription / entitlement machinery with real users
+(ADR-006, spec in `20-challenge-game.md`). Its second subject matter is the
+platform integration surface itself, made visible and exercised in production.
 
-That is a deliberate choice with a practical purpose. vxtpl is also the reference
+Both roles are deliberate and reinforce each other. vxtpl is the reference
 build every new Vxture product is copied from (ADR-001), and a reference nobody
-runs drifts from reality within weeks. By deploying vxtpl at
-`https://vxtpl.vxture.com` and holding it to the same gates as any product, the
-integration contracts stay verified by execution rather than by review.
+runs drifts from reality within weeks - while a product nobody USES verifies
+the integration surface but never the product surface. By deploying vxtpl at
+`https://vxtpl.vxture.com`, giving it users, and holding it to the same gates
+as any product, both the integration contracts and the tier-gating patterns
+stay verified by execution rather than by review.
 
 ## Surfaces
 
 | Route | What it is |
 |-------|-----------|
-| `/` | Product home; build provenance and entry to the four surfaces |
+| `/` | Product home; the challenge front door, the tier ladder, build provenance, and the reference cards |
+| `/challenge` | The game: server-issued seeded runs, daily quota (free), score recording |
+| `/records` | Personal record: best 3 pinned all-time, tier-windowed recent runs, pro's 30-day trend |
+| `/leaderboard` | Global best-run board (pro), anonymous call signs, cross-workspace by design |
 | `/chat` | A tier-gated chat turn: pick a model and an optional skill, get a reply from Atlas, optionally executed through a Runos capability |
 | `/status` | Live configuration state of every integration channel, reported as presence booleans - no secret value ever leaves the server |
 | `/platform-check` | Read-only connectivity probes against Atlas and Runos, from a consumer's perspective |
 | `/entitlement-matrix` | Every subscription tier x status combination and the gate/CTA outcome it produces, computed fully offline |
 
-`/chat` is the load-bearing one. It is the only surface that exercises the whole
-chain in a single user action: session -> workspace -> entitlement -> capability
-gate -> S2S token mint -> Atlas call -> optional Runos capability -> usage record.
-The other three exist so that when that chain breaks, the failing link is visible
-without a debugger.
+Two surfaces are load-bearing. `/chat` exercises the whole S2S chain in a
+single user action: session -> workspace -> entitlement -> capability gate ->
+S2S token mint -> Atlas call -> optional Runos capability -> usage record.
+`/challenge` exercises the whole commercial chain: entitlement -> capability
+gate -> locally-counted quota against a domain table -> domain write -> usage
+record -> conversion deep-link. The remaining surfaces exist so that when
+either chain breaks, the failing link is visible without a debugger.
 
 ## Platform contracts consumed
 
@@ -64,11 +72,17 @@ they should, and are worth stating where a reader will meet them:
 
 vxtpl's capability matrix (`portals/app/app/entitlement/capability.ts`) is the
 exemplar of a product blank zone filled in: concrete feature keys for three chat
-models and four skills, gated cumulatively across the five subscription tiers.
-The *mechanism* - `canUseFeature`, `minTierFor`, the `hasProductAccess` /
-`hasDataAccess` / `ctaFor` formulas, and the value domains imported from
-`@vxture/shared` - is rigid and shared org-wide. The *content* of the matrix is
-vxtpl's, and a copied product replaces it.
+models, four skills, and the game's five `game:*` keys, gated cumulatively
+across the five subscription tiers. The *mechanism* - `canUseFeature`,
+`minTierFor`, the `hasProductAccess` / `hasDataAccess` / `ctaFor` formulas, and
+the value domains imported from `@vxture/shared` - is rigid and shared
+org-wide. The *content* of the matrix is vxtpl's, and a copied product replaces
+it.
+
+The game adds the quota exemplar: the free tier's 10-runs-a-day cap is counted
+locally against `vxtpl_game.run` (the product counts, the platform never
+adjudicates), with a platform-configured `limits["vxtpl.game.runs_per_day"]`
+overriding the product default when present - the sales number always wins.
 
 Gating is fail-closed at every layer: an unresolvable entitlement denies access
 rather than defaulting to a tier, and an ungated model or skill is refused with a
