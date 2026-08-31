@@ -33,3 +33,22 @@ test("minTierFor reports the lowest tier that unlocks a feature", () => {
   assert.equal(minTierFor("skill:data-analysis"), "enterprise");
   assert.equal(minTierFor("model:does-not-exist"), null);
 });
+
+// The game ladder (20-specs/20): each step unlocks exactly one capability
+// bundle, and business/enterprise add nothing beyond pro on the game axis.
+test("game ladder: free plays, starter unlocks history, pro unlocks the board", () => {
+  assert.equal(minTierFor("game:play"), "free");
+  assert.equal(minTierFor("game:unlimited-runs"), "starter");
+  assert.equal(minTierFor("game:history"), "starter");
+  assert.equal(minTierFor("game:leaderboard"), "pro");
+  assert.equal(minTierFor("game:trend"), "pro");
+});
+
+test("game ladder is cumulative through the upper tiers", () => {
+  for (const tier of ["pro", "business", "enterprise"] as const) {
+    const e = makeEntitlement("ws", "p", { tier });
+    for (const key of ["game:play", "game:unlimited-runs", "game:history", "game:leaderboard", "game:trend"]) {
+      assert.equal(canUseFeature(e, key), true, `${tier} should have ${key}`);
+    }
+  }
+});

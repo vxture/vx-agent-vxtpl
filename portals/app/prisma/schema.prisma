@@ -9,7 +9,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["vx_provision", "local_authz", "local_usage"]
+  schemas  = ["vx_provision", "local_authz", "local_usage", "vxtpl_game"]
 }
 
 // ===== vx_provision =====
@@ -142,4 +142,23 @@ model Checkpoint {
   @@unique([workspaceId, metric], map: "uidx_checkpoint_ws_metric")
   @@map("checkpoint")
   @@schema("local_usage")
+}
+
+// ===== vxtpl_game (domain schema, incr/0001) =====
+
+model GameRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  sub         String    @db.VarChar(128)
+  status      String    @default("started") @db.VarChar(32)
+  outcome     String?   @db.VarChar(32)
+  scoreMs     Int?      @map("score_ms")
+  seed        String    @db.VarChar(64)
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz()
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([workspaceId, sub, startedAt(sort: Desc)], map: "idx_run_ws_sub_started")
+  @@map("run")
+  @@schema("vxtpl_game")
 }

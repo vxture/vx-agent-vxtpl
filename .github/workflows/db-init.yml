@@ -139,8 +139,8 @@ jobs:
           fi
 
           if [ "$ACTION" = "verify" ]; then
-            echo "[db-init] contract schema tables:"
-            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('vx_provision','local_authz','local_usage') ORDER BY 1;"
+            echo "[db-init] contract + domain schema tables:"
+            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('vx_provision','local_authz','local_usage','vxtpl_game') ORDER BY 1;"
             echo "[db-init] service role state:"
             run -c "SELECT rolname, rolcanlogin, (rolpassword IS NOT NULL) AS has_password FROM pg_roles WHERE rolname = '${SNAKE}_svc';"
             if [ -n "$svc_pw" ]; then echo "[db-init] .env DATABASE_URL carries a svc password: yes"; else echo "[db-init] .env DATABASE_URL carries a svc password: no"; fi

@@ -5,6 +5,11 @@ product is copied from. Those are deliberately the same thing: a template nobody
 runs drifts from reality, so vxtpl proves the platform integration surface by
 consuming it in production at `https://vxtpl.vxture.com`.
 
+Its product is **The 20-Second Challenge** - a bullet-dodging reaction game
+whose three subscription tiers (daily quota, personal record, global
+leaderboard + trend) run the platform's real quota / entitlement machinery
+with real users (ADR-006, `docs/20-specs/20-challenge-game.md`).
+
 It signs users in against the central accounts service (C1), gates them by
 subscription tier (C2), receives provisioning webhooks (C3), calls **Atlas** for
 model inference, and calls **Runos** for capability execution - with the same
@@ -19,6 +24,9 @@ reintroduce npm workspaces.
 
 | Surface | What it demonstrates |
 |---------|----------------------|
+| `/challenge` | The game: seeded runs, the free tier's daily quota spent server-side at start, scores recorded within server bounds |
+| `/records` | Tier-windowed personal record - best 3 pinned all-time, starter's last 10, pro's 30 days with a daily-best trend curve |
+| `/leaderboard` | The global board (pro), cross-workspace by design and anonymous by construction (call signs, never identifiers) |
 | `/gate` | The product front door: verifies access on entry, redirects a signed-in visitor straight through, and otherwise shows the one action that helps |
 | `/chat` | A tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
 | `/status` | Every integration channel's live configuration state, with no secret ever leaving the server |
