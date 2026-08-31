@@ -1,132 +1,428 @@
-import { BRAND } from "@vxtpl/shared/brand";
-import { Card, CardDescription, CardHeader, CardTitle, Grid, Section, Stack } from "../ds";
-import { serviceIdentity } from "@vxture/shared";
+"use client";
 
-// The entry page leads with the product - the challenge - and keeps the
-// platform-reference surfaces underneath it. That order IS the product
-// definition (ADR-006): vxtpl earns its keep as a game people play, and the
-// reference material stays honest because it sits inside a product that has
-// real users to break it.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { subscribeUrl } from "../entitlement/deeplink";
+import { formatScoreMs } from "../game/rules";
+import { GameView, type GameFinish } from "./deck/game-view";
+import { AvatarMenu, BoardModule, RecordsModule } from "./deck/panels";
 
-const LADDER = [
-  {
-    tier: "Free",
-    unlock: "Play every day",
-    body: "The full arena, ten runs a day. Quota resets at 00:00 UTC.",
-  },
-  {
-    tier: "Starter",
-    unlock: "No limits, plus your record",
-    body: "Unlimited runs, your last 10 kept with the best three pinned - time and date included.",
-  },
-  {
-    tier: "Pro",
-    unlock: "The board and the trend",
-    body: "The global leaderboard, and 30 days of your record drawn as a daily-best curve.",
-  },
-];
+// THE app: one fullscreen command deck at `/` (owner decision 2026-08-31 -
+// single interface; the old landing, /records and /leaderboard pages are
+// gone, their content folded into the deck's side rails). Reference style:
+// the amber-on-charcoal data-viz dashboard, and its smart-street sibling for
+// the collapse pattern - side data columns flanking a central live canvas,
+// each foldable to a slim rail.
+//
+// The improvement on the reference's collapse buttons: the deck folds ITSELF.
+// Starting a run collapses both rails so the arena owns the screen; the
+// result unfolds them so the numbers land where you just played. Manual fold
+// handles work at any time and win until the next auto event.
+//
+// Layout, per the owner's review: LEFT rail = the two live numbers (runs
+// today, personal best) + the record module; RIGHT rail = identity strip
+// (avatar / exit / fullscreen) + the global board. Debug surfaces (chat,
+// status, ...) stay routable behind the avatar menu - service hatches, not
+// player destinations.
 
-const REFERENCE_CARDS = [
-  {
-    href: "/chat",
-    title: "Chat",
-    body: "Talk to the platform's model gateway (Atlas). Model + skill selection, gated by your subscription tier.",
-  },
-  {
-    href: "/status",
-    title: "Integration status",
-    body: "Live view of every platform-integration channel (C1/C2/C3, chat/Atlas) and their configuration state.",
-  },
-  {
-    href: "/platform-check",
-    title: "Platform check",
-    body: "Read-only connectivity probes against Atlas and Runos, from an agent-usage perspective.",
-  },
-  {
-    href: "/entitlement-matrix",
-    title: "Entitlement matrix",
-    body: "Every tier x status combination and the gate/CTA outcome it produces - fully offline.",
-  },
-];
+const UNLIMITED = -1;
 
-/**
- * The reference cards keep the auto-fit track list for the same reason the old
- * home page had it: `Grid`'s `columns` compiles to a fixed column count at
- * every width, and four 66px columns is what a phone would get. The cards are
- * links, so the anchor stays the grid item and the card fills it
- * (`height: 100%`), exactly as before.
- */
-export default function HomePage() {
-  const { gitSha } = serviceIdentity({ service: `${BRAND.productCode}-app`, product: BRAND.productCode });
+interface Quota {
+  cap: number;
+  usedToday: number;
+  remaining: number;
+  resetsAt: string;
+}
+
+interface GameContext {
+  tier: string | null;
+  cta: "subscribe" | "pay" | "renew" | "none";
+  gates: { play: boolean; history: boolean; leaderboard: boolean; trend: boolean };
+  quota: Quota;
+  best: { scoreMs: number } | null;
+}
+
+interface RunTicket {
+  runId: string;
+  seed: string;
+}
+
+interface FinishResult {
+  outcome: "survived" | "hit";
+  scoreMs: number;
+  isPersonalBest: boolean;
+}
+
+type Phase = "loading" | "signed-out" | "idle" | "playing" | "submitting" | "result";
+
+function tierLabel(tier: string | null): string {
+  return tier ? tier.toUpperCase() : "NO SUBSCRIPTION";
+}
+
+function resetsIn(resetsAt: string): string {
+  const ms = new Date(resetsAt).getTime() - Date.now();
+  if (ms <= 0) return "now";
+  const h = Math.floor(ms / 3600000);
+  const m = Math.ceil((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** The daily allowance as deck tick-bars: spent ones dim, the rest glow. */
+function QuotaTicks({ quota }: { quota: Quota }) {
+  if (quota.cap === UNLIMITED) {
+    return <div className="deck-panel__value">UNLIMITED</div>;
+  }
+  if (quota.cap > 20) {
+    return (
+      <div className="deck-panel__value">
+        {quota.remaining}
+        <span className="deck-panel__dim"> / {quota.cap}</span>
+      </div>
+    );
+  }
   return (
-    <main className="page">
-      <Stack gap="xs">
-        <div className="eyebrow">{BRAND.displayName} - Vxture product</div>
-        <Section
-          level={1}
-          title="The 20-Second Challenge"
-          description={
-            <span className="block max-w-[62ch]">
-              Dodge everything, from every direction, for twenty seconds. One hit ends the run; the clock is
-              the score. Built on the Vxture platform - sign-in, tiers, quota and records are the real,
-              production subscription machinery. Build <code>{gitSha}</code>.
-            </span>
-          }
+    <div>
+      <div className="deck-panel__value">
+        {quota.remaining}
+        <span className="deck-panel__dim"> / {quota.cap}</span>
+      </div>
+      <div className="deck-ticks" title={`${quota.remaining} of ${quota.cap} runs left today (resets 00:00 UTC)`}>
+        {Array.from({ length: quota.cap }, (_, i) => (
+          <i key={i} className={i < quota.usedToday ? "deck-tick deck-tick--spent" : "deck-tick"} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Rail({
+  side,
+  folded,
+  onToggle,
+  label,
+  children,
+}: {
+  side: "left" | "right";
+  folded: boolean;
+  onToggle: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <aside className={`deck-rail deck-rail-${side}${folded ? " deck-rail-folded" : ""}`}>
+      <button
+        className="deck-rail__handle"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        aria-label={`${folded ? "Expand" : "Collapse"} ${label}`}
+      >
+        <span className="deck-rail__chev" aria-hidden>
+          {folded ? (side === "left" ? ">" : "<") : side === "left" ? "<" : ">"}
+        </span>
+        <span className="deck-rail__label" aria-hidden>
+          {label}
+        </span>
+      </button>
+      {!folded && <div className="deck-rail__body">{children}</div>}
+    </aside>
+  );
+}
+
+export default function DeckPage() {
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [ctx, setCtx] = useState<GameContext | null>(null);
+  const [ticket, setTicket] = useState<RunTicket | null>(null);
+  const [result, setResult] = useState<FinishResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [folded, setFolded] = useState({ left: false, right: false });
+  const [modOpen, setModOpen] = useState({ records: true, board: true });
+  const [epoch, setEpoch] = useState(0);
+  const deckRef = useRef<HTMLDivElement>(null);
+
+  const loadContext = useCallback(async () => {
+    const r = await fetch("/api/game", { cache: "no-store" });
+    if (r.status === 401 || r.status === 503) {
+      const body = (await r.json().catch(() => ({}))) as { error?: string };
+      setPhase("signed-out");
+      setError(body.error ?? "sign in to play");
+      return null;
+    }
+    const data = (await r.json()) as GameContext;
+    setCtx(data);
+    return data;
+  }, []);
+
+  useEffect(() => {
+    loadContext()
+      .then((data) => {
+        if (data) setPhase("idle");
+      })
+      .catch(() => setError("failed to load the challenge context"));
+  }, [loadContext]);
+
+  async function start() {
+    setError(null);
+    setResult(null);
+    try {
+      const r = await fetch("/api/game/run", { method: "POST" });
+      const body = (await r.json()) as RunTicket & { error?: string; quota?: Quota };
+      if (r.status === 429) {
+        setCtx((c) => (c && body.quota ? { ...c, quota: body.quota } : c));
+        setPhase("idle");
+        return;
+      }
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      setCtx((c) => (c && body.quota ? { ...c, quota: body.quota } : c));
+      setTicket({ runId: body.runId, seed: body.seed });
+      setPhase("playing");
+      setFolded({ left: true, right: true }); // the arena owns the screen
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to start the run");
+    }
+  }
+
+  async function finish(f: GameFinish) {
+    if (!ticket) return;
+    setPhase("submitting");
+    try {
+      const r = await fetch("/api/game/run/finish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId: ticket.runId, scoreMs: f.scoreMs }),
+      });
+      const body = (await r.json()) as FinishResult & { error?: string; best?: { scoreMs: number } | null };
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      setResult({ outcome: body.outcome, scoreMs: body.scoreMs, isPersonalBest: body.isPersonalBest });
+      setCtx((c) => (c ? { ...c, best: body.best ?? c.best } : c));
+    } catch (err) {
+      // The run still happened for the player; show their score with the
+      // recording failure attached rather than pretending nothing occurred.
+      setResult({ outcome: f.outcome, scoreMs: f.scoreMs, isPersonalBest: false });
+      setError(err instanceof Error ? `recording failed: ${err.message}` : "recording failed");
+    } finally {
+      setTicket(null);
+      setPhase("result");
+      setEpoch((e) => e + 1); // open modules refetch; closed ones on next open
+      setFolded({ left: false, right: false }); // the numbers land where you played
+    }
+  }
+
+  /** EXIT: mid-run it abandons the run (already spent - quota counts starts);
+   * otherwise it just resets the deck to idle. */
+  const exitRun = useCallback(() => {
+    setTicket(null);
+    setResult(null);
+    setError(null);
+    setPhase((p) => {
+      if (p === "playing" || p === "submitting" || p === "result") {
+        setFolded({ left: false, right: false });
+        return "idle";
+      }
+      return p;
+    });
+  }, []);
+
+  // Escape is the mid-run EXIT: during play the rails are folded, so the
+  // button form of EXIT is two clicks away - the key is zero.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") exitRun();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [exitRun]);
+
+  function toggleFullscreen() {
+    const el = deckRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else if (el.requestFullscreen) {
+      void el.requestFullscreen().catch(() => undefined);
+    }
+  }
+
+  const quotaExhausted = ctx != null && ctx.quota.cap !== UNLIMITED && ctx.quota.remaining === 0;
+  const noAccess = ctx != null && !ctx.gates.play;
+  const playing = (phase === "playing" || phase === "submitting") && ticket != null;
+  const signedIn = phase !== "signed-out";
+
+  return (
+    <div ref={deckRef} className="deck">
+      <div className="deck__field" aria-hidden />
+
+      <div className="deck-frame">
+        {/* LEFT rail: the two live numbers + the record */}
+        <Rail
+          side="left"
+          folded={folded.left}
+          onToggle={() => setFolded((f) => ({ ...f, left: !f.left }))}
+          label="DATA"
         >
-          <Stack gap="lg">
-            <div className="hero-actions">
-              <a className="hero-play" href="/challenge">
-                Play now
-              </a>
-              <a className="hero-secondary" href="/leaderboard">
-                Global board
-              </a>
-              <a className="hero-secondary" href="/records">
-                Your record
-              </a>
-            </div>
+          {ctx && !noAccess ? (
+            <>
+              <div className="deck-panel">
+                <div className="deck-panel__title">Runs today</div>
+                <QuotaTicks quota={ctx.quota} />
+              </div>
+              <div className="deck-panel">
+                <div className="deck-panel__title">Personal best</div>
+                <div className="deck-panel__value">
+                  {ctx.best ? `${formatScoreMs(ctx.best.scoreMs)}s` : "--.--"}
+                </div>
+              </div>
+              <RecordsModule
+                open={modOpen.records}
+                onToggle={() => setModOpen((m) => ({ ...m, records: !m.records }))}
+                epoch={epoch}
+              />
+            </>
+          ) : (
+            <div className="deck-mod__loading">{signedIn ? "SYNCING..." : "SIGNED OUT"}</div>
+          )}
+        </Rail>
 
-            {/* The ladder: one card per tier, ONE unlock per step - the shape
-                of the subscription design, not a price sheet. Pricing lives in
-                the console; this page only says what each step opens. */}
-            <Grid columns={3} gap="md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-              {LADDER.map((l) => (
-                <Card key={l.tier} surface="strong" style={{ height: "100%" }}>
-                  <CardHeader>
-                    <div className="eyebrow">{l.tier}</div>
-                    <CardTitle>{l.unlock}</CardTitle>
-                    <CardDescription>{l.body}</CardDescription>
-                  </CardHeader>
-                </Card>
-              ))}
-            </Grid>
+        {/* CENTER: title, stage, hint */}
+        <main className="deck-main">
+          <div className="deck-title">
+            <div className="deck-title__text">The 20-Second Challenge</div>
+            <div className="deck-title__sub">{ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
+          </div>
 
-            <Section
-              level={2}
-              title="Platform reference"
-              description={
-                <span className="block max-w-[62ch]">
-                  vxtpl is also the reference build new Vxture products are copied from. These surfaces show the
-                  integration machinery the game runs on.
-                </span>
-              }
+          <div className="deck-stage">
+            {phase === "loading" && !error && <div className="deck-status">SYNCING...</div>}
+
+            {phase === "signed-out" && (
+              <div className="deck-dialog">
+                <div className="deck-dialog__title">Sign in to play</div>
+                <p className="deck-dialog__body">
+                  Runs, quota and records belong to your workspace, so the challenge needs you signed in.
+                </p>
+                <a className="deck-btn deck-btn-solid" href="/auth/login?returnTo=/">
+                  SIGN IN
+                </a>
+              </div>
+            )}
+
+            {noAccess && ctx && (
+              <div className="deck-dialog">
+                <div className="deck-dialog__title">No subscription covers the challenge</div>
+                <p className="deck-dialog__body">
+                  The free tier already includes daily runs - it just has to be active for this workspace.
+                </p>
+                <a
+                  className="deck-btn deck-btn-solid"
+                  href={subscribeUrl({ intent: ctx.cta === "renew" || ctx.cta === "pay" ? "renew" : "upgrade" })}
+                >
+                  {ctx.cta === "pay" ? "FIX PAYMENT" : ctx.cta === "renew" ? "RENEW" : "SUBSCRIBE"}
+                </a>
+              </div>
+            )}
+
+            {playing && ticket && <GameView seed={ticket.seed} onFinish={finish} />}
+
+            {phase === "idle" && ctx && !noAccess && (
+              <div className="deck-center">
+                {quotaExhausted ? (
+                  <>
+                    <div className="deck-orb deck-orb--spent" aria-hidden>
+                      <div className="deck-orb__label">OUT OF</div>
+                      <div className="deck-orb__big">RUNS</div>
+                      <div className="deck-orb__sub">for today</div>
+                    </div>
+                    <p className="deck-dialog__body">
+                      {ctx.quota.cap} runs a day on the free tier. Resets 00:00 UTC - in{" "}
+                      {resetsIn(ctx.quota.resetsAt)}. Starter removes the daily limit.
+                    </p>
+                    <a
+                      className="deck-btn deck-btn-solid"
+                      href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}
+                    >
+                      MOVE TO STARTER
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <button className="deck-orb" onClick={start}>
+                      <div className="deck-orb__label">READY</div>
+                      <div className="deck-orb__big">START</div>
+                      <div className="deck-orb__sub">survive 20.00s</div>
+                    </button>
+                    <p className="deck-hintline">
+                      Everything is aimed at you and flies straight. Keep moving - a shot can never turn.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {phase === "result" && result && (
+              <div className="deck-center">
+                <div
+                  className={result.outcome === "survived" ? "deck-orb deck-orb--win" : "deck-orb deck-orb--score"}
+                  aria-hidden
+                >
+                  <div className="deck-orb__label">{result.outcome === "survived" ? "SURVIVED" : "HIT AT"}</div>
+                  <div className="deck-orb__big">{formatScoreMs(result.scoreMs)}</div>
+                  <div className="deck-orb__sub">seconds{result.isPersonalBest ? " - new best" : ""}</div>
+                </div>
+                <div className="deck-actions">
+                  {quotaExhausted ? (
+                    <a
+                      className="deck-btn deck-btn-solid"
+                      href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}
+                    >
+                      OUT OF RUNS - MOVE TO STARTER
+                    </a>
+                  ) : (
+                    <button className="deck-btn deck-btn-solid" onClick={start}>
+                      RUN IT AGAIN
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {error && <p className="deck-error">{error}</p>}
+          </div>
+
+          <footer className="deck-bottom">
+            <div className="deck-bottom__frame" aria-hidden />
+            <div className="deck-hint">ARROW KEYS TO MOVE / ESC TO LEAVE / ONE HIT ENDS THE RUN</div>
+          </footer>
+        </main>
+
+        {/* RIGHT rail: identity strip + the global board */}
+        <Rail
+          side="right"
+          folded={folded.right}
+          onToggle={() => setFolded((f) => ({ ...f, right: !f.right }))}
+          label="BOARD"
+        >
+          <div className="deck-idbar">
+            <AvatarMenu />
+            <button className="deck-iconbtn" onClick={exitRun} title="Leave the run" aria-label="Leave the run">
+              EXIT
+            </button>
+            <button
+              className="deck-iconbtn"
+              onClick={toggleFullscreen}
+              title="Toggle fullscreen"
+              aria-label="Toggle fullscreen"
             >
-              <Grid columns={4} gap="md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                {REFERENCE_CARDS.map((c) => (
-                  <a key={c.href} href={c.href} style={{ color: "inherit" }}>
-                    <Card surface="strong" style={{ height: "100%" }}>
-                      <CardHeader>
-                        <CardTitle style={{ color: "var(--vxtpl-accent-ink)" }}>{c.title}</CardTitle>
-                        <CardDescription>{c.body}</CardDescription>
-                      </CardHeader>
-                    </Card>
-                  </a>
-                ))}
-              </Grid>
-            </Section>
-          </Stack>
-        </Section>
-      </Stack>
-    </main>
+              [ ]
+            </button>
+          </div>
+          {signedIn ? (
+            <BoardModule
+              open={modOpen.board}
+              onToggle={() => setModOpen((m) => ({ ...m, board: !m.board }))}
+              epoch={epoch}
+            />
+          ) : (
+            <div className="deck-mod__loading">SIGNED OUT</div>
+          )}
+        </Rail>
+      </div>
+    </div>
   );
 }

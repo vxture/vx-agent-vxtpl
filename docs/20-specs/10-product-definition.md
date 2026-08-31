@@ -18,24 +18,30 @@ stay verified by execution rather than by review.
 
 ## Surfaces
 
+The app is ONE screen (owner decision 2026-08-31): the fullscreen command
+deck at `/`. Everything a player touches - the game, the daily quota, the
+personal record with its trend, the global board, identity and conversion -
+lives on that deck, with the record and board as collapsible side-rail
+modules. There is no landing page and no separate records/leaderboard pages
+(`/challenge` survives only as a redirect for old links).
+
 | Route | What it is |
 |-------|-----------|
-| `/` | Product home; the challenge front door, the tier ladder, build provenance, and the reference cards |
-| `/challenge` | The game: server-issued seeded runs, daily quota (free), score recording |
-| `/records` | Personal record: best 3 pinned all-time, tier-windowed recent runs, pro's 30-day trend |
-| `/leaderboard` | Global best-run board (pro), anonymous call signs, cross-workspace by design |
-| `/chat` | A tier-gated chat turn: pick a model and an optional skill, get a reply from Atlas, optionally executed through a Runos capability |
-| `/status` | Live configuration state of every integration channel, reported as presence booleans - no secret value ever leaves the server |
-| `/platform-check` | Read-only connectivity probes against Atlas and Runos, from a consumer's perspective |
-| `/entitlement-matrix` | Every subscription tier x status combination and the gate/CTA outcome it produces, computed fully offline |
+| `/` | THE app: the deck - seeded runs, daily quota (free), score recording, record + trend module, global-board module, avatar/identity strip |
+| `/chat` | Debug/reference: a tier-gated chat turn against Atlas, optionally through a Runos capability |
+| `/status` | Debug/reference: live configuration state of every integration channel, presence booleans only |
+| `/platform-check` | Debug/reference: read-only connectivity probes against Atlas and Runos |
+| `/entitlement-matrix` | Debug/reference: every tier x status combination and its gate/CTA outcome, fully offline |
 
-Two surfaces are load-bearing. `/chat` exercises the whole S2S chain in a
-single user action: session -> workspace -> entitlement -> capability gate ->
-S2S token mint -> Atlas call -> optional Runos capability -> usage record.
-`/challenge` exercises the whole commercial chain: entitlement -> capability
-gate -> locally-counted quota against a domain table -> domain write -> usage
-record -> conversion deep-link. The remaining surfaces exist so that when
-either chain breaks, the failing link is visible without a debugger.
+The debug surfaces are the template's service hatches: routable behind the
+deck's avatar menu, never player destinations. Two surfaces are load-bearing.
+`/chat` exercises the whole S2S chain in a single user action: session ->
+workspace -> entitlement -> capability gate -> S2S token mint -> Atlas call ->
+optional Runos capability -> usage record. The deck exercises the whole
+commercial chain: entitlement -> capability gate -> locally-counted quota
+against a domain table -> domain write -> usage record -> conversion
+deep-link. The rest exist so that when either chain breaks, the failing link
+is visible without a debugger.
 
 ## Platform contracts consumed
 

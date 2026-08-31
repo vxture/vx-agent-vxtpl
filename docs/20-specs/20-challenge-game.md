@@ -20,7 +20,7 @@ the score is the survival time either way.
 | Skill model | dodging craft, not reflexes (owner decision 2026-08-31): everything is SLOW and AIMED. Bullets fire exactly at the player's position and fly straight (no jitter, no homing), so standing still is lethal and any deliberate move invalidates every shot in the air. The ramp raises density (spawn cadence 320ms -> 70ms), barely speed (60 -> 130 logical px/s); slow bullets live longer, so the field thickens on its own. Four converging ring bursts at 6.0 / 11.0 / 15.5 / 18.2s |
 | Player | fixed 150 px/s - slightly faster than the fastest bullet, so every death is a positioning mistake, never a speed check. Small marks throughout (player r4, bullets r2-3.2): the read is lanes, not blobs |
 | Controls | the four arrow keys, nothing else (owner decision 2026-08-31; desktop-first, no pointer follow, no touch) |
-| Presentation | a fullscreen command deck in the owner's reference style (amber-on-charcoal data-viz dashboard): fixed overlay, gold panel chrome, the glowing center orb as start control and score display |
+| Presentation | ONE screen: a fullscreen command deck at `/` in the owner's reference style (amber-on-charcoal data-viz dashboard). Side rails carry the live numbers plus collapsible record and board modules (collapse pattern from the reference's sibling design, improved: the deck folds itself when a run starts and unfolds on the result); right rail holds avatar / exit / fullscreen; debug surfaces sit behind the avatar menu |
 | Determinism | every run is seeded server-side; the engine (`game/engine.ts`) is pure and replayable from the seed |
 | Cross-device | one logical 800x520 arena, letterboxed into the viewport - a smaller screen shrinks the picture, not the game |
 
@@ -96,6 +96,6 @@ this repo's own: no client anti-cheat arms race (see integrity posture).
 | Persistence port | `portals/app/app/game/store.ts` (+ `prisma-store.ts`) |
 | Schema | `deploy/database/ddl/incr/0001_vxtpl_game.sql` (`vxtpl_game.run`) |
 | APIs | `portals/app/app/api/game/{,run,run/finish,records,leaderboard}/route.ts` |
-| Surfaces | `/challenge`, `/records`, `/leaderboard` under `portals/app/app/(product)/` |
+| Surface | the deck at `/` - `portals/app/app/(product)/page.tsx` + `(product)/deck/` (renderer, side modules, trend chart); `/challenge` redirects |
 | Tier keys | `portals/app/app/entitlement/capability.ts` (`game:*`) |
 | Usage metric | `vxtpl.game.runs`, buffered like `vxtpl.chat.messages` (liaison letter 130) |

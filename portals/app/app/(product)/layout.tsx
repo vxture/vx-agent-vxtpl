@@ -17,14 +17,15 @@ import { SessionControl } from "../session-control";
  * else?" at exactly the moment we are asking someone to trust the sign-in.
  */
 
-// The game surfaces lead; the reference surfaces that did not fit stay one
-// click away on the home page's reference cards and the page-links footers.
+// The app itself is the one deck at `/`, which covers this chrome entirely -
+// so the nav only ever shows on the debug/reference surfaces below, and it
+// links between them plus a way back to the deck.
 const NAV_LINKS = [
-  { href: "/challenge", label: "Play" },
-  { href: "/records", label: "Records" },
-  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/", label: "Play" },
   { href: "/chat", label: "Chat" },
   { href: "/status", label: "Status" },
+  { href: "/platform-check", label: "Platform check" },
+  { href: "/entitlement-matrix", label: "Entitlement matrix" },
 ];
 
 export default function ProductLayout({ children }: { children: ReactNode }) {
