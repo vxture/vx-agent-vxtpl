@@ -1,15 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge } from "../../ds";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../../entitlement/deeplink";
 import { formatScoreMs } from "../../game/rules";
 import { GameView, type GameFinish } from "./game-view";
 
-// The challenge surface: the whole subscription design, playable. One GET
-// paints the tier, the quota and the personal best; starting a run spends
-// quota on the server; finishing records the score. Every gate the page shows
-// is the server's answer rendered, never re-derived locally.
+// The challenge surface as a fullscreen command deck (owner's reference: the
+// amber-on-charcoal data-viz dashboard). The page is a fixed overlay - the
+// product chrome stays behind it, EXIT is the way back - and every state
+// (idle, countdown, run, result) lives on the same deck so play never changes
+// rooms. The centerpiece is the glowing orb: the start control when idle, the
+// score when done - exactly the role the big center orb plays in the
+// reference design.
+//
+// Every gate the page shows is the server's answer rendered, never re-derived
+// locally. Pricing never appears; conversion exits deep-link to the console.
 
 const UNLIMITED = -1;
 
@@ -43,7 +48,7 @@ interface FinishResult {
 type Phase = "loading" | "signed-out" | "idle" | "playing" | "submitting" | "result";
 
 function tierLabel(tier: string | null): string {
-  return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "No subscription";
+  return tier ? tier.toUpperCase() : "NO SUBSCRIPTION";
 }
 
 function resetsIn(resetsAt: string): string {
@@ -54,33 +59,25 @@ function resetsIn(resetsAt: string): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** The daily allowance, drawn as pips: spent ones dim, the remainder glows.
- * Ten dots say "10 a day" faster than any sentence - and starter's badge says
- * the other thing just as fast. */
-function QuotaPips({ quota }: { quota: Quota }) {
+/** The daily allowance as deck tick-bars: spent ones dim, the rest glow. */
+function QuotaTicks({ quota }: { quota: Quota }) {
   if (quota.cap === UNLIMITED) {
-    return (
-      <StatusBadge tone="brand" dot>
-        Unlimited runs
-      </StatusBadge>
-    );
+    return <div className="deck-panel__value">UNLIMITED</div>;
   }
   if (quota.cap > 20) {
     return (
-      <span className="quota-text">
-        {quota.remaining} of {quota.cap} runs left today
-      </span>
+      <div className="deck-panel__value">
+        {quota.remaining}
+        <span className="deck-panel__dim"> / {quota.cap}</span>
+      </div>
     );
   }
   return (
-    <span className="quota-pips" title={`${quota.remaining} of ${quota.cap} runs left today (resets 00:00 UTC)`}>
+    <div className="deck-ticks" title={`${quota.remaining} of ${quota.cap} runs left today (resets 00:00 UTC)`}>
       {Array.from({ length: quota.cap }, (_, i) => (
-        <i key={i} className={i < quota.usedToday ? "pip pip--spent" : "pip"} />
+        <i key={i} className={i < quota.usedToday ? "deck-tick deck-tick--spent" : "deck-tick"} />
       ))}
-      <span className="quota-text">
-        {quota.remaining} left today
-      </span>
-    </span>
+    </div>
   );
 }
 
@@ -90,6 +87,7 @@ export default function ChallengePage() {
   const [ticket, setTicket] = useState<RunTicket | null>(null);
   const [result, setResult] = useState<FinishResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const deckRef = useRef<HTMLDivElement>(null);
 
   const loadContext = useCallback(async () => {
     const r = await fetch("/api/game", { cache: "no-store" });
@@ -156,149 +154,163 @@ export default function ChallengePage() {
     }
   }
 
+  function toggleFullscreen() {
+    const el = deckRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else if (el.requestFullscreen) {
+      void el.requestFullscreen().catch(() => undefined);
+    }
+  }
+
   const quotaExhausted = ctx != null && ctx.quota.cap !== UNLIMITED && ctx.quota.remaining === 0;
   const noAccess = ctx != null && !ctx.gates.play;
+  const playing = (phase === "playing" || phase === "submitting") && ticket != null;
 
   return (
-    <main className="page">
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: "1.7rem" }}>The 20-Second Challenge</h1>
-        <StatusBadge tone={ctx?.tier ? "brand" : "neutral"} dot>
-          {ctx ? tierLabel(ctx.tier) : "..."}
-        </StatusBadge>
-      </div>
-      <p className="lede">
-        Dodge everything, from every direction, for twenty seconds. Mouse, touch, or arrow keys - the run
-        ends on the first hit.
-      </p>
+    <div ref={deckRef} className="deck">
+      <div className="deck__field" aria-hidden />
 
-      {phase === "signed-out" && (
-        <Card style={{ marginTop: "1.4rem" }}>
-          <CardHeader>
-            <CardTitle>Sign in to play</CardTitle>
-            <CardDescription>
-              Runs, quota and records belong to your workspace, so the challenge needs you signed in.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <a href="/auth/login?returnTo=/challenge">Sign in</a>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {noAccess && ctx && (
-        <Card style={{ marginTop: "1.4rem" }}>
-          <CardHeader>
-            <CardTitle>No subscription covers the challenge</CardTitle>
-            <CardDescription>
-              The free tier already includes daily runs - it just has to be active for this workspace.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <a href={subscribeUrl({ intent: ctx.cta === "renew" || ctx.cta === "pay" ? "renew" : "upgrade" })}>
-                {ctx.cta === "pay" ? "Fix payment" : ctx.cta === "renew" ? "Renew" : "Subscribe"}
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {ctx && !noAccess && phase !== "signed-out" && (
-        <div style={{ marginTop: "1.4rem" }}>
-          {/* Status strip: quota on the left, personal best on the right. Always
-              visible - during play it is the one non-arena thing worth a glance. */}
-          <div className="arena-strip">
-            <QuotaPips quota={ctx.quota} />
-            <span className="quota-text" style={{ marginLeft: "auto" }}>
-              {ctx.best ? `personal best ${formatScoreMs(ctx.best.scoreMs)}s` : "no runs yet"}
-            </span>
-          </div>
-
-          {(phase === "playing" || phase === "submitting") && ticket ? (
-            <GameView seed={ticket.seed} onFinish={finish} />
-          ) : phase === "submitting" || (phase === "result" && result) ? null : (
-            <div className="arena-idle">
-              {quotaExhausted ? (
-                <>
-                  <div className="arena-idle__title">Out of runs for today</div>
-                  <p className="arena-idle__body">
-                    The free tier includes {ctx.quota.cap} runs a day. Quota resets at 00:00 UTC - in{" "}
-                    {resetsIn(ctx.quota.resetsAt)}. Starter removes the daily limit.
-                  </p>
-                  <Button asChild>
-                    <a href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>Move to Starter</a>
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="arena-idle__title">Ready?</div>
-                  <p className="arena-idle__body">
-                    Twenty seconds on the clock. The field thickens as it counts - the last five are the run.
-                  </p>
-                  <Button onClick={start}>Start the challenge</Button>
-                </>
-              )}
-            </div>
-          )}
-
-          {phase === "result" && result && (
-            <div className="arena-result">
-              <div className={result.outcome === "survived" ? "arena-result__score arena-result__score--win" : "arena-result__score"}>
-                {formatScoreMs(result.scoreMs)}
-                <span className="arena-result__unit">s</span>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
-                <StatusBadge tone={result.outcome === "survived" ? "success" : "neutral"} dot>
-                  {result.outcome === "survived" ? "Survived" : `Hit at ${formatScoreMs(result.scoreMs)}s`}
-                </StatusBadge>
-                {result.isPersonalBest && (
-                  <StatusBadge tone="brand" dot>
-                    New personal best
-                  </StatusBadge>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", justifyContent: "center" }}>
-                {quotaExhausted ? (
-                  <Button asChild>
-                    <a href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>
-                      Out of runs - move to Starter
-                    </a>
-                  </Button>
-                ) : (
-                  <Button onClick={start}>Run it again</Button>
-                )}
-                {ctx.gates.history ? (
-                  <Button variant="outline" asChild>
-                    <a href="/records">View your record</a>
-                  </Button>
-                ) : (
-                  <Button variant="outline" asChild>
-                    <a href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>
-                      Keep a record (Starter)
-                    </a>
-                  </Button>
-                )}
-                {ctx.gates.leaderboard && (
-                  <Button variant="outline" asChild>
-                    <a href="/leaderboard">Global board</a>
-                  </Button>
-                )}
-              </div>
+      <header className="deck-top">
+        <div className="deck-top__side">
+          <a className="deck-exit" href="/">
+            &lt; EXIT
+          </a>
+          {ctx && !noAccess && (
+            <div className="deck-panel">
+              <div className="deck-panel__title">Runs today</div>
+              <QuotaTicks quota={ctx.quota} />
             </div>
           )}
         </div>
-      )}
 
-      {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
+        <div className="deck-title">
+          <div className="deck-title__text">The 20-Second Challenge</div>
+          <div className="deck-title__sub">{ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
+        </div>
 
-      <footer className="page-links">
-        <a href="/records">-&gt; your record</a>
-        <a href="/leaderboard">-&gt; global board</a>
-        <a href="/entitlement-matrix">-&gt; how the tiers gate</a>
+        <div className="deck-top__side deck-top__side--right">
+          {ctx && (
+            <div className="deck-panel deck-panel-right">
+              <div className="deck-panel__title">Personal best</div>
+              <div className="deck-panel__value">
+                {ctx.best ? `${formatScoreMs(ctx.best.scoreMs)}s` : "--.--"}
+              </div>
+            </div>
+          )}
+          <button className="deck-iconbtn" onClick={toggleFullscreen} title="Toggle fullscreen" aria-label="Toggle fullscreen">
+            [ ]
+          </button>
+        </div>
+      </header>
+
+      <div className="deck-stage">
+        {phase === "loading" && !error && <div className="deck-status">SYNCING...</div>}
+
+        {phase === "signed-out" && (
+          <div className="deck-dialog">
+            <div className="deck-dialog__title">Sign in to play</div>
+            <p className="deck-dialog__body">
+              Runs, quota and records belong to your workspace, so the challenge needs you signed in.
+            </p>
+            <a className="deck-btn deck-btn-solid" href="/auth/login?returnTo=/challenge">
+              SIGN IN
+            </a>
+          </div>
+        )}
+
+        {noAccess && ctx && (
+          <div className="deck-dialog">
+            <div className="deck-dialog__title">No subscription covers the challenge</div>
+            <p className="deck-dialog__body">
+              The free tier already includes daily runs - it just has to be active for this workspace.
+            </p>
+            <a
+              className="deck-btn deck-btn-solid"
+              href={subscribeUrl({ intent: ctx.cta === "renew" || ctx.cta === "pay" ? "renew" : "upgrade" })}
+            >
+              {ctx.cta === "pay" ? "FIX PAYMENT" : ctx.cta === "renew" ? "RENEW" : "SUBSCRIBE"}
+            </a>
+          </div>
+        )}
+
+        {playing && ticket && <GameView seed={ticket.seed} onFinish={finish} />}
+
+        {phase === "idle" && ctx && !noAccess && (
+          <div className="deck-center">
+            {quotaExhausted ? (
+              <>
+                <div className="deck-orb deck-orb--spent" aria-hidden>
+                  <div className="deck-orb__label">OUT OF</div>
+                  <div className="deck-orb__big">RUNS</div>
+                  <div className="deck-orb__sub">for today</div>
+                </div>
+                <p className="deck-dialog__body">
+                  {ctx.quota.cap} runs a day on the free tier. Resets 00:00 UTC - in {resetsIn(ctx.quota.resetsAt)}.
+                  Starter removes the daily limit.
+                </p>
+                <a className="deck-btn deck-btn-solid" href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>
+                  MOVE TO STARTER
+                </a>
+              </>
+            ) : (
+              <>
+                <button className="deck-orb" onClick={start}>
+                  <div className="deck-orb__label">READY</div>
+                  <div className="deck-orb__big">START</div>
+                  <div className="deck-orb__sub">survive 20.00s</div>
+                </button>
+                <p className="deck-hintline">
+                  Everything is aimed at you and flies straight. Keep moving - a shot can never turn.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {phase === "result" && result && (
+          <div className="deck-center">
+            <div className={result.outcome === "survived" ? "deck-orb deck-orb--win" : "deck-orb deck-orb--score"} aria-hidden>
+              <div className="deck-orb__label">{result.outcome === "survived" ? "SURVIVED" : "HIT AT"}</div>
+              <div className="deck-orb__big">{formatScoreMs(result.scoreMs)}</div>
+              <div className="deck-orb__sub">seconds{result.isPersonalBest ? " - new best" : ""}</div>
+            </div>
+            <div className="deck-actions">
+              {quotaExhausted ? (
+                <a className="deck-btn deck-btn-solid" href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>
+                  OUT OF RUNS - MOVE TO STARTER
+                </a>
+              ) : (
+                <button className="deck-btn deck-btn-solid" onClick={start}>
+                  RUN IT AGAIN
+                </button>
+              )}
+              {ctx?.gates.history ? (
+                <a className="deck-btn" href="/records">
+                  YOUR RECORD
+                </a>
+              ) : (
+                <a className="deck-btn" href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}>
+                  KEEP A RECORD (STARTER)
+                </a>
+              )}
+              {ctx?.gates.leaderboard && (
+                <a className="deck-btn" href="/leaderboard">
+                  GLOBAL BOARD
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && <p className="deck-error">{error}</p>}
+      </div>
+
+      <footer className="deck-bottom">
+        <div className="deck-bottom__frame" aria-hidden />
+        <div className="deck-hint">ARROW KEYS TO MOVE / ONE HIT ENDS THE RUN</div>
       </footer>
-    </main>
+    </div>
   );
 }

@@ -79,10 +79,27 @@ test("a huge frame delta cannot tunnel a bullet through the player", () => {
   const state = createEngine("cafebabe1234");
   const player = { x: 400, y: 260 };
   // Fast bullet pointed straight at the player from the left; one 500ms frame
-  // would carry it far past if integrated in a single step.
-  state.bullets.push({ x: 300, y: 260, vx: 2000, vy: 0, r: 4 });
+  // would carry it far past if integrated in a single step. r=6 keeps the
+  // collision window wider than one 120Hz substep at this speed, so the hit
+  // cannot depend on step phase.
+  state.bullets.push({ x: 300, y: 260, vx: 2000, vy: 0, r: 6 });
   advance(state, 500, player);
   assert.equal(state.status, "hit");
+});
+
+test("every aimed bullet flies straight at where the player stood", () => {
+  const state = createEngine("cafebabe1234");
+  const player = { x: 500, y: 200 };
+  // Tiny steps so freshly spawned bullets have barely moved when checked -
+  // and a bullet moving ALONG its aim line keeps pointing at the target.
+  for (let t = 0; t < 700; t += 8) advance(state, 8, player);
+  assert.ok(state.bullets.length > 0, "expected at least one spawn by 700ms");
+  for (const b of state.bullets) {
+    const speed = Math.hypot(b.vx, b.vy);
+    const dist = Math.hypot(player.x - b.x, player.y - b.y);
+    const cos = ((player.x - b.x) * b.vx + (player.y - b.y) * b.vy) / (speed * dist);
+    assert.ok(cos > 0.9995, `bullet veers off target (cos ${cos})`);
+  }
 });
 
 test("bullets leaving the arena are culled", () => {
