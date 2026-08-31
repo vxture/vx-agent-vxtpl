@@ -345,10 +345,10 @@ export default function DeckPage() {
                     <button className="deck-orb" onClick={start}>
                       <div className="deck-orb__label">READY</div>
                       <div className="deck-orb__big">START</div>
-                      <div className="deck-orb__sub">survive 20.00s</div>
+                      <div className="deck-orb__sub">20.00s qualifies</div>
                     </button>
                     <p className="deck-hintline">
-                      Everything is aimed at you and flies straight. Keep moving - a shot can never turn.
+                      Everything is aimed at you and flies straight. 20.00s makes the run count - after the bar, every second is score.
                     </p>
                   </>
                 )}
@@ -361,7 +361,7 @@ export default function DeckPage() {
                   className={result.outcome === "survived" ? "deck-orb deck-orb--win" : "deck-orb deck-orb--score"}
                   aria-hidden
                 >
-                  <div className="deck-orb__label">{result.outcome === "survived" ? "SURVIVED" : "HIT AT"}</div>
+                  <div className="deck-orb__label">{result.outcome === "survived" ? "QUALIFIED" : "HIT AT"}</div>
                   <div className="deck-orb__big">{formatScoreMs(result.scoreMs)}</div>
                   <div className="deck-orb__sub">seconds{result.isPersonalBest ? " - new best" : ""}</div>
                 </div>
@@ -387,7 +387,7 @@ export default function DeckPage() {
 
           <footer className="deck-bottom">
             <div className="deck-bottom__frame" aria-hidden />
-            <div className="deck-hint">ARROW KEYS TO MOVE / ESC TO LEAVE / ONE HIT ENDS THE RUN</div>
+            <div className="deck-hint">ARROW KEYS TO MOVE / ESC TO LEAVE / 20S QUALIFIES - NO CEILING</div>
           </footer>
         </main>
 

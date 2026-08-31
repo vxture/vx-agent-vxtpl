@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RUN_DURATION_MS } from "./rules";
+import { QUALIFY_MS } from "./rules";
 import {
   ARENA_H,
   ARENA_W,
@@ -40,27 +40,33 @@ test("same seed + same inputs = the same run", () => {
   assert.deepEqual(s1.bullets, s2.bullets);
 });
 
-test("difficulty ramps: spawn interval shrinks, speed grows", () => {
+test("difficulty ramps: spawn interval shrinks, speed grows to the bar", () => {
   assert.ok(spawnIntervalAt(0) > spawnIntervalAt(10000));
-  assert.ok(spawnIntervalAt(10000) > spawnIntervalAt(RUN_DURATION_MS));
-  assert.ok(bulletSpeedAt(0) < bulletSpeedAt(RUN_DURATION_MS));
+  assert.ok(spawnIntervalAt(10000) > spawnIntervalAt(QUALIFY_MS));
+  assert.ok(bulletSpeedAt(0) < bulletSpeedAt(QUALIFY_MS));
 });
 
-test("the last two seconds spawn more than the first two", () => {
+test("past the bar, density keeps creeping but speed holds", () => {
+  assert.ok(spawnIntervalAt(QUALIFY_MS) > spawnIntervalAt(QUALIFY_MS * 2));
+  assert.ok(spawnIntervalAt(QUALIFY_MS * 2) >= spawnIntervalAt(QUALIFY_MS * 3)); // floor
+  assert.equal(bulletSpeedAt(QUALIFY_MS), bulletSpeedAt(QUALIFY_MS * 3));
+});
+
+test("the last two seconds before the bar out-spawn the first two", () => {
   const state = createEngine("cafebabe1234");
   runFor(state, 2000);
   const early = state.spawned;
-  runFor(state, RUN_DURATION_MS - 4000);
+  runFor(state, QUALIFY_MS - 4000);
   const beforeLate = state.spawned;
   runFor(state, 1990);
   const late = state.spawned - beforeLate;
   assert.ok(late > early, `late window ${late} should out-spawn early window ${early}`);
 });
 
-test("an untouched player survives at exactly the run duration", () => {
-  const state = runFor(createEngine("cafebabe1234"), RUN_DURATION_MS + 100);
-  assert.equal(state.status, "survived");
-  assert.equal(state.t, RUN_DURATION_MS);
+test("the bar is not the end: an untouched run keeps going past 20s", () => {
+  const state = runFor(createEngine("cafebabe1234"), QUALIFY_MS + 6000);
+  assert.equal(state.status, "running");
+  assert.ok(state.t > QUALIFY_MS, `t ${state.t} should pass the bar`);
 });
 
 test("a bullet overlapping the player is a hit, and the state latches", () => {

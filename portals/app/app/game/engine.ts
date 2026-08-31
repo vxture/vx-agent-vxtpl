@@ -1,45 +1,57 @@
-import { RUN_DURATION_MS } from "./rules";
+import { QUALIFY_MS } from "./rules";
 
 // The bullet-field engine: pure state + advance(), no DOM and no canvas, so the
 // whole difficulty curve is unit-testable and a run is reproducible from its
-// seed. The renderer (challenge/game-view.tsx) owns input and drawing only.
+// seed. The renderer (deck/game-view.tsx) owns input and drawing only.
 //
 // Coordinates are LOGICAL: a fixed 800x520 arena that the renderer scales to
 // the actual canvas. Keeping the space fixed means difficulty is identical on a
 // phone and a desktop - a smaller screen scales the picture, not the game.
+//
+// A run has NO end but the hit (owner decision 2026-08-31): 20s is the
+// qualifying bar, not a finish line. The curves ramp to their 20s values,
+// then density keeps creeping (never speed) and the ring bursts turn
+// periodic - the field slowly closes until the inevitable.
 
 export const ARENA_W = 800;
 export const ARENA_H = 520;
 export const PLAYER_R = 4;
 
-/** Arrow-key movement speed (logical px/s). Slightly faster than the fastest
- * bullet, and that margin IS the game: you can always outrun a shot you saw,
- * so every death is a positioning mistake, never a speed check. Owner-tuned
- * 2026-08-31: the fun is dodging craft, not reflexes. */
-export const PLAYER_SPEED = 150;
+/** Arrow-key movement speed (logical px/s). Still faster than any bullet -
+ * you can always outrun a shot you saw, so every death is a positioning
+ * mistake, never a speed check. Owner-tuned twice (2026-08-31): SLOW and
+ * DENSE - threading gaps deliberately, not twitching between them. */
+export const PLAYER_SPEED = 110;
 
 const BULLET_R_MIN = 2;
 const BULLET_R_MAX = 3.2;
 const CULL_MARGIN = 48;
 
-// Cadence and speed, owner-tuned 2026-08-31: everything SLOW and AIMED. The
-// ramp raises density (spawn interval), barely speed - slow bullets live
-// longer on screen, so the field thickens on its own and the difficulty
-// becomes reading converging lanes, not outrunning them.
-const SPAWN_INTERVAL_START_MS = 320;
-const SPAWN_INTERVAL_END_MS = 70;
-const SPEED_START = 60; // logical px/s
-const SPEED_END = 130;
+// Cadence: density does the ramping, speed barely moves. Slow bullets live
+// long, so the on-screen count compounds - the "surviving through the slits"
+// feel is many slow lanes, not few fast ones. Past the bar the interval
+// keeps shrinking gently to a floor; speed never grows past its 20s value.
+const SPAWN_INTERVAL_START_MS = 240;
+const SPAWN_INTERVAL_QUALIFY_MS = 55;
+const SPAWN_INTERVAL_FLOOR_MS = 42;
+const SPEED_START = 45; // logical px/s
+const SPEED_QUALIFY = 85;
 
-// Ring bursts: converging circles at fixed moments - the run's set pieces. A
-// player who has seen one run knows when to brace, which is what makes a 20s
-// game replayable rather than random.
+// Ring bursts: converging circles at fixed moments - the first lap's set
+// pieces. A player who has seen one run knows when to brace, which is what
+// makes the game replayable rather than random.
 const BURSTS: { at: number; count: number; speed: number }[] = [
-  { at: 6000, count: 12, speed: 80 },
-  { at: 11000, count: 16, speed: 88 },
-  { at: 15500, count: 20, speed: 96 },
-  { at: 18200, count: 24, speed: 105 },
+  { at: 6000, count: 14, speed: 55 },
+  { at: 11000, count: 18, speed: 60 },
+  { at: 15500, count: 22, speed: 66 },
+  { at: 18200, count: 26, speed: 72 },
 ];
+
+// Past the bar, the bursts turn periodic: one every encore interval.
+const ENCORE_FIRST_AT = QUALIFY_MS + 4000;
+const ENCORE_EVERY_MS = 6000;
+const ENCORE_COUNT = 26;
+const ENCORE_SPEED = 70;
 
 export interface Vec {
   x: number;
@@ -54,7 +66,7 @@ export interface Bullet {
   r: number;
 }
 
-export type EngineStatus = "running" | "hit" | "survived";
+export type EngineStatus = "running" | "hit";
 
 export interface EngineState {
   t: number; // elapsed ms
@@ -62,6 +74,7 @@ export interface EngineState {
   bullets: Bullet[];
   nextSpawnAt: number;
   burstsFired: number;
+  nextEncoreAt: number;
   spawned: number; // total bullets ever spawned (telemetry + tests)
   rand: () => number;
 }
@@ -79,13 +92,18 @@ export function seededRandom(seedHex: string): () => number {
 }
 
 export function spawnIntervalAt(t: number): number {
-  const f = Math.min(1, t / RUN_DURATION_MS);
-  return SPAWN_INTERVAL_START_MS + (SPAWN_INTERVAL_END_MS - SPAWN_INTERVAL_START_MS) * f;
+  if (t <= QUALIFY_MS) {
+    const f = t / QUALIFY_MS;
+    return SPAWN_INTERVAL_START_MS + (SPAWN_INTERVAL_QUALIFY_MS - SPAWN_INTERVAL_START_MS) * f;
+  }
+  // second lap: creep from the qualify value down to the floor, then hold
+  const f = Math.min(1, (t - QUALIFY_MS) / QUALIFY_MS);
+  return SPAWN_INTERVAL_QUALIFY_MS + (SPAWN_INTERVAL_FLOOR_MS - SPAWN_INTERVAL_QUALIFY_MS) * f;
 }
 
 export function bulletSpeedAt(t: number): number {
-  const f = Math.min(1, t / RUN_DURATION_MS);
-  return SPEED_START + (SPEED_END - SPEED_START) * f;
+  const f = Math.min(1, t / QUALIFY_MS);
+  return SPEED_START + (SPEED_QUALIFY - SPEED_START) * f;
 }
 
 export function createEngine(seedHex: string): EngineState {
@@ -95,6 +113,7 @@ export function createEngine(seedHex: string): EngineState {
     bullets: [],
     nextSpawnAt: 600, // a breath before the first bullet
     burstsFired: 0,
+    nextEncoreAt: ENCORE_FIRST_AT,
     spawned: 0,
     rand: seededRandom(seedHex),
   };
@@ -159,8 +178,7 @@ function spawnBurst(state: EngineState, player: Vec, count: number, speed: numbe
 
 /**
  * Advance the simulation by dtMs with the player at `player`. Mutates and
- * returns the state. Terminal states latch: once hit or survived, advance is a
- * no-op.
+ * returns the state. The hit latches: once hit, advance is a no-op.
  */
 export function advance(state: EngineState, dtMs: number, player: Vec): EngineState {
   if (state.status !== "running") return state;
@@ -179,12 +197,6 @@ export function advance(state: EngineState, dtMs: number, player: Vec): EngineSt
 function step(state: EngineState, dt: number, player: Vec): void {
   state.t += dt;
 
-  if (state.t >= RUN_DURATION_MS) {
-    state.t = RUN_DURATION_MS;
-    state.status = "survived";
-    return;
-  }
-
   while (state.t >= state.nextSpawnAt) {
     spawnAimed(state, player);
     state.nextSpawnAt += spawnIntervalAt(state.t);
@@ -193,6 +205,10 @@ function step(state: EngineState, dt: number, player: Vec): void {
     const b = BURSTS[state.burstsFired];
     spawnBurst(state, player, b.count, b.speed);
     state.burstsFired++;
+  }
+  while (state.t >= state.nextEncoreAt) {
+    spawnBurst(state, player, ENCORE_COUNT, ENCORE_SPEED);
+    state.nextEncoreAt += ENCORE_EVERY_MS;
   }
 
   const s = dt / 1000;

@@ -8,7 +8,15 @@ import { UNLIMITED, limitOf } from "../entitlement/quota";
 // platform-configured limit beats the product default, and this file holds
 // only what the product itself owns - durations, windows, and arithmetic.
 
-export const RUN_DURATION_MS = 20000;
+/** The QUALIFYING bar, not the end (owner decision 2026-08-31): a run keeps
+ * going past 20s with no ceiling - the score is however long you survive,
+ * and 20.000s is the line that makes it a qualified run. The HUD progress
+ * bar wraps on this period. */
+export const QUALIFY_MS = 20000;
+
+/** Server sanity ceiling on a reported score (10 minutes). The wall-clock
+ * check already bounds honest scores; this bounds the column. */
+export const MAX_SCORE_MS = 600000;
 
 /** Product default for the free tier's daily quota. A platform-configured
  * `limits[DAILY_LIMIT_KEY]` overrides it (the platform's sales number wins);
@@ -73,12 +81,14 @@ export function historyWindowFor(e: Entitlement): HistoryWindow {
 // --- score validation ----------------------------------------------------
 
 export function isValidScoreMs(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= RUN_DURATION_MS;
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_SCORE_MS;
 }
 
-/** A survived run is exactly the full duration; anything shorter was a hit. */
+/** Every run ends on a hit; reaching the bar first makes it a QUALIFIED run.
+ * The stored value stays 'survived' (the DB check predates the unbounded
+ * score); read it as "qualified". */
 export function outcomeForScore(scoreMs: number): "survived" | "hit" {
-  return scoreMs >= RUN_DURATION_MS ? "survived" : "hit";
+  return scoreMs >= QUALIFY_MS ? "survived" : "hit";
 }
 
 /** The reported score cannot exceed the wall time the server observed between
