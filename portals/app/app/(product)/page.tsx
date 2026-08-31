@@ -4,25 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../entitlement/deeplink";
 import { formatScoreMs } from "../game/rules";
 import { GameView, type GameFinish } from "./deck/game-view";
-import { AvatarMenu, BoardModule, RecordsModule } from "./deck/panels";
+import { AvatarBadge, BoardModule, RecordsModule } from "./deck/panels";
 
 // THE app: one fullscreen command deck at `/` (owner decision 2026-08-31 -
-// single interface; the old landing, /records and /leaderboard pages are
-// gone, their content folded into the deck's side rails). Reference style:
-// the amber-on-charcoal data-viz dashboard, and its smart-street sibling for
-// the collapse pattern - side data columns flanking a central live canvas,
-// each foldable to a slim rail.
+// single interface). Reference style: the amber-on-charcoal data-viz
+// dashboard, and its smart-street sibling for the collapse pattern.
 //
-// The improvement on the reference's collapse buttons: the deck folds ITSELF.
-// Starting a run collapses both rails so the arena owns the screen; the
-// result unfolds them so the numbers land where you just played. Manual fold
-// handles work at any time and win until the next auto event.
-//
-// Layout, per the owner's review: LEFT rail = the two live numbers (runs
-// today, personal best) + the record module; RIGHT rail = identity strip
-// (avatar / exit / fullscreen) + the global board. Debug surfaces (chat,
-// status, ...) stay routable behind the avatar menu - service hatches, not
-// player destinations.
+// The collapse pattern, per the owner's re-review: the KEY information never
+// folds. The topbar always carries the two live numbers on the left and the
+// quiet identity strip on the right; only the secondary modules (the record,
+// the board) live in the side rails. Each rail is toggled by an ARC ornament
+// at the stage edge - the two thin bracket arcs from the reference design,
+// embracing the stage when open and MIRRORING outward when folded, so the
+// shape itself says which way it will move. The deck still folds itself:
+// starting a run collapses both rails, the result unfolds them.
 
 const UNLIMITED = -1;
 
@@ -94,36 +89,38 @@ function QuotaTicks({ quota }: { quota: Quota }) {
   );
 }
 
-function Rail({
-  side,
-  folded,
-  onToggle,
-  label,
-  children,
-}: {
-  side: "left" | "right";
-  folded: boolean;
-  onToggle: () => void;
-  label: string;
-  children: React.ReactNode;
-}) {
+/** A side rail: nothing but its module. Folding takes it to zero width - the
+ * key numbers live in the topbar and never move. */
+function Rail({ side, folded, children }: { side: "left" | "right"; folded: boolean; children: React.ReactNode }) {
   return (
     <aside className={`deck-rail deck-rail-${side}${folded ? " deck-rail-folded" : ""}`}>
-      <button
-        className="deck-rail__handle"
-        onClick={onToggle}
-        aria-expanded={!folded}
-        aria-label={`${folded ? "Expand" : "Collapse"} ${label}`}
-      >
-        <span className="deck-rail__chev" aria-hidden>
-          {folded ? (side === "left" ? ">" : "<") : side === "left" ? "<" : ">"}
-        </span>
-        <span className="deck-rail__label" aria-hidden>
-          {label}
-        </span>
-      </button>
-      {!folded && <div className="deck-rail__body">{children}</div>}
+      <div className="deck-rail__body">{children}</div>
     </aside>
+  );
+}
+
+/**
+ * The arc toggle - the reference design's bracket ornament, made the control.
+ * Open, the pair embraces the stage: "(" left, ")" right. Folded, the arc
+ * mirrors and points outward, toward the panel it would bring back.
+ */
+function ArcToggle({ side, folded, onToggle }: { side: "left" | "right"; folded: boolean; onToggle: () => void }) {
+  const mirrored = side === "left" ? folded : !folded;
+  return (
+    <button
+      className={`deck-arc deck-arc-${side}`}
+      onClick={onToggle}
+      aria-expanded={!folded}
+      aria-label={`${folded ? "Expand" : "Collapse"} the ${side === "left" ? "record" : "board"} panel`}
+    >
+      <svg viewBox="0 0 36 360" className={mirrored ? "deck-arc__svg deck-arc__svg--flip" : "deck-arc__svg"} aria-hidden>
+        <path className="deck-arc__tick" d="M29 8 H35" />
+        <path className="deck-arc__line" d="M30 8 Q4 180 30 352" />
+        <path className="deck-arc__accent" d="M22.5 118 Q13.5 180 22.5 242" />
+        <path className="deck-arc__chev" d="M23 170 L16 180 L23 190" />
+        <path className="deck-arc__tick" d="M29 352 H35" />
+      </svg>
+    </button>
   );
 }
 
@@ -222,7 +219,7 @@ export default function DeckPage() {
   }, []);
 
   // Escape is the mid-run EXIT: during play the rails are folded, so the
-  // button form of EXIT is two clicks away - the key is zero.
+  // button form of EXIT is a reach - the key is zero.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") exitRun();
@@ -250,43 +247,77 @@ export default function DeckPage() {
     <div ref={deckRef} className="deck">
       <div className="deck__field" aria-hidden />
 
-      <div className="deck-frame">
-        {/* LEFT rail: the two live numbers + the record */}
-        <Rail
-          side="left"
-          folded={folded.left}
-          onToggle={() => setFolded((f) => ({ ...f, left: !f.left }))}
-          label="DATA"
-        >
+      {/* Topbar: the information that NEVER folds. Left, the two live
+          numbers; right, the quiet identity strip - chrome, not content. */}
+      <header className="deck-topbar">
+        <div className="deck-chips">
           {ctx && !noAccess ? (
             <>
-              <div className="deck-panel">
-                <div className="deck-panel__title">Runs today</div>
+              <div className="deck-chip">
+                <div className="deck-chip__label">Runs today</div>
                 <QuotaTicks quota={ctx.quota} />
               </div>
-              <div className="deck-panel">
-                <div className="deck-panel__title">Personal best</div>
+              <div className="deck-chip">
+                <div className="deck-chip__label">Personal best</div>
                 <div className="deck-panel__value">
                   {ctx.best ? `${formatScoreMs(ctx.best.scoreMs)}s` : "--.--"}
                 </div>
               </div>
-              <RecordsModule
-                open={modOpen.records}
-                onToggle={() => setModOpen((m) => ({ ...m, records: !m.records }))}
-                epoch={epoch}
-              />
             </>
+          ) : (
+            <div className="deck-chip">
+              <div className="deck-chip__label">{signedIn ? "Syncing" : "Signed out"}</div>
+              <div className="deck-panel__value">--.--</div>
+            </div>
+          )}
+        </div>
+
+        <div className="deck-title">
+          <div className="deck-title__text">The 20-Second Challenge</div>
+          <div className="deck-title__sub">{ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
+        </div>
+
+        <div className="deck-id">
+          <AvatarBadge />
+          <span className="deck-id__sep" aria-hidden />
+          <button className="deck-id__btn" onClick={exitRun} title="Leave the run" aria-label="Leave the run">
+            EXIT
+          </button>
+          <button
+            className="deck-id__btn"
+            onClick={toggleFullscreen}
+            title="Toggle fullscreen"
+            aria-label="Toggle fullscreen"
+          >
+            [ ]
+          </button>
+        </div>
+      </header>
+
+      <div className="deck-frame">
+        <Rail side="left" folded={folded.left}>
+          {ctx && !noAccess ? (
+            <RecordsModule
+              open={modOpen.records}
+              onToggle={() => setModOpen((m) => ({ ...m, records: !m.records }))}
+              epoch={epoch}
+            />
           ) : (
             <div className="deck-mod__loading">{signedIn ? "SYNCING..." : "SIGNED OUT"}</div>
           )}
         </Rail>
 
-        {/* CENTER: title, stage, hint */}
         <main className="deck-main">
-          <div className="deck-title">
-            <div className="deck-title__text">The 20-Second Challenge</div>
-            <div className="deck-title__sub">{ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
-          </div>
+          <ArcToggle
+            side="left"
+            folded={folded.left}
+            onToggle={() => setFolded((f) => ({ ...f, left: !f.left }))}
+          />
+          <ArcToggle
+            side="right"
+            folded={folded.right}
+            onToggle={() => setFolded((f) => ({ ...f, right: !f.right }))}
+          />
 
           <div className="deck-stage">
             {phase === "loading" && !error && <div className="deck-status">SYNCING...</div>}
@@ -348,7 +379,8 @@ export default function DeckPage() {
                       <div className="deck-orb__sub">20.00s qualifies</div>
                     </button>
                     <p className="deck-hintline">
-                      Everything is aimed at you and flies straight. 20.00s makes the run count - after the bar, every second is score.
+                      Everything is aimed at you and flies straight. 20.00s makes the run count - after the bar,
+                      every second is score.
                     </p>
                   </>
                 )}
@@ -391,27 +423,7 @@ export default function DeckPage() {
           </footer>
         </main>
 
-        {/* RIGHT rail: identity strip + the global board */}
-        <Rail
-          side="right"
-          folded={folded.right}
-          onToggle={() => setFolded((f) => ({ ...f, right: !f.right }))}
-          label="BOARD"
-        >
-          <div className="deck-idbar">
-            <AvatarMenu />
-            <button className="deck-iconbtn" onClick={exitRun} title="Leave the run" aria-label="Leave the run">
-              EXIT
-            </button>
-            <button
-              className="deck-iconbtn"
-              onClick={toggleFullscreen}
-              title="Toggle fullscreen"
-              aria-label="Toggle fullscreen"
-            >
-              [ ]
-            </button>
-          </div>
+        <Rail side="right" folded={folded.right}>
           {signedIn ? (
             <BoardModule
               open={modOpen.board}
