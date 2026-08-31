@@ -21,9 +21,13 @@ api/game/*                       gate -> count -> write -> meter, per route
 
 The deck is the only player surface (owner decision 2026-08-31): records and
 board are collapsible rail modules that fetch their own API on first open and
-refetch when the page bumps `epoch` after a finished run. Starting a run
-auto-folds both rails; the result auto-unfolds them - the collapse pattern
-from the reference design, made self-acting.
+refetch when the page bumps `epoch` after a finished run. The collapse
+pattern is the reference design's ARC ornaments made into the control: two
+thin bracket arcs embrace the stage when open and mirror outward when folded
+(the shape says which way it will move), a rail folds to zero width, and the
+KEY information - the two live numbers left, the quiet identity strip right -
+lives in the topbar and never folds. Starting a run auto-folds both rails;
+the result auto-unfolds them.
 
 Three rules, in copy-priority order:
 

@@ -238,7 +238,10 @@ const SERVICE_LINKS = [
   { href: "/entitlement-matrix", label: "ENTITLEMENT MATRIX" },
 ];
 
-export function AvatarMenu() {
+/** Avatar + name in a quiet frame slot (owner review: the identity strip is
+ * chrome, not content - it must not compete with the arena). Clicking opens
+ * the service menu. */
+export function AvatarBadge() {
   const [state, setState] = useState<{ authenticated: boolean; user?: SessionUser } | null>(null);
   const [openMenu, setOpenMenu] = useState(false);
 
@@ -251,25 +254,29 @@ export function AvatarMenu() {
 
   if (state && !state.authenticated) {
     return (
-      <a className="deck-btn deck-btn-solid" href="/auth/login?returnTo=/">
+      <a className="deck-id__btn" href="/auth/login?returnTo=/">
         SIGN IN
       </a>
     );
   }
 
   const who = state?.user?.email ?? state?.user?.sub ?? "";
-  const initial = (who || "P").charAt(0).toUpperCase();
+  const name = who.includes("@") ? who.split("@")[0] : who ? who.slice(0, 12) : "pilot";
+  const initial = (name || "P").charAt(0).toUpperCase();
 
   return (
     <div className="deck-avatar-wrap">
       <button
-        className="deck-avatar"
+        className="deck-id__ava"
         onClick={() => setOpenMenu((v) => !v)}
         aria-expanded={openMenu}
         aria-label="Account and service menu"
         title={who || undefined}
       >
-        {initial}
+        <span className="deck-id__circle" aria-hidden>
+          {initial}
+        </span>
+        <span className="deck-id__name">{name.toUpperCase()}</span>
       </button>
       {openMenu && (
         <div className="deck-menu">
