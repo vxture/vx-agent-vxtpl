@@ -51,11 +51,15 @@ Three rules, in copy-priority order:
 
 ## Things that bit us (so a copy does not rediscover them)
 
-- **In-memory stores must live on `globalThis`.** Next bundles each API route
-  separately; a module-scoped singleton gives `/api/game/run` and
-  `/run/finish` different Maps, and the second route answers "run not found"
-  for a run the first just created. Observed in dev; `game/store.ts` documents
-  the fix. The Prisma path is immune (state is in the database).
+- **In-memory stores must live on `globalThis` - ALL of them.** Next bundles
+  each API route separately; a module-scoped singleton gives every route its
+  own instance. Found twice, live, in two different shapes: `/api/game/run`
+  and `/run/finish` held different Maps ("run not found" for a just-created
+  run), and later the provisioning webhook and the platform-check probe held
+  different delivery logs ("no deliveries recorded yet" seconds after a
+  delivery). `game/store.ts`, `provisioning/lib/store.ts` and
+  `usage/lib/store.ts` all carry the globalThis pattern now; a new store
+  copies it. The Prisma path is immune (state is in the database).
 - **`Button asChild` + a bare `a { color }` rule = accent-on-accent.**
   Tailwind utilities sit in a cascade layer, and any unlayered element rule
   beats them. `globals.css` scopes a `revert-layer` on

@@ -1,4 +1,4 @@
-import type { ProvisioningStore, DeliveryMeta } from "./store";
+import type { ProvisioningStore, DeliveryMeta, DeliveryRecord } from "./store";
 import { getPrismaClient } from "../../lib/db";
 
 // Prisma-backed ProvisioningStore over the vx_provision schema. Used when
@@ -15,6 +15,12 @@ export class PrismaProvisioningStore implements ProvisioningStore {
     await p.webhookDelivery.create({
       data: { deliveryId: id, type: meta?.type ?? "unknown", result: meta?.result ?? "processed" },
     });
+  }
+
+  async recentDeliveries(limit: number): Promise<DeliveryRecord[]> {
+    const p = await getPrismaClient();
+    const rows = await p.webhookDelivery.findMany({ orderBy: { createdAt: "desc" }, take: limit });
+    return rows.map((r) => ({ deliveryId: r.deliveryId, type: r.type, result: r.result, at: r.createdAt }));
   }
 
   async getLastSeq(workspaceId: string, product: string): Promise<number> {

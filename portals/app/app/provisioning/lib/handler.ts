@@ -7,7 +7,11 @@ import type { ProvisioningStore } from "./store";
 
 export interface ProvisioningEvent {
   id: string; // = X-Vxture-Delivery; idempotency key
-  type: string; // tenant.provisioned | tenant.deprovisioned | subscription_changed | grant.invalidated
+  // The LIVE word list (integration general rules, C3 webhook) is exactly
+  // tenant.provisioned | tenant.deprovisioned. The other cases below are kept
+  // for forward/backward tolerance: an unknown type records its delivery and
+  // takes no action, which is the spec's required posture.
+  type: string;
   occurred_at?: number;
   seq: number; // per (workspace, product), monotonic
   workspace_id: string;
@@ -54,10 +58,15 @@ export async function handleProvisioning(
     case "tenant.provisioned":
       await deps.store.upsertInstance(event.workspace_id, deps.product, "provisioned");
       await deps.onProvisioned?.(event.workspace_id);
+      // (De)provisioning IS an entitlement change - it is what the C2 cache's
+      // "invalidate for second-level freshness" exists for. Evicting here is
+      // what turns a 45s TTL into a one-click catch-up after purchase.
+      deps.onSubscriptionChanged?.(event.workspace_id);
       break;
     case "tenant.deprovisioned":
       // Archive, not hard-delete (080-rp section 4 / product_240 section 6#21).
       await deps.store.upsertInstance(event.workspace_id, deps.product, "deprovisioned");
+      deps.onSubscriptionChanged?.(event.workspace_id);
       break;
     case "subscription_changed":
       deps.onSubscriptionChanged?.(event.workspace_id);
