@@ -49,7 +49,7 @@ is visible without a debugger.
 |---------|----------|-------------|
 | C1 | OIDC relying party against `accounts.vxture.com` | Sign-in with PKCE (S256), single-use state, nonce verification, Redis-backed opaque session cookie, back-channel logout. Tokens never reach the browser. |
 | C2 | `GET /platform/entitlements` | Resolves the caller's subscription tier and quota pools for the active workspace; 45s cache, invalidated by C3, stale-on-error, fail-closed to no-coverage. |
-| C3 | Inbound provisioning webhook + `POST /usage/consume` | HMAC-verified (`t=`,`v1=` over raw bytes, +/-300s, rotation slot), idempotent and sequence-ordered; `subscription_changed` evicts the C2 cache. Usage is buffered locally and flushed with 409-terminal semantics. |
+| C3 | Inbound provisioning webhook + `POST /usage/consume` | HMAC-verified (`t=`,`v1=` over raw bytes, +/-300s, rotation slot), idempotent and sequence-ordered; every entitlement-changing delivery evicts the C2 cache. Usage is buffered locally and flushed on the always-200 consume contract (`gated` is information and evicts C2, `replayed`/`event_id` reconcile, non-200 retries), with `end_user_id` attribution and `x-request-id` on every call. |
 | Atlas | Chat inference and model listing | Every chat turn. Atlas meters model token consumption itself; vxtpl records only its own product-level counter. |
 | Runos | Capability discovery and invocation | Skill execution on a chat turn, plus a read-only well-known probe on `/platform-check`. |
 

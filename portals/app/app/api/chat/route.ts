@@ -35,6 +35,7 @@ const DEV_WORKSPACE_ID = "ws_local_dev";
 
 interface Caller {
   workspaceId: string;
+  sub?: string; // end-user attribution for the usage record
   identity: ChatIdentity;
 }
 
@@ -66,6 +67,7 @@ async function resolveCaller(): Promise<Caller | { error: string; status: number
   }
   return {
     workspaceId: ctx.user.activeWorkspace,
+    sub: ctx.user.sub,
     identity: {
       workspaceId: ctx.user.activeWorkspace,
       // On-behalf-of: the platform reads workspace and subject from this token
@@ -162,6 +164,7 @@ export async function POST(req: Request): Promise<Response> {
       metric: USAGE_METRIC,
       amount: 1,
       idempotencyKey: randomUUID(),
+      endUserId: caller.sub,
     });
   } catch (err) {
     console.error(`[chat] usage record failed for workspace ${caller.workspaceId}:`, err);
