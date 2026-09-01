@@ -27,7 +27,9 @@ export const FREE_DAILY_RUNS = 10;
 export const TOP_PIN_COUNT = 3;
 export const HISTORY_LIMIT = 10;
 export const TREND_DAYS = 30;
-export const LEADERBOARD_SIZE = 20;
+
+/** Both boards cap at the top 100 (owner decision 2026-09-01). */
+export const LEADERBOARD_SIZE = 100;
 
 /** Finish-phase slack: a reported score may exceed the server-observed wall
  * time by at most this much (network + countdown jitter). */
@@ -96,6 +98,32 @@ export function outcomeForScore(scoreMs: number): "survived" | "hit" {
  * were, never for how long the clock ran. */
 export function scoreFitsWallClock(scoreMs: number, startedAt: Date, finishedAt: Date): boolean {
   return scoreMs <= finishedAt.getTime() - startedAt.getTime() + FINISH_SLACK_MS;
+}
+
+// --- seasons --------------------------------------------------------------
+
+export interface Season {
+  key: string; // "2026Q3"
+  label: string; // "2026 Q3"
+  start: Date; // inclusive, UTC
+  end: Date; // exclusive, UTC (= next season's start)
+}
+
+/**
+ * Seasons are NATURAL QUARTERS, UTC (owner decision 2026-09-01). The season
+ * board shows only the CURRENT season and expired seasons are not archived -
+ * the season board is simply "the all-time query windowed to this quarter",
+ * so a season "ends" by its runs aging out of the window, not by a job.
+ */
+export function seasonOf(now: Date): Season {
+  const year = now.getUTCFullYear();
+  const q = Math.floor(now.getUTCMonth() / 3); // 0..3
+  return {
+    key: `${year}Q${q + 1}`,
+    label: `${year} Q${q + 1}`,
+    start: new Date(Date.UTC(year, q * 3, 1)),
+    end: new Date(Date.UTC(year, q * 3 + 3, 1)),
+  };
 }
 
 // --- leaderboard call signs ----------------------------------------------

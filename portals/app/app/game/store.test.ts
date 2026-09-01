@@ -75,6 +75,19 @@ test("leaderboard keeps one row per player: their best, best first", async () =>
   );
 });
 
+test("leaderboard windowed by `since` is the season board", async () => {
+  const store = new InMemoryGameStore();
+  // Last season's monster score...
+  await seedRun(store, { sub: "usr_old", startedAt: "2026-06-15T10:00:00Z", scoreMs: 30000, finishedAt: "2026-06-15T10:00:30Z" });
+  // ...and this season's field.
+  await seedRun(store, { sub: "usr_new", startedAt: "2026-08-10T10:00:00Z", scoreMs: 12000, finishedAt: "2026-08-10T10:00:12Z" });
+  const q3start = new Date("2026-07-01T00:00:00Z");
+  const season = await store.leaderboard(10, q3start);
+  assert.deepEqual(season.map((r) => r.sub), ["usr_new"]); // old season aged out
+  const allTime = await store.leaderboard(10);
+  assert.deepEqual(allTime.map((r) => r.sub), ["usr_old", "usr_new"]); // still counts forever
+});
+
 test("leaderboard truncates to n", async () => {
   const store = new InMemoryGameStore();
   for (let i = 0; i < 5; i++) {

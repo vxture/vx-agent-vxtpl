@@ -96,16 +96,20 @@ export class PrismaGameStore implements GameStore {
     return rows.map(toRow);
   }
 
-  async leaderboard(n: number): Promise<LeaderboardRow[]> {
+  async leaderboard(n: number, since?: Date): Promise<LeaderboardRow[]> {
     const p = await getPrismaClient();
     // One row per (workspace, sub): their best finished run, earliest finish
     // winning a tie. DISTINCT ON is the idiomatic Postgres shape for this and
-    // has no Prisma-query equivalent that keeps the tie-break.
+    // has no Prisma-query equivalent that keeps the tie-break. The season
+    // board is the SAME query windowed by finished_at (epoch floor when
+    // absent, so the SQL shape stays one statement).
+    const floor = since ?? new Date(0);
     const rows = await p.$queryRaw<{ sub: string; score_ms: number; finished_at: Date }[]>`
       SELECT sub, score_ms, finished_at FROM (
         SELECT DISTINCT ON (workspace_id, sub) sub, score_ms, finished_at
         FROM vxtpl_game.run
         WHERE status = 'finished' AND score_ms IS NOT NULL AND finished_at IS NOT NULL
+          AND finished_at >= ${floor}
         ORDER BY workspace_id, sub, score_ms DESC, finished_at ASC
       ) best
       ORDER BY score_ms DESC, finished_at ASC
