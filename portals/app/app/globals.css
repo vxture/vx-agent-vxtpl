@@ -513,10 +513,13 @@ footer.page-links {
 .deck-rail-folded {
   width: 0;
 }
+/* The rail body does NOT scroll (owner review 2026-09-01): scrolling lives
+ * INSIDE the module's list region (.deck-scroll), so the module title - and
+ * the board's you-are footer - stay pinned while the rows move. */
 .deck-rail__body {
   width: 302px;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -748,8 +751,13 @@ footer.page-links {
   border: 1px solid var(--vxtpl-deck-line-faint);
   background: var(--vxtpl-deck-panel);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
 }
 .deck-mod__head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -785,6 +793,24 @@ footer.page-links {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Everything in a module keeps its height except the one scroll region -
+ * podium, trend, labels and the footer are pinned; the list absorbs the
+ * overflow. */
+.deck-mod__body > :not(.deck-scroll) {
+  flex-shrink: 0;
+}
+.deck-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.deck-mod__foot {
+  border-top: 1px solid var(--vxtpl-deck-line-faint);
+  padding-top: 8px;
 }
 .deck-mod__sub {
   font-size: 0.6rem;
