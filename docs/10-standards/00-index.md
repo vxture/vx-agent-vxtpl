@@ -9,6 +9,7 @@ product repo.
 | Standard | Platform-repo path | Covers |
 |----------|--------------------|--------|
 | Integration general rules | published artifact "Product Integration General Rules" (platform line, 2026-08-28) - the INTERFACE authority; by its own terms it supersedes any conflicting doc | C1 OIDC / C1b S2S exchange, C2 envelope v3 + gating, C3 consume (always-200) + webhook, API-shape MUST set (X/A/B/D/G), go-live checklist |
+| Integration exemplar (this repo, application side) | published artifact "Product Integration Exemplar" (vxtpl line, 2026-09-01) - the APPLICATION-SIDE counterpart of the general rules; the two carry mutual references and are maintained as a pair. Interface semantics defer to the general rules; product-internal structure defers to this repo | where each platform obligation lands in this repo (file-level), implementation order, deploy-stage guard, cache-invalidation chain, copy guide for new products, ten implementation-side traps |
 | Repo governance | `docs/10-standards/140-repo-governance-standard.md` | branch model, ruleset, secret hygiene, SCA gate, data layer, guardrails |
 | Docs taxonomy | `docs/10-standards/070-docs-taxonomy.md` | docs numbering and identifiers |
 | Security | `docs/10-standards/150-security.md` | secret boundaries |
