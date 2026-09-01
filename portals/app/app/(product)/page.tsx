@@ -228,6 +228,17 @@ export default function DeckPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [exitRun]);
 
+  /** One click, both rails (owner review 2026-09-01): the arcs are a PAIR -
+   * they embrace or release the stage together. If the two ever disagree
+   * (auto events always set both, so only a mid-animation click could), any
+   * open rail means the pair reads as open, and the click closes both. */
+  function toggleRails() {
+    setFolded((f) => {
+      const anyOpen = !f.left || !f.right;
+      return { left: anyOpen, right: anyOpen };
+    });
+  }
+
   function toggleFullscreen() {
     const el = deckRef.current;
     if (!el) return;
@@ -308,16 +319,8 @@ export default function DeckPage() {
         </Rail>
 
         <main className="deck-main">
-          <ArcToggle
-            side="left"
-            folded={folded.left}
-            onToggle={() => setFolded((f) => ({ ...f, left: !f.left }))}
-          />
-          <ArcToggle
-            side="right"
-            folded={folded.right}
-            onToggle={() => setFolded((f) => ({ ...f, right: !f.right }))}
-          />
+          <ArcToggle side="left" folded={folded.left} onToggle={toggleRails} />
+          <ArcToggle side="right" folded={folded.right} onToggle={toggleRails} />
 
           <div className="deck-stage">
             {phase === "loading" && !error && <div className="deck-status">SYNCING...</div>}
