@@ -34,7 +34,9 @@ interface GameContext {
   cta: "subscribe" | "pay" | "renew" | "none";
   gates: { play: boolean; history: boolean; leaderboard: boolean; trend: boolean };
   quota: Quota;
+  season?: { key: string; label: string };
   best: { scoreMs: number } | null;
+  seasonBest?: { scoreMs: number } | null;
 }
 
 interface RunTicket {
@@ -203,10 +205,16 @@ export default function DeckPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ runId: ticket.runId, scoreMs: f.scoreMs }),
       });
-      const body = (await r.json()) as FinishResult & { error?: string; best?: { scoreMs: number } | null };
+      const body = (await r.json()) as FinishResult & {
+        error?: string;
+        best?: { scoreMs: number } | null;
+        seasonBest?: { scoreMs: number } | null;
+      };
       if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
       setResult({ outcome: body.outcome, scoreMs: body.scoreMs, isPersonalBest: body.isPersonalBest });
-      setCtx((c) => (c ? { ...c, best: body.best ?? c.best } : c));
+      setCtx((c) =>
+        c ? { ...c, best: body.best ?? c.best, seasonBest: body.seasonBest ?? c.seasonBest } : c,
+      );
     } catch (err) {
       // The run still happened for the player; show their score with the
       // recording failure attached rather than pretending nothing occurred.
@@ -285,10 +293,18 @@ export default function DeckPage() {
                 <div className="deck-chip__label">Runs today</div>
                 <QuotaTicks quota={ctx.quota} />
               </div>
+              {/* TWO numbers (owner decision 2026-09-01): the all-time trophy
+                  and the season working best - the stats below only speak
+                  season, so this chip is where all-time survives. */}
               <div className="deck-chip">
                 <div className="deck-chip__label">Personal best</div>
                 <div className="deck-panel__value">
+                  <span className="deck-chip__tag">ALL</span>
                   {ctx.best ? `${formatScoreMs(ctx.best.scoreMs)}s` : "--.--"}
+                </div>
+                <div className="deck-panel__value">
+                  <span className="deck-chip__tag">{ctx.season?.label ?? "SEASON"}</span>
+                  {ctx.seasonBest ? `${formatScoreMs(ctx.seasonBest.scoreMs)}s` : "--.--"}
                 </div>
               </div>
             </>

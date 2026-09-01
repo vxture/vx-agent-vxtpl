@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isCallerError, resolveGameCaller } from "../../../../game/api-caller";
 import { getGameStore } from "../../../../game/store";
-import { isValidScoreMs, outcomeForScore, scoreFitsWallClock } from "../../../../game/rules";
+import { isValidScoreMs, outcomeForScore, scoreFitsWallClock, seasonOf } from "../../../../game/rules";
 
 // POST /api/game/run/finish - close a run with its score. The client is the
 // only witness to the bullets, so the score is client-reported - but it is
@@ -48,11 +48,17 @@ export async function POST(req: Request): Promise<Response> {
   const outcome = outcomeForScore(scoreMs);
   await store.finishRun(run.id, { outcome, scoreMs, finishedAt });
 
-  const [best] = await store.bestFinished(caller.workspaceId, caller.sub, 1);
+  const season = seasonOf(finishedAt);
+  const [[best], [seasonBest]] = await Promise.all([
+    store.bestFinished(caller.workspaceId, caller.sub, 1),
+    store.bestFinished(caller.workspaceId, caller.sub, 1, season.start),
+  ]);
   return NextResponse.json({
     outcome,
     scoreMs,
     best: best?.scoreMs != null ? { scoreMs: best.scoreMs, achievedAt: best.finishedAt } : null,
+    seasonBest:
+      seasonBest?.scoreMs != null ? { scoreMs: seasonBest.scoreMs, achievedAt: seasonBest.finishedAt } : null,
     isPersonalBest: best?.id === run.id,
   });
 }

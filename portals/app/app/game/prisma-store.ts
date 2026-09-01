@@ -86,10 +86,16 @@ export class PrismaGameStore implements GameStore {
     return rows.map(toRow);
   }
 
-  async bestFinished(workspaceId: string, sub: string, n: number): Promise<GameRunRow[]> {
+  async bestFinished(workspaceId: string, sub: string, n: number, since?: Date): Promise<GameRunRow[]> {
     const p = await getPrismaClient();
     const rows = await p.gameRun.findMany({
-      where: { workspaceId, sub, status: "finished", scoreMs: { not: null } },
+      where: {
+        workspaceId,
+        sub,
+        status: "finished",
+        scoreMs: { not: null },
+        ...(since ? { finishedAt: { gte: since } } : {}),
+      },
       orderBy: [{ scoreMs: "desc" }, { finishedAt: "asc" }],
       take: n,
     });

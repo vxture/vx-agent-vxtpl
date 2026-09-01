@@ -922,8 +922,19 @@ footer.page-links {
   color: var(--vxtpl-deck-dim);
 }
 .deck-chip .deck-panel__value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin-top: 2px;
   font-size: 0.85rem;
+}
+.deck-chip__tag {
+  min-width: 3.6em;
+  font-family: var(--vxtpl-sans);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--vxtpl-deck-dim);
 }
 .deck-chip .deck-ticks {
   margin-top: 4px;

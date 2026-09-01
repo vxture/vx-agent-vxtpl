@@ -90,5 +90,10 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
+  // Two last-season trophies for the caller, so the topbar's ALL-vs-season
+  // pair visibly diverges and the season scoping is reviewable at a glance.
+  await finishedRun(DEV_WORKSPACE_ID, DEV_SUB, new Date(season.start.getTime() - 20 * DAY_MS), 26500);
+  await finishedRun(DEV_WORKSPACE_ID, DEV_SUB, new Date(season.start.getTime() - 45 * DAY_MS), 23800);
+
   return NextResponse.json({ ok: true, players, runs });
 }
