@@ -2,10 +2,12 @@
 
 ## What vxtpl is
 
-vxtpl is a Vxture product with a real business domain: the 20-Second Challenge,
-a bullet-dodging reaction game whose three subscription tiers exercise the
-platform's quota / subscription / entitlement machinery with real users
-(ADR-006, spec in `20-challenge-game.md`). Its second subject matter is the
+vxtpl is a Vxture product with a real business domain: **Emberstorm**, a
+bullet-dodging reaction game (its mode: the 20-Second Challenge) whose three
+subscription tiers exercise the platform's quota / subscription / entitlement
+machinery with real users (ADR-006, spec in `20-challenge-game.md`). `vxtpl`
+is the product code - platform plumbing; Emberstorm is the brand
+(`BRAND.displayName`). Its second subject matter is the
 platform integration surface itself, made visible and exercised in production.
 
 Both roles are deliberate and reinforce each other. vxtpl is the reference

@@ -115,8 +115,25 @@ const derived = {
 // `vxturebiz_my_prod_prod` inside a repo that thinks it is called `acme`.
 const currentSnake = CURRENT.replaceAll("-", "_");
 const currentUpper = currentSnake.toUpperCase();
-/** Title case, for BRAND.displayName - the one place a human-facing name lives. */
-const currentTitle = titleCase(CURRENT);
+/**
+ * The CURRENT display name, READ from brand.ts rather than derived from the
+ * product code. The two diverge on purpose: a real product carries a real
+ * brand ("Emberstorm"), not a Title-Cased code - so deriving the old name
+ * from the code would walk straight past every place the brand appears, and
+ * a copy would ship still calling itself by its parent's name. The copy
+ * STARTS as titleCase(code) and renames itself when it has a brand.
+ */
+const currentTitle = readDisplayName() ?? titleCase(CURRENT);
+
+function readDisplayName() {
+  try {
+    const brand = readFileSync(join("portals", "packages", "shared", "src", "brand.ts"), "utf8");
+    const m = /displayName:\s*"([^"]+)"/.exec(brand);
+    return m ? m[1] : null;
+  } catch {
+    return null; // fresh checkout oddity: fall back to the derived form
+  }
+}
 
 function titleCase(value) {
   return value

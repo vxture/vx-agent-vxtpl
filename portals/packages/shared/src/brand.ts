@@ -5,9 +5,16 @@
 // code stays `vxtpl`, so deriving one from the other misidentifies the product
 // on any non-prod stack. `scripts/init/rename-product.mjs` rewrites these two
 // values when a new product repo is copied from vxtpl.
+//
+// productCode is PLUMBING (the platform key, owner-registered, rigid);
+// displayName is BRAND (what a human sees, exemplar content). They diverge on
+// purpose: the code stays `vxtpl`, the product is named Emberstorm - the
+// arena is literally a storm of amber embers converging on you. The rename
+// script reads the current displayName from this file, so a copy starts as
+// its Title-Cased code and takes its own brand from here on.
 export const BRAND = {
   productCode: "vxtpl",
-  displayName: "Vxtpl",
+  displayName: "Emberstorm",
   defaultLocale: "en",
 } as const;
 

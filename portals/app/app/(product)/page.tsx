@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../entitlement/deeplink";
 import { formatScoreMs } from "../game/rules";
+import { BRAND } from "@vxtpl/shared/brand";
 import { GameView, type GameFinish } from "./deck/game-view";
 import { AvatarBadge, BoardModule, RecordsModule } from "./deck/panels";
 
@@ -284,8 +285,8 @@ export default function DeckPage() {
         </div>
 
         <div className="deck-title">
-          <div className="deck-title__text">The 20-Second Challenge</div>
-          <div className="deck-title__sub">{ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
+          <div className="deck-title__text">{BRAND.displayName}</div>
+          <div className="deck-title__sub">THE 20-SECOND CHALLENGE / {ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
         </div>
 
         <div className="deck-id">
