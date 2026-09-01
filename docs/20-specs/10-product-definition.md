@@ -30,7 +30,7 @@ modules. There is no landing page and no separate records/leaderboard pages
 | Route | What it is |
 |-------|-----------|
 | `/` | THE app: the deck - seeded runs, daily quota (free), score recording, record + trend module, global-board module, avatar/identity strip |
-| `/chat` | Debug/reference: a tier-gated chat turn against Atlas, optionally through a Runos capability |
+| `/chat` | Debug/reference: a tier-gated chat turn against Atlas, optionally through a Runos capability. Hard-limited as a debug surface (owner 2026-09-01): 500 chars/message, 20-message history, 6 turns/minute per (workspace, sub), enforced server-side before any token is minted |
 | `/status` | Debug/reference: live configuration state of every integration channel, presence booleans only |
 | `/platform-check` | Debug/reference: read-only connectivity probes against Atlas and Runos |
 | `/entitlement-matrix` | Debug/reference: every tier x status combination and its gate/CTA outcome, fully offline |
