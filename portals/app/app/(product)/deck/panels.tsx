@@ -42,7 +42,9 @@ interface BoardEntry {
 interface BoardData {
   allowed: boolean;
   requiredTier?: Tier | null;
-  entries?: BoardEntry[];
+  season?: { key: string; label: string; endsAt: string };
+  seasonEntries?: BoardEntry[];
+  allTimeEntries?: BoardEntry[];
   me?: { callSign: string; bestMs: number | null };
 }
 
@@ -176,42 +178,76 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
 }
 
 export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle: () => void; epoch: number }) {
-  const data = useModuleData<BoardData>("/api/game/leaderboard", open, epoch);
+  const data = useModuleData<BoardData>('/api/game/leaderboard', open, epoch);
+  const [tab, setTab] = useState<'season' | 'alltime'>('season');
+
+  const rows = (tab === 'season' ? data?.seasonEntries : data?.allTimeEntries) ?? [];
 
   return (
-    <DeckModule title="Global board" open={open} onToggle={onToggle}>
-      {!data && <div className="deck-mod__loading">SYNCING...</div>}
+    <DeckModule title='Global board' open={open} onToggle={onToggle}>
+      {!data && <div className='deck-mod__loading'>SYNCING...</div>}
 
       {data && !data.allowed && (
         <LockNote
           note="Pro puts your best run up against everyone's. Players appear as call signs - the board is global, identities are not."
           tier={data.requiredTier}
-          cta="MOVE TO PRO"
+          cta='MOVE TO PRO'
         />
       )}
 
       {data?.allowed && (
         <>
-          <div className="deck-rows">
-            {(data.entries ?? []).map((e) => (
-              <div key={e.rank} className={e.you ? "deck-row deck-row-you" : "deck-row"}>
-                <span className={e.rank <= 3 ? "deck-row__rank" : "deck-row__rank deck-row__rank--plain"}>
+          {/* Two boards, and only two (owner decision 2026-09-01): the
+              CURRENT season (natural quarter) and all-time, top 100 each.
+              Expired seasons are not archived - there is no third tab. */}
+          <div className='deck-tabs' role='tablist'>
+            <button
+              className={tab === 'season' ? 'deck-tab deck-tab--active' : 'deck-tab'}
+              role='tab'
+              aria-selected={tab === 'season'}
+              onClick={() => setTab('season')}
+            >
+              {data.season ? data.season.label.toUpperCase() : 'SEASON'}
+            </button>
+            <button
+              className={tab === 'alltime' ? 'deck-tab deck-tab--active' : 'deck-tab'}
+              role='tab'
+              aria-selected={tab === 'alltime'}
+              onClick={() => setTab('alltime')}
+            >
+              ALL-TIME
+            </button>
+          </div>
+          <div className='deck-mod__sub'>
+            {tab === 'season' && data.season
+              ? `season ends ${new Date(data.season.endsAt).toLocaleDateString()} / top 100`
+              : 'since day one / top 100'}
+          </div>
+
+          <div className='deck-rows'>
+            {rows.map((e) => (
+              <div key={e.rank} className={e.you ? 'deck-row deck-row-you' : 'deck-row'}>
+                <span className={e.rank <= 3 ? 'deck-row__rank' : 'deck-row__rank deck-row__rank--plain'}>
                   {e.rank}
                 </span>
-                <span className="deck-row__sign">{e.callSign}</span>
-                <span className={e.qualified ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
+                <span className='deck-row__sign'>{e.callSign}</span>
+                <span className={e.qualified ? 'deck-row__value deck-row__value--win' : 'deck-row__value'}>
                   {formatScoreMs(e.scoreMs)}s
                 </span>
               </div>
             ))}
-            {data.entries?.length === 0 && (
-              <div className="deck-row__meta">nobody has finished a run yet - the board is one survivor away</div>
+            {rows.length === 0 && (
+              <div className='deck-row__meta'>
+                {tab === 'season'
+                  ? 'no finished runs this season yet - the board is one run away'
+                  : 'nobody has finished a run yet'}
+              </div>
             )}
           </div>
           {data.me && (
-            <div className="deck-mod__sub">
-              you are <span className="deck-row__sign">{data.me.callSign}</span>
-              {data.me.bestMs != null ? ` - best ${formatScoreMs(data.me.bestMs)}s` : ""}
+            <div className='deck-mod__sub'>
+              you are <span className='deck-row__sign'>{data.me.callSign}</span>
+              {data.me.bestMs != null ? ` - best ${formatScoreMs(data.me.bestMs)}s` : ''}
             </div>
           )}
         </>

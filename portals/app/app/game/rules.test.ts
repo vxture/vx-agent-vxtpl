@@ -15,6 +15,7 @@ import {
   outcomeForScore,
   remainingRuns,
   scoreFitsWallClock,
+  seasonOf,
   utcDayStart,
 } from "./rules";
 
@@ -92,6 +93,22 @@ test("a score cannot exceed the observed wall clock plus slack", () => {
   assert.equal(scoreFitsWallClock(5000, start, finishFast), true);
   const finishSlow = new Date("2026-08-31T10:00:25.000Z");
   assert.equal(scoreFitsWallClock(QUALIFY_MS, start, finishSlow), true);
+});
+
+test("seasons are natural quarters, UTC, with exclusive ends", () => {
+  const q3 = seasonOf(new Date("2026-09-01T00:00:00Z"));
+  assert.equal(q3.key, "2026Q3");
+  assert.equal(q3.label, "2026 Q3");
+  assert.equal(q3.start.toISOString(), "2026-07-01T00:00:00.000Z");
+  assert.equal(q3.end.toISOString(), "2026-10-01T00:00:00.000Z");
+
+  // The last instant of a quarter still belongs to it...
+  assert.equal(seasonOf(new Date("2026-09-30T23:59:59.999Z")).key, "2026Q3");
+  // ...and the first instant of the next one does not.
+  assert.equal(seasonOf(new Date("2026-10-01T00:00:00.000Z")).key, "2026Q4");
+  // Year rollover.
+  assert.equal(seasonOf(new Date("2026-12-31T23:59:59Z")).key, "2026Q4");
+  assert.equal(seasonOf(new Date("2027-01-01T00:00:00Z")).key, "2027Q1");
 });
 
 test("call signs are deterministic, anonymous, and ASCII", () => {

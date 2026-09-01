@@ -537,14 +537,18 @@ footer.page-links {
 
 /* --- the arc toggles: the reference design's bracket ornaments, made the
  * control. Open, "(" and ")" embrace the stage; folded, each arc mirrors and
- * points outward toward the panel it would bring back. */
+ * points outward toward the panel it would bring back. Layered composition
+ * (owner re-review): dashed ghost arc for texture, the thin long arc, a
+ * THICK bright accent segment offset well inside it, elbow hooks and node
+ * dots at the tips, and the chevron in clear space on the rail side. The
+ * accent breathes; reduced-motion stills it. */
 .deck-arc {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
   z-index: 4;
-  width: 34px;
-  height: min(56vh, 400px);
+  width: 44px;
+  height: min(60vh, 430px);
   padding: 0;
   border: none;
   background: none;
@@ -564,35 +568,95 @@ footer.page-links {
 .deck-arc__svg--flip {
   transform: scaleX(-1);
 }
+.deck-arc__ghost {
+  fill: none;
+  stroke: rgba(245, 166, 35, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 3 9;
+}
 .deck-arc__line {
   fill: none;
-  stroke: rgba(245, 166, 35, 0.3);
-  stroke-width: 1.4;
+  stroke: rgba(245, 166, 35, 0.34);
+  stroke-width: 1.3;
+}
+.deck-arc__elbow {
+  fill: none;
+  stroke: rgba(245, 166, 35, 0.55);
+  stroke-width: 1.6;
+  stroke-linecap: square;
 }
 .deck-arc__accent {
   fill: none;
-  stroke: var(--vxtpl-deck-gold);
-  stroke-width: 2.4;
+  stroke: var(--vxtpl-deck-gold-bright);
+  stroke-width: 3.2;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.55));
+  filter: drop-shadow(0 0 5px rgba(245, 166, 35, 0.65));
+  animation: deck-ember-pulse 2.6s ease-in-out infinite;
+}
+.deck-arc__node {
+  fill: var(--vxtpl-deck-gold-bright);
+  filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.8));
+}
+.deck-arc__node--dim {
+  fill: var(--vxtpl-deck-gold);
+  filter: none;
 }
 .deck-arc__chev {
   fill: none;
   stroke: var(--vxtpl-deck-gold-bright);
-  stroke-width: 2;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.deck-arc__tick {
-  fill: none;
-  stroke: rgba(245, 166, 35, 0.5);
-  stroke-width: 1.4;
-}
 .deck-arc:hover .deck-arc__line {
-  stroke: rgba(245, 166, 35, 0.55);
+  stroke: rgba(245, 166, 35, 0.6);
+}
+.deck-arc:hover .deck-arc__ghost {
+  stroke: rgba(245, 166, 35, 0.3);
 }
 .deck-arc:hover .deck-arc__accent {
-  stroke: var(--vxtpl-deck-gold-bright);
+  filter: drop-shadow(0 0 9px rgba(245, 190, 60, 0.9));
+}
+@keyframes deck-ember-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck-arc__accent {
+    animation: none;
+  }
+}
+
+/* --- board tabs: season / all-time --- */
+.deck-tabs {
+  display: flex;
+  gap: 4px;
+}
+.deck-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--vxtpl-deck-line-faint);
+  background: transparent;
+  color: var(--vxtpl-deck-dim);
+  font-family: inherit;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  cursor: pointer;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+.deck-tab:hover {
+  color: var(--vxtpl-deck-gold-bright);
+}
+.deck-tab--active {
+  background: rgba(245, 166, 35, 0.14);
+  border-color: var(--vxtpl-deck-line);
+  color: var(--vxtpl-deck-gold-bright);
 }
 
 /* --- the identity strip: QUIET chrome (owner review) - a hairline frame,

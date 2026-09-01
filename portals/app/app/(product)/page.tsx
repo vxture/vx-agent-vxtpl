@@ -104,6 +104,17 @@ function Rail({ side, folded, children }: { side: "left" | "right"; folded: bool
  * The arc toggle - the reference design's bracket ornament, made the control.
  * Open, the pair embraces the stage: "(" left, ")" right. Folded, the arc
  * mirrors and points outward, toward the panel it would bring back.
+ *
+ * Redrawn per the owner's review (2026-09-01): the first cut piled the
+ * accent, the main arc and the chevron onto one waist. This one is LAYERED,
+ * with the separations computed, not eyeballed - quadratic waist = (P0 +
+ * 2C + P2) / 4:
+ *   ghost (dashed texture)  waist x = 19
+ *   main long arc           waist x = 22
+ *   bright accent segment   waist x = 35.5  (13.5px inside the main arc)
+ *   chevron                 x 4..12         (7px clear of everything)
+ * plus elbow hooks and node dots at the arc tips, and a slow ember pulse on
+ * the accent (killed under prefers-reduced-motion).
  */
 function ArcToggle({ side, folded, onToggle }: { side: "left" | "right"; folded: boolean; onToggle: () => void }) {
   const mirrored = side === "left" ? folded : !folded;
@@ -112,14 +123,19 @@ function ArcToggle({ side, folded, onToggle }: { side: "left" | "right"; folded:
       className={`deck-arc deck-arc-${side}`}
       onClick={onToggle}
       aria-expanded={!folded}
-      aria-label={`${folded ? "Expand" : "Collapse"} the ${side === "left" ? "record" : "board"} panel`}
+      aria-label={`${folded ? "Expand" : "Collapse"} the side panels`}
     >
-      <svg viewBox="0 0 36 360" className={mirrored ? "deck-arc__svg deck-arc__svg--flip" : "deck-arc__svg"} aria-hidden>
-        <path className="deck-arc__tick" d="M29 8 H35" />
-        <path className="deck-arc__line" d="M30 8 Q4 180 30 352" />
-        <path className="deck-arc__accent" d="M22.5 118 Q13.5 180 22.5 242" />
-        <path className="deck-arc__chev" d="M23 170 L16 180 L23 190" />
-        <path className="deck-arc__tick" d="M29 352 H35" />
+      <svg viewBox="0 0 44 420" className={mirrored ? "deck-arc__svg deck-arc__svg--flip" : "deck-arc__svg"} aria-hidden>
+        <path className="deck-arc__ghost" d="M31 40 Q7 210 31 380" />
+        <path className="deck-arc__line" d="M36 14 Q8 210 36 406" />
+        <path className="deck-arc__elbow" d="M36 14 H44 M44 14 V24" />
+        <path className="deck-arc__elbow" d="M36 406 H44 M44 406 V396" />
+        <path className="deck-arc__accent" d="M41 150 Q30 210 41 270" />
+        <circle className="deck-arc__node" cx="36" cy="14" r="2.2" />
+        <circle className="deck-arc__node" cx="36" cy="406" r="2.2" />
+        <circle className="deck-arc__node deck-arc__node--dim" cx="41" cy="150" r="1.6" />
+        <circle className="deck-arc__node deck-arc__node--dim" cx="41" cy="270" r="1.6" />
+        <path className="deck-arc__chev" d="M12 198 L4 210 L12 222" />
       </svg>
     </button>
   );

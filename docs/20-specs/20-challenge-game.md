@@ -68,6 +68,11 @@ enterprise add nothing on the game axis beyond pro.
   workspaces, ties broken by who set the time first. Players appear as
   deterministic anonymous call signs derived from `sub` (`NOVA-7F3A`) - the one
   cross-workspace surface carries no identifier that maps back to an account.
+- Seasons (owner decision 2026-09-01): natural quarters, UTC. TWO boards and
+  only two - the CURRENT season and all-time - each capped at the top 100.
+  Expired seasons are not archived or distinguished: the season board is the
+  all-time query windowed to the current quarter, so an old season ages out
+  by falling outside the window, never by a job.
 
 ## Integrity posture
 
