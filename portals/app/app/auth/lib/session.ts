@@ -26,7 +26,7 @@ export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthU
 export async function getAuthContext(
   cfg: OidcConfig,
   rpsid: string,
-): Promise<{ user: AuthUser; accessToken: string } | null> {
+): Promise<{ user: AuthUser; accessToken: string; idToken: string } | null> {
   let session = await getSession(cfg.clientId, rpsid);
   if (!session) return null;
 
@@ -42,7 +42,7 @@ export async function getAuthContext(
   } catch {
     return null;
   }
-  return { user: toAuthUser(claims), accessToken: session.accessToken };
+  return { user: toAuthUser(claims), accessToken: session.accessToken, idToken: session.idToken };
 }
 
 async function tryRefresh(

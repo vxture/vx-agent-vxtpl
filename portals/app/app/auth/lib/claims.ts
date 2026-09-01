@@ -75,6 +75,33 @@ export interface AuthUser {
   isWorkspaceOwner: boolean;
 }
 
+// Display-only profile claims from the id_token ("openid profile email" is
+// in OIDC_SCOPES). The id_token's signature and nonce were verified at the
+// callback; here the payload is only RE-READ for profile fields, so a decode
+// without an exp check is correct - the short-lived id_token expiring
+// mid-session must not blank the user's name. Never used for authorization.
+export interface IdProfile {
+  displayName: string | null;
+  picture: string | null;
+  email: string | null;
+}
+
+export function profileFromIdToken(idToken: string): IdProfile {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(idToken.split(".")[1] ?? "", "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    return {
+      displayName: s(payload["name"]) ?? s(payload["nickname"]) ?? s(payload["preferred_username"]),
+      picture: s(payload["picture"]),
+      email: s(payload["email"]),
+    };
+  } catch {
+    return { displayName: null, picture: null, email: null };
+  }
+}
+
 export function toAuthUser(claims: AccessClaims): AuthUser {
   const roles = Array.isArray(claims.roles) ? claims.roles : [];
   return {
