@@ -41,8 +41,13 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "dev-seed is local-dev only" }, { status: 403 });
   }
 
+  // Default sized so both boards clearly OVERFLOW the rail (the point of a
+  // review field is to see the scroll, not a page that exactly fits - owner
+  // review 2026-09-01; a 24-player field filled one screen to the pixel and
+  // hid the scrollbar). ~20% of pilots are last-season-only, so the season
+  // board stays visibly shorter than the all-time board.
   const body = (await req.json().catch(() => ({}))) as { players?: number };
-  const players = Math.min(Math.max(body.players ?? 24, 1), 200);
+  const players = Math.min(Math.max(body.players ?? 60, 1), 200);
 
   const store = getGameStore();
   const rand = rng(Date.now());
@@ -67,7 +72,7 @@ export async function POST(req: Request): Promise<Response> {
     const sub = `usr_seed_${String(p + 1).padStart(3, "0")}`;
     const ws = `ws_seed_${String(p + 1).padStart(3, "0")}`;
     const lastSeasonOnly = rand() < 0.2;
-    const runCount = 1 + Math.floor(rand() * 5);
+    const runCount = 2 + Math.floor(rand() * 7);
     for (let i = 0; i < runCount; i++) {
       const startedAt = lastSeasonOnly
         ? new Date(season.start.getTime() - (1 + rand() * 60) * DAY_MS) // before this quarter
@@ -76,13 +81,16 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  // The dev caller's own arc: a 30-day practice curve that actually improves,
-  // so YOUR RECORD, the podium and the trend all have a story to show.
-  for (let d = 29; d >= 0; d--) {
-    if (rand() < 0.35) continue; // rest days stay gaps in the trend
-    const perDay = 1 + Math.floor(rand() * 2);
+  // The dev caller's own arc: a practice curve that actually improves, so
+  // YOUR RECORD, the podium and the trend all have a story to show. It spans
+  // the season so far (floored at two weeks, so a fresh quarter still draws
+  // a curve), dense enough that the pro recent list overflows and scrolls.
+  const arcDays = Math.max(14, Math.min(Math.floor((now - season.start.getTime()) / DAY_MS), 92));
+  for (let d = arcDays - 1; d >= 0; d--) {
+    if (rand() < 0.3) continue; // rest days stay gaps in the trend
+    const perDay = 1 + Math.floor(rand() * 3);
     for (let i = 0; i < perDay; i++) {
-      const progress = (30 - d) / 30; // later days run longer
+      const progress = (arcDays - d) / arcDays; // later days run longer
       const base = 2000 + progress * 16000;
       const score = Math.round(base + (rand() - 0.35) * 8000);
       const startedAt = new Date(now - d * DAY_MS - rand() * 0.5 * DAY_MS);
