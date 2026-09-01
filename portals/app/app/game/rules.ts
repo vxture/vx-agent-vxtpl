@@ -26,7 +26,6 @@ export const FREE_DAILY_RUNS = 10;
 
 export const TOP_PIN_COUNT = 3;
 export const HISTORY_LIMIT = 10;
-export const TREND_DAYS = 30;
 
 /** Both boards cap at the top 100 (owner decision 2026-09-01). */
 export const LEADERBOARD_SIZE = 100;
@@ -69,13 +68,14 @@ export function remainingRuns(cap: number, usedToday: number): number {
 export type HistoryWindow =
   | { kind: "none" }
   | { kind: "last10"; limit: number }
-  | { kind: "days30"; days: number };
+  | { kind: "season" };
 
-/** What slice of their own record a player may see. Pro's 30-day window
- * supersedes starter's last-10 (the ladder is cumulative, the WINDOW is not -
- * it widens). */
+/** What slice of their own record a player may see. Pro's window is THE
+ * SEASON (owner decision 2026-09-01 - no hardcoded day count; every stat
+ * adapts to the season period). Starter keeps a last-10 list within the
+ * season. The ladder is cumulative; the WINDOW widens with it. */
 export function historyWindowFor(e: Entitlement): HistoryWindow {
-  if (canUseFeature(e, "game:trend")) return { kind: "days30", days: TREND_DAYS };
+  if (canUseFeature(e, "game:trend")) return { kind: "season" };
   if (canUseFeature(e, "game:history")) return { kind: "last10", limit: HISTORY_LIMIT };
   return { kind: "none" };
 }
@@ -114,6 +114,11 @@ export interface Season {
  * board shows only the CURRENT season and expired seasons are not archived -
  * the season board is simply "the all-time query windowed to this quarter",
  * so a season "ends" by its runs aging out of the window, not by a job.
+ *
+ * THIS FUNCTION IS THE SEASON PERIOD. Every season-scoped stat (boards,
+ * podium, recent window, trend) takes its window from here and nowhere else,
+ * so changing the period later (a configured length, a launch-anchored
+ * epoch) is a change to this one function.
  */
 export function seasonOf(now: Date): Season {
   const year = now.getUTCFullYear();

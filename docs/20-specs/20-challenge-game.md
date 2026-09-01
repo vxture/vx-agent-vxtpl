@@ -40,7 +40,7 @@ enterprise add nothing on the game axis beyond pro.
 |------|------|-----------------|
 | free | play, 10 runs/day | `game:play` |
 | starter | unlimited runs + personal record (last 10 runs, best 3 pinned, with time and date) | `game:unlimited-runs`, `game:history` |
-| pro | global leaderboard + record window widened to 30 days with a daily-best trend curve | `game:leaderboard`, `game:trend` |
+| pro | global leaderboard + record window widened to the whole season with a daily-best trend curve | `game:leaderboard`, `game:trend` |
 
 ## Quota (free tier)
 
@@ -64,11 +64,15 @@ enterprise add nothing on the game axis beyond pro.
   anywhere are the topbar's all-time personal best and the all-time board.
 - Personal best is TWO numbers in the topbar chip: all-time (the trophy) and
   the current season (the working number).
-- Starter window: last 10 finished runs this season. Pro window: last 30
-  days, clamped to the quarter (list capped at 100 rows for reading; the
-  trend aggregates every run in the window).
-- Trend (pro): per-UTC-day best/mean/count over the clamped window, drawn as
-  a single daily-best curve. Days without runs are gaps, not zeros.
+- Starter window: last 10 finished runs this season. Pro window: the WHOLE
+  season - no hardcoded day count anywhere (owner decision 2026-09-01); every
+  stat takes its window from the season period, and seasonOf is the single
+  place that period is defined (extensible later: configured length,
+  launch-anchored epoch). List capped at 100 rows for reading; the trend
+  aggregates every run in the season.
+- Trend (pro): per-UTC-day best/mean/count over the season, drawn as a
+  single daily-best curve spanning season start to today. Days without runs
+  are gaps, not zeros.
 - Leaderboard (pro): each player's single best finished run, global across
   workspaces, ties broken by who set the time first. Players appear as
   deterministic anonymous call signs derived from `sub` (`NOVA-7F3A`) - the one
