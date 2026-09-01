@@ -75,6 +75,16 @@ test("leaderboard keeps one row per player: their best, best first", async () =>
   );
 });
 
+test("bestFinished windowed by `since` is the season best", async () => {
+  const store = new InMemoryGameStore();
+  await seedRun(store, { startedAt: "2026-06-10T10:00:00Z", scoreMs: 28000, finishedAt: "2026-06-10T10:00:28Z" }); // last season trophy
+  await seedRun(store, { startedAt: "2026-08-10T10:00:00Z", scoreMs: 21000, finishedAt: "2026-08-10T10:00:21Z" }); // this season
+  const [allTime] = await store.bestFinished(WS, SUB, 1);
+  assert.equal(allTime.scoreMs, 28000);
+  const [seasonBest] = await store.bestFinished(WS, SUB, 1, new Date("2026-07-01T00:00:00Z"));
+  assert.equal(seasonBest.scoreMs, 21000);
+});
+
 test("leaderboard windowed by `since` is the season board", async () => {
   const store = new InMemoryGameStore();
   // Last season's monster score...

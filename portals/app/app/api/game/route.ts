@@ -9,12 +9,15 @@ import {
   dailyRunCap,
   nextUtcMidnight,
   remainingRuns,
+  seasonOf,
   utcDayStart,
 } from "../../game/rules";
 
 // GET /api/game - the challenge context: what this player may do, how much
-// quota is left today, and their personal best. One call renders the whole
-// /challenge surface; the write paths are /api/game/run and /run/finish.
+// quota is left today, and their personal bests - BOTH of them (owner
+// decision 2026-09-01): the all-time trophy and the current-season working
+// number. One call renders the whole deck; the write paths are /api/game/run
+// and /run/finish.
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
@@ -24,10 +27,14 @@ export async function GET(): Promise<Response> {
   const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
   const store = getGameStore();
   const now = new Date();
+  const season = seasonOf(now);
 
   const cap = dailyRunCap(entitlement);
   const usedToday = await store.countStartedSince(caller.workspaceId, caller.sub, utcDayStart(now));
-  const [best] = await store.bestFinished(caller.workspaceId, caller.sub, 1);
+  const [[best], [seasonBest]] = await Promise.all([
+    store.bestFinished(caller.workspaceId, caller.sub, 1),
+    store.bestFinished(caller.workspaceId, caller.sub, 1, season.start),
+  ]);
 
   return NextResponse.json({
     tier: entitlement.tier,
@@ -51,6 +58,9 @@ export async function GET(): Promise<Response> {
       remaining: remainingRuns(cap, usedToday),
       resetsAt: nextUtcMidnight(now).toISOString(),
     },
+    season: { key: season.key, label: season.label },
     best: best?.scoreMs != null ? { scoreMs: best.scoreMs, achievedAt: best.finishedAt } : null,
+    seasonBest:
+      seasonBest?.scoreMs != null ? { scoreMs: seasonBest.scoreMs, achievedAt: seasonBest.finishedAt } : null,
   });
 }

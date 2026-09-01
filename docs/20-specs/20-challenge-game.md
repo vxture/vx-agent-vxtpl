@@ -57,13 +57,18 @@ enterprise add nothing on the game axis beyond pro.
 
 - Fields per run: time and date played (`started_at`), score (survival ms,
   unbounded above the bar), outcome ('survived' = qualified at >= 20s / 'hit').
-- Best 3 pinned: the all-time top three finished runs stay pinned on the
-  records surface at every entitled tier - the window widens with the ladder,
-  the podium never forgets.
-- Starter window: last 10 finished runs. Pro window: last 30 days (list capped
-  at 100 rows for reading; the trend aggregates every run in the window).
-- Trend (pro): per-UTC-day best/mean/count over the 30-day window, drawn as a
-  single daily-best curve. Days without runs are gaps, not zeros.
+- SEASON scope (owner decision 2026-09-01, supersedes the earlier "podium
+  never forgets"): every stat and analysis below the topbar speaks the
+  CURRENT season only - the podium is the season's best 3, the recent window
+  and the trend clamp to the quarter start. The only all-time numbers
+  anywhere are the topbar's all-time personal best and the all-time board.
+- Personal best is TWO numbers in the topbar chip: all-time (the trophy) and
+  the current season (the working number).
+- Starter window: last 10 finished runs this season. Pro window: last 30
+  days, clamped to the quarter (list capped at 100 rows for reading; the
+  trend aggregates every run in the window).
+- Trend (pro): per-UTC-day best/mean/count over the clamped window, drawn as
+  a single daily-best curve. Days without runs are gaps, not zeros.
 - Leaderboard (pro): each player's single best finished run, global across
   workspaces, ties broken by who set the time first. Players appear as
   deterministic anonymous call signs derived from `sub` (`NOVA-7F3A`) - the one

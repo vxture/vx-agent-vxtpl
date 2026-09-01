@@ -3,13 +3,15 @@ import { getEntitlementResolver } from "../../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../../entitlement/capability";
 import { isCallerError, resolveGameCaller } from "../../../game/api-caller";
 import { getGameStore, type GameRunRow } from "../../../game/store";
-import { TOP_PIN_COUNT, TREND_DAYS, dailyTrend, historyWindowFor } from "../../../game/rules";
+import { TOP_PIN_COUNT, TREND_DAYS, dailyTrend, historyWindowFor, seasonOf } from "../../../game/rules";
 
-// GET /api/game/records - the player's own record, sliced by tier:
-// starter sees their last 10 finished runs, pro sees the last 30 days plus the
-// daily trend. The best-3 pins are ALL-TIME on both tiers - the window widens
-// with the ladder, the podium never forgets. Free gets the locked shape with
-// the tier that would open it, not an error: the surface renders the offer.
+// GET /api/game/records - the player's own record, sliced by tier and scoped
+// to the CURRENT SEASON (owner decision 2026-09-01): starter sees their last
+// 10 finished runs this season, pro the last 30 days (clamped to the quarter)
+// plus the daily trend; the best-3 podium is the season's. The only all-time
+// numbers anywhere are the topbar's all-time best and the all-time board.
+// Free gets the locked shape with the tier that would open it, not an error:
+// the surface renders the offer.
 export const dynamic = "force-dynamic";
 
 // Pro's raw-list cap. The window is 30 days; an unbounded player could hold
@@ -39,21 +41,31 @@ export async function GET(): Promise<Response> {
     });
   }
 
+  // EVERYTHING below the topbar is CURRENT-SEASON only (owner decision
+  // 2026-09-01): podium, recent list and trend all start at the quarter
+  // boundary. The only all-time numbers left anywhere are the topbar's
+  // all-time best and the all-time board.
   const store = getGameStore();
-  const top = await store.bestFinished(caller.workspaceId, caller.sub, TOP_PIN_COUNT);
+  const season = seasonOf(new Date());
+  const top = await store.bestFinished(caller.workspaceId, caller.sub, TOP_PIN_COUNT, season.start);
 
   let recent: GameRunRow[];
   if (window.kind === "last10") {
-    recent = await store.recentFinished(caller.workspaceId, caller.sub, { limit: window.limit });
+    recent = await store.recentFinished(caller.workspaceId, caller.sub, {
+      since: season.start,
+      limit: window.limit,
+    });
   } else {
-    const since = new Date(Date.now() - window.days * 24 * 60 * 60 * 1000);
+    // Pro's 30-day window, clamped to the season: early in a quarter the
+    // window must not reach back into the previous season.
+    const since = new Date(Math.max(season.start.getTime(), Date.now() - window.days * 24 * 60 * 60 * 1000));
     recent = await store.recentFinished(caller.workspaceId, caller.sub, { since, limit: RECENT_MAX });
   }
 
   const trendAllowed = canUseFeature(entitlement, "game:trend");
   let trend = null;
   if (trendAllowed) {
-    const since = new Date(Date.now() - TREND_DAYS * 24 * 60 * 60 * 1000);
+    const since = new Date(Math.max(season.start.getTime(), Date.now() - TREND_DAYS * 24 * 60 * 60 * 1000));
     // Unbounded on purpose: the trend aggregates EVERY run in the window, not
     // just the RECENT_MAX the list shows.
     const all = await store.recentFinished(caller.workspaceId, caller.sub, { since });
@@ -65,6 +77,7 @@ export async function GET(): Promise<Response> {
   return NextResponse.json({
     allowed: true,
     window,
+    season: { key: season.key, label: season.label },
     top: top.map(runJson),
     recent: recent.map(runJson),
     trend,
