@@ -10,6 +10,9 @@ export interface UsageEvent {
   metric: string;
   amount: number;
   idempotencyKey: string;
+  /** Optional end-user attribution (consume end_user_id) - vxtpl's units of
+   * work are personal, so callers that know the sub pass it. */
+  endUserId?: string;
 }
 
 export async function recordUsage(
@@ -23,5 +26,6 @@ export async function recordUsage(
     metric: event.metric,
     amount: event.amount,
     idempotencyKey: event.idempotencyKey,
+    endUserId: event.endUserId ?? null,
   });
 }

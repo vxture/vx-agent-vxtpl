@@ -9,6 +9,7 @@ export interface UsageRow {
   metric: string; // must hit a platform metric registry key
   amount: number;
   idempotencyKey: string; // forced; replay = no-op
+  endUserId?: string | null; // optional per-user attribution (consume end_user_id)
   flushed: boolean;
 }
 
@@ -43,16 +44,27 @@ export class InMemoryUsageStore implements UsageStore {
   }
 }
 
-let override: UsageStore | null = null;
-let memo: UsageStore | null = null;
+// globalThis, not module scope - see provisioning/lib/store.ts for why (per-
+// route bundles would give the recorder and the flusher different buffers).
+interface StoreGlobal {
+  __vxtplUsageStore?: { override: UsageStore | null; memo: UsageStore | null };
+}
+
+function slot(): { override: UsageStore | null; memo: UsageStore | null } {
+  const g = globalThis as StoreGlobal;
+  g.__vxtplUsageStore ??= { override: null, memo: null };
+  return g.__vxtplUsageStore;
+}
 
 export function getUsageStore(): UsageStore {
-  if (override) return override;
-  if (memo) return memo;
-  memo = prismaEnabled() ? new PrismaUsageStore() : new InMemoryUsageStore();
-  return memo;
+  const s = slot();
+  if (s.override) return s.override;
+  if (s.memo) return s.memo;
+  s.memo = prismaEnabled() ? new PrismaUsageStore() : new InMemoryUsageStore();
+  return s.memo;
 }
 export function setUsageStore(next: UsageStore | null): void {
-  override = next;
-  memo = null;
+  const s = slot();
+  s.override = next;
+  s.memo = null;
 }

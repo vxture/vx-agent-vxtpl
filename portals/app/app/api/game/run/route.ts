@@ -62,6 +62,7 @@ export async function POST(): Promise<Response> {
       metric: RUNS_METRIC,
       amount: 1,
       idempotencyKey: randomUUID(),
+      endUserId: caller.sub, // runs are personal; the platform can attribute them
     });
   } catch (err) {
     console.error(`[game] usage record failed for workspace ${caller.workspaceId}:`, err);

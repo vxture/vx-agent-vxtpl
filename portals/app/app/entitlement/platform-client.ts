@@ -6,6 +6,15 @@ import { EMPTY_ENTITLEMENT, type Entitlement, type QuotaPool } from "./types";
 // entitlement endpoint over the internal network with the shared internal-auth
 // header, and parses the envelope tolerantly (unknown added fields ignored,
 // missing fields defaulted). Never sends the secret to the browser.
+//
+// CREDENTIAL CLASS, flagged: `x-vxture-internal-auth` is a shared token, and
+// the integration general rules retire shared-password credentials for
+// product-to-product calls (new products must not be born on a retired
+// credential class) without naming the replacement for the PLATFORM
+// channels (/platform/*, /usage/*) themselves.
+// Liaison letter 140 asks the platform line to name it; until answered, this
+// header stays - it is what production runs on, and inventing a replacement
+// inside a product repo is exactly what the rules forbid.
 
 export interface PlatformClientConfig {
   baseUrl: string;

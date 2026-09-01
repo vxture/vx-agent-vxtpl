@@ -125,6 +125,7 @@ model Raw {
   metric         String   @db.VarChar(128)
   amount         BigInt
   idempotencyKey String   @map("idempotency_key") @db.VarChar(128)
+  endUserId      String?  @map("end_user_id") @db.VarChar(128)
   flushed        Boolean  @default(false)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
 

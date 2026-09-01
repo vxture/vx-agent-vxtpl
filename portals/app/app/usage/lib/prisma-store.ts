@@ -14,6 +14,7 @@ export class PrismaUsageStore implements UsageStore {
         metric: row.metric,
         amount: BigInt(row.amount),
         idempotencyKey: row.idempotencyKey,
+        endUserId: row.endUserId ?? null,
       },
       update: {},
     });
@@ -27,6 +28,7 @@ export class PrismaUsageStore implements UsageStore {
       metric: r.metric,
       amount: Number(r.amount),
       idempotencyKey: r.idempotencyKey,
+      endUserId: r.endUserId,
       flushed: r.flushed,
     }));
   }
