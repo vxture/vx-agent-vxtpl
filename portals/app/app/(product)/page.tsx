@@ -142,9 +142,11 @@ export default function DeckPage() {
   const loadContext = useCallback(async () => {
     const r = await fetch("/api/game", { cache: "no-store" });
     if (r.status === 401 || r.status === 503) {
-      const body = (await r.json().catch(() => ({}))) as { error?: string };
+      // The sign-in dialog says everything a visitor needs; the raw error
+      // (e.g. "OIDC_RP_ENABLED is off") is operator diagnosis and belongs to
+      // /api/status, not the landing (live finding 2026-09-01).
       setPhase("signed-out");
-      setError(body.error ?? "sign in to play");
+      setError(null);
       return null;
     }
     const data = (await r.json()) as GameContext;
@@ -271,8 +273,12 @@ export default function DeckPage() {
       {/* Topbar: the information that NEVER folds. Left, the two live
           numbers; right, the quiet identity strip - chrome, not content. */}
       <header className="deck-topbar">
+        {/* Signed out, the topbar carries NO data surfaces (owner review
+            2026-09-01, live finding): no placeholder chips, no persona in
+            the identity strip - a visitor sees the brand, the stage dialog
+            and the fullscreen control, nothing pretending to be state. */}
         <div className="deck-chips">
-          {ctx && !noAccess ? (
+          {!signedIn ? null : ctx && !noAccess ? (
             <>
               <div className="deck-chip">
                 <div className="deck-chip__label">Runs today</div>
@@ -305,19 +311,31 @@ export default function DeckPage() {
 
         <div className="deck-title">
           <div className="deck-title__text">{BRAND.displayName}</div>
-          <div className="deck-title__sub">THE 20-SECOND CHALLENGE / {ctx ? tierLabel(ctx.tier) : "SYNCING"}</div>
+          <div className="deck-title__sub">
+            THE 20-SECOND CHALLENGE
+            {signedIn ? ` / ${ctx ? tierLabel(ctx.tier) : "SYNCING"}` : ""}
+          </div>
         </div>
 
         <div className="deck-id">
-          <AvatarBadge />
-          <span className="deck-id__sep" aria-hidden />
-          {/* EXIT = return to the home (idle) screen, abandoning any run.
-              Hidden when signed out - next to SIGN IN it read as its
-              opposite (owner review 2026-09-01). */}
+          {/* The avatar persona (and its PILOT fallback) is for the
+              signed-in deck ONLY - a signed-out visitor must never see a
+              name that looks like a session (live finding 2026-09-01). */}
           {signedIn && (
-            <button className="deck-id__btn" onClick={exitRun} title="Return home (leaves the run)" aria-label="Return home">
-              EXIT
-            </button>
+            <>
+              <AvatarBadge />
+              <span className="deck-id__sep" aria-hidden />
+              {/* EXIT = return to the home (idle) screen, abandoning any
+                  run. */}
+              <button
+                className="deck-id__btn"
+                onClick={exitRun}
+                title="Return home (leaves the run)"
+                aria-label="Return home"
+              >
+                EXIT
+              </button>
+            </>
           )}
           <button
             className="deck-id__btn"
@@ -331,21 +349,30 @@ export default function DeckPage() {
       </header>
 
       <div className="deck-frame">
-        <Rail side="left" folded={folded.left}>
-          {ctx && !noAccess ? (
-            <RecordsModule
-              open={modOpen.records}
-              onToggle={() => setModOpen((m) => ({ ...m, records: !m.records }))}
-              epoch={epoch}
-            />
-          ) : (
-            <div className="deck-mod__loading">{signedIn ? "SYNCING..." : "SIGNED OUT"}</div>
-          )}
-        </Rail>
+        {/* Signed out, the side rails and their arc toggles do not exist at
+            all (owner review 2026-09-01): a visitor gets the stage and the
+            sign-in dialog, not empty panels advertising their absence. */}
+        {signedIn && (
+          <Rail side="left" folded={folded.left}>
+            {ctx && !noAccess ? (
+              <RecordsModule
+                open={modOpen.records}
+                onToggle={() => setModOpen((m) => ({ ...m, records: !m.records }))}
+                epoch={epoch}
+              />
+            ) : (
+              <div className="deck-mod__loading">SYNCING...</div>
+            )}
+          </Rail>
+        )}
 
         <main className="deck-main">
-          <ArcToggle side="left" folded={folded.left} onToggle={toggleRails} />
-          <ArcToggle side="right" folded={folded.right} onToggle={toggleRails} />
+          {signedIn && (
+            <>
+              <ArcToggle side="left" folded={folded.left} onToggle={toggleRails} />
+              <ArcToggle side="right" folded={folded.right} onToggle={toggleRails} />
+            </>
+          )}
 
           <div className="deck-stage">
             {phase === "loading" && !error && <div className="deck-status">SYNCING...</div>}
@@ -447,21 +474,23 @@ export default function DeckPage() {
 
           <footer className="deck-bottom">
             <div className="deck-bottom__frame" aria-hidden />
-            <div className="deck-hint">ARROW KEYS TO MOVE / ESC TO LEAVE / 20S QUALIFIES - NO CEILING</div>
+            <div className="deck-hint">
+              {signedIn
+                ? "ARROW KEYS TO MOVE / ESC TO LEAVE / 20S QUALIFIES - NO CEILING"
+                : "THE 20-SECOND CHALLENGE - SIGN IN TO RUN"}
+            </div>
           </footer>
         </main>
 
-        <Rail side="right" folded={folded.right}>
-          {signedIn ? (
+        {signedIn && (
+          <Rail side="right" folded={folded.right}>
             <BoardModule
               open={modOpen.board}
               onToggle={() => setModOpen((m) => ({ ...m, board: !m.board }))}
               epoch={epoch}
             />
-          ) : (
-            <div className="deck-mod__loading">SIGNED OUT</div>
-          )}
-        </Rail>
+          </Rail>
+        )}
       </div>
     </div>
   );

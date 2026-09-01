@@ -282,8 +282,12 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
 
 interface SessionUser {
   sub?: string;
-  email?: string;
+  email?: string | null;
   activeWorkspace?: string;
+  /** id_token display profile (owner 2026-09-01): the strip shows the
+   * person - platform display name and avatar - never the sub. */
+  displayName?: string | null;
+  picture?: string | null;
 }
 
 /** Debug/reference surfaces stay routable but live behind the avatar - the
@@ -316,9 +320,16 @@ export function AvatarBadge() {
   // session mid-visit - where the stage shows its own sign-in dialog) the
   // badge shows the local PILOT persona and the menu carries the sign-in.
   const authed = state?.authenticated === true;
-  const who = state?.user?.email ?? state?.user?.sub ?? "";
-  const name = who.includes("@") ? who.split("@")[0] : who ? who.slice(0, 12) : "pilot";
+  // Platform display name and avatar first (owner 2026-09-01); email prefix
+  // is the fallback, the local PILOT persona is dev-only (the deck hides the
+  // badge entirely for signed-out visitors).
+  const email = state?.user?.email ?? "";
+  const name =
+    state?.user?.displayName ??
+    (email.includes("@") ? email.split("@")[0] : state?.user?.sub ? state.user.sub.slice(0, 12) : "pilot");
+  const picture = state?.user?.picture ?? null;
   const initial = (name || "P").charAt(0).toUpperCase();
+  const who = [state?.user?.displayName, email || state?.user?.sub].filter(Boolean).join(" - ");
 
   return (
     <div className="deck-avatar-wrap">
@@ -329,9 +340,13 @@ export function AvatarBadge() {
         aria-label="Account and service menu"
         title={who || undefined}
       >
-        <span className="deck-id__circle" aria-hidden>
-          {initial}
-        </span>
+        {picture ? (
+          <img className="deck-id__img" src={picture} alt="" aria-hidden />
+        ) : (
+          <span className="deck-id__circle" aria-hidden>
+            {initial}
+          </span>
+        )}
         <span className="deck-id__name">{name.toUpperCase()}</span>
       </button>
       {openMenu && (

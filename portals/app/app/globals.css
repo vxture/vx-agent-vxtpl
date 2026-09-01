@@ -660,6 +660,15 @@ footer.page-links {
   font-size: 0.68rem;
   font-weight: 800;
 }
+/* Platform avatar image: same slot as the initial circle. */
+.deck-id__img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 166, 35, 0.4);
+  object-fit: cover;
+  display: block;
+}
 .deck-id__name {
   font-size: 0.62rem;
   font-weight: 700;
