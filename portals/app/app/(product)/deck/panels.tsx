@@ -170,9 +170,10 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
             {data.window?.kind === "last10" ? " (last 10)" : ""}
           </div>
           {/* No display cap: the API already bounds the list (last-10 for
-            * starter, RECENT_MAX for pro) and the rail body scrolls - a UI
-            * slice here silently hid the season window (owner 2026-09-01). */}
-          <div className="deck-rows">
+            * starter, RECENT_MAX for pro). This is the module's ONE scroll
+            * region - podium, trend and the labels above stay pinned while
+            * the recent rows move (owner review 2026-09-01). */}
+          <div className="deck-rows deck-scroll">
             {(data.recent ?? []).map((r, i) => (
               <div key={i} className="deck-row">
                 <span className={r.outcome === "survived" ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
@@ -194,6 +195,9 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
   const [tab, setTab] = useState<'season' | 'alltime'>('season');
 
   const rows = (tab === 'season' ? data?.seasonEntries : data?.allTimeEntries) ?? [];
+  // The pinned footer answers "where am I on THIS board": the row when
+  // ranked, "outside top 100" when the board is full without you.
+  const myRow = rows.find((e) => e.you);
 
   return (
     <DeckModule title='Global board' open={open} onToggle={onToggle}>
@@ -236,7 +240,9 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
               : 'since day one / top 100'}
           </div>
 
-          <div className='deck-rows'>
+          {/* The ONE scroll region: tabs and the season line stay pinned
+              above, the you-are footer below; only the ranks move. */}
+          <div className='deck-rows deck-scroll'>
             {rows.map((e) => (
               <div key={e.rank} className={e.you ? 'deck-row deck-row-you' : 'deck-row'}>
                 <span className={e.rank <= 3 ? 'deck-row__rank' : 'deck-row__rank deck-row__rank--plain'}>
@@ -257,9 +263,13 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
             )}
           </div>
           {data.me && (
-            <div className='deck-mod__sub'>
+            <div className='deck-mod__foot deck-mod__sub'>
               you are <span className='deck-row__sign'>{data.me.callSign}</span>
-              {data.me.bestMs != null ? ` - best ${formatScoreMs(data.me.bestMs)}s` : ''}
+              {myRow
+                ? ` - #${myRow.rank} - ${formatScoreMs(myRow.scoreMs)}s`
+                : data.me.bestMs != null
+                  ? ` - outside top 100`
+                  : ' - no finished runs yet'}
             </div>
           )}
         </>
