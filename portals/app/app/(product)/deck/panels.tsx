@@ -297,14 +297,12 @@ export function AvatarBadge() {
       .catch(() => setState({ authenticated: false }));
   }, []);
 
-  if (state && !state.authenticated) {
-    return (
-      <a className="deck-id__btn" href="/auth/login?returnTo=/">
-        SIGN IN
-      </a>
-    );
-  }
-
+  // ALWAYS the avatar (owner review 2026-09-01): reaching the deck means the
+  // gate already let you through, so a SIGN IN button in the identity strip
+  // is a contradiction. Without a platform session (local dev, or an expired
+  // session mid-visit - where the stage shows its own sign-in dialog) the
+  // badge shows the local PILOT persona and the menu carries the sign-in.
+  const authed = state?.authenticated === true;
   const who = state?.user?.email ?? state?.user?.sub ?? "";
   const name = who.includes("@") ? who.split("@")[0] : who ? who.slice(0, 12) : "pilot";
   const initial = (name || "P").charAt(0).toUpperCase();
@@ -335,12 +333,18 @@ export function AvatarBadge() {
               {l.label}
             </a>
           ))}
-          {/* POST, not a link, so a prefetch cannot sign the player out. */}
-          <form method="post" action="/auth/logout">
-            <button type="submit" className="deck-menu__item deck-menu__item--danger">
-              SIGN OUT
-            </button>
-          </form>
+          {authed ? (
+            // POST, not a link, so a prefetch cannot sign the player out.
+            <form method="post" action="/auth/logout">
+              <button type="submit" className="deck-menu__item deck-menu__item--danger">
+                SIGN OUT
+              </button>
+            </form>
+          ) : (
+            <a className="deck-menu__item" href="/auth/login?returnTo=/">
+              SIGN IN
+            </a>
+          )}
         </div>
       )}
     </div>

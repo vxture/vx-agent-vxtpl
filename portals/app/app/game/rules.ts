@@ -163,7 +163,10 @@ export function callSign(sub: string): string {
 
 export interface FinishedRun {
   scoreMs: number;
-  startedAt: Date;
+  /** finished_at - THE season anchor everywhere (owner decision 2026-09-01):
+   * trend buckets, window membership, boards and bests all judge by when the
+   * run finished, never a mix of anchors. */
+  at: Date;
 }
 
 export interface TrendPoint {
@@ -183,7 +186,7 @@ function utcDayKey(d: Date): string {
 export function dailyTrend(runs: readonly FinishedRun[]): TrendPoint[] {
   const byDay = new Map<string, { best: number; sum: number; count: number }>();
   for (const r of runs) {
-    const key = utcDayKey(r.startedAt);
+    const key = utcDayKey(r.at);
     const agg = byDay.get(key) ?? { best: 0, sum: 0, count: 0 };
     agg.best = Math.max(agg.best, r.scoreMs);
     agg.sum += r.scoreMs;

@@ -42,8 +42,16 @@ export function TrendChart({
   const [hover, setHover] = useState<Hover | null>(null);
 
   const geo = useMemo(() => {
+    // SCOPE is the season (the points are season-filtered upstream); the AXIS
+    // is the data (owner review 2026-09-01): it opens at the first day that
+    // actually has a run, so an idle early season is not a wall of blank.
+    // A minimum span keeps a young season readable, and the season start is
+    // the floor - the axis never reaches into the previous season.
+    const MIN_SPAN_DAYS = 7;
     const end = Date.parse(new Date().toISOString().slice(0, 10)); // today, UTC midnight
-    const start = Math.min(Date.parse(startsAt.slice(0, 10)), end - DAY_MS);
+    const seasonFloor = Date.parse(startsAt.slice(0, 10));
+    const firstData = points.length ? Math.min(...points.map((p) => Date.parse(p.day))) : end;
+    const start = Math.max(seasonFloor, Math.min(firstData, end - MIN_SPAN_DAYS * DAY_MS));
     const x = (day: string) => M.left + ((Date.parse(day) - start) / (end - start || 1)) * PLOT_W;
     // The y domain is open at the top - 20s qualifies, it does not cap. Grow
     // to fit the best run, in 5s steps, and thin the gridlines as it grows.
