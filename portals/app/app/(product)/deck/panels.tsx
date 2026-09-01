@@ -322,6 +322,10 @@ export function AvatarBadge() {
       {openMenu && (
         <div className="deck-menu">
           {who && <div className="deck-menu__who">{who}</div>}
+          {/* DEBUG, and labeled so (owner review 2026-09-01): these are the
+              template's service hatches for verifying the platform channels,
+              not product features - a player never needs them. */}
+          <div className="deck-menu__group">DEBUG TOOLS</div>
           {SERVICE_LINKS.map((l) => (
             <a key={l.href} className="deck-menu__item" href={l.href}>
               {l.label}

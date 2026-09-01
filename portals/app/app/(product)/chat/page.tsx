@@ -175,13 +175,17 @@ export default function ChatPage() {
     <main className="page">
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
+        <StatusBadge tone="warning" dot>
+          debug surface
+        </StatusBadge>
         <StatusBadge tone={tierTone(ctx?.tier ?? null)} dot>
           {ctx ? tierLabel(ctx.tier) : "..."}
         </StatusBadge>
       </div>
       <p className="lede">
-        A tier-gated turn against the platform&apos;s model gateway. A selected skill runs as a real Runos
-        capability.
+        A tier-gated turn against the platform&apos;s model gateway; a selected skill runs as a real Runos
+        capability. This is a DEBUG surface for verifying the S2S chain, not a product feature - turns are
+        capped at 500 characters and 6 per minute.
       </p>
 
       {signedOut && (
@@ -250,7 +254,8 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
-                placeholder="Type a message"
+                placeholder="Type a short verification message (max 500 chars)"
+                maxLength={500}
                 disabled={busy}
               />
               <Button onClick={send} disabled={busy || !input.trim()}>

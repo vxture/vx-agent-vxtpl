@@ -293,17 +293,19 @@ export default function DeckPage() {
                 <div className="deck-chip__label">Runs today</div>
                 <QuotaTicks quota={ctx.quota} />
               </div>
-              {/* TWO numbers (owner decision 2026-09-01): the all-time trophy
-                  and the season working best - the stats below only speak
-                  season, so this chip is where all-time survives. */}
-              <div className="deck-chip">
+              {/* TWO numbers, ONE line (owner review): all-time | season.
+                  The meaning lives in the tooltip, not in a second row - the
+                  topbar keeps its height. */}
+              <div
+                className="deck-chip deck-chip--wide"
+                title={`all-time best ${ctx.best ? formatScoreMs(ctx.best.scoreMs) + "s" : "none"} | ${
+                  ctx.season?.label ?? "season"
+                } season best ${ctx.seasonBest ? formatScoreMs(ctx.seasonBest.scoreMs) + "s" : "none"}`}
+              >
                 <div className="deck-chip__label">Personal best</div>
                 <div className="deck-panel__value">
-                  <span className="deck-chip__tag">ALL</span>
                   {ctx.best ? `${formatScoreMs(ctx.best.scoreMs)}s` : "--.--"}
-                </div>
-                <div className="deck-panel__value">
-                  <span className="deck-chip__tag">{ctx.season?.label ?? "SEASON"}</span>
+                  <span className="deck-chip__sep">|</span>
                   {ctx.seasonBest ? `${formatScoreMs(ctx.seasonBest.scoreMs)}s` : "--.--"}
                 </div>
               </div>
@@ -324,9 +326,14 @@ export default function DeckPage() {
         <div className="deck-id">
           <AvatarBadge />
           <span className="deck-id__sep" aria-hidden />
-          <button className="deck-id__btn" onClick={exitRun} title="Leave the run" aria-label="Leave the run">
-            EXIT
-          </button>
+          {/* EXIT = return to the home (idle) screen, abandoning any run.
+              Hidden when signed out - next to SIGN IN it read as its
+              opposite (owner review 2026-09-01). */}
+          {signedIn && (
+            <button className="deck-id__btn" onClick={exitRun} title="Return home (leaves the run)" aria-label="Return home">
+              EXIT
+            </button>
+          )}
           <button
             className="deck-id__btn"
             onClick={toggleFullscreen}

@@ -9,6 +9,7 @@ import { findModel, findSkill, gatedModels, gatedSkills } from "../../chat/catal
 import { getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
 import { isDeployedStage } from "../../lib/deploy-stage";
+import { CHAT_TURNS_PER_MINUTE, allowChatTurn } from "../../chat/rate-limit";
 
 // GET/POST /api/chat - the tier-gated chat turn.
 //
@@ -99,6 +100,17 @@ export async function GET(): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const caller = await resolveCaller();
   if (isFailure(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
+
+  // Debug-surface throttle (owner decision 2026-09-01): chat verifies the
+  // S2S chain, it is not a product feature - and every turn spends Atlas
+  // tokens. Refused BEFORE any parsing so a rejected turn costs nothing.
+  const rate = allowChatTurn(`${caller.workspaceId}:${caller.sub ?? "anon"}`);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: `debug surface rate limit: ${CHAT_TURNS_PER_MINUTE} turns/minute - retry in ${rate.retryAfterSeconds}s` },
+      { status: 429, headers: { "retry-after": String(rate.retryAfterSeconds ?? 60) } },
+    );
+  }
 
   let body: unknown;
   try {

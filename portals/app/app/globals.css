@@ -746,6 +746,13 @@ footer.page-links {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.deck-menu__group {
+  padding: 7px 10px 3px;
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: var(--vxtpl-deck-dim);
+}
 .deck-menu form {
   display: block;
 }
@@ -921,6 +928,9 @@ footer.page-links {
   text-transform: uppercase;
   color: var(--vxtpl-deck-dim);
 }
+.deck-chip--wide {
+  min-width: 168px;
+}
 .deck-chip .deck-panel__value {
   display: flex;
   align-items: baseline;
@@ -928,13 +938,9 @@ footer.page-links {
   margin-top: 2px;
   font-size: 0.85rem;
 }
-.deck-chip__tag {
-  min-width: 3.6em;
-  font-family: var(--vxtpl-sans);
-  font-size: 0.54rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: var(--vxtpl-deck-dim);
+.deck-chip__sep {
+  color: rgba(245, 166, 35, 0.35);
+  font-weight: 400;
 }
 .deck-chip .deck-ticks {
   margin-top: 4px;

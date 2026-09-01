@@ -43,4 +43,7 @@ export interface ChatReply {
 }
 
 export const MAX_HISTORY_MESSAGES = 20;
-export const MAX_MESSAGE_LENGTH = 4000;
+// 500, not 4000 (owner decision 2026-09-01): chat is a DEBUG surface that
+// verifies the S2S chain, not a product feature - a verification prompt fits
+// in a sentence, and every extra character is billed Atlas tokens.
+export const MAX_MESSAGE_LENGTH = 500;
