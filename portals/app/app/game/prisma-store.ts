@@ -73,14 +73,15 @@ export class PrismaGameStore implements GameStore {
     opts: { limit?: number; since?: Date },
   ): Promise<GameRunRow[]> {
     const p = await getPrismaClient();
+    // finished_at is THE season anchor (see the port doc in store.ts).
     const rows = await p.gameRun.findMany({
       where: {
         workspaceId,
         sub,
         status: "finished",
-        ...(opts.since ? { startedAt: { gte: opts.since } } : {}),
+        finishedAt: opts.since ? { gte: opts.since } : { not: null },
       },
-      orderBy: { startedAt: "desc" },
+      orderBy: { finishedAt: "desc" },
       ...(opts.limit !== undefined ? { take: opts.limit } : {}),
     });
     return rows.map(toRow);

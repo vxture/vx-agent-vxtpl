@@ -72,7 +72,9 @@ export async function GET(): Promise<Response> {
     // not just the RECENT_MAX the list shows.
     const all = await store.recentFinished(caller.workspaceId, caller.sub, { since: season.start });
     trend = dailyTrend(
-      all.filter((r) => r.scoreMs != null).map((r) => ({ scoreMs: r.scoreMs!, startedAt: r.startedAt })),
+      all
+        .filter((r) => r.scoreMs != null && r.finishedAt != null)
+        .map((r) => ({ scoreMs: r.scoreMs!, at: r.finishedAt! })),
     );
   }
 

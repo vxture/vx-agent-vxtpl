@@ -120,10 +120,10 @@ test("call signs are deterministic, anonymous, and ASCII", () => {
 
 test("dailyTrend aggregates per UTC day, oldest first", () => {
   const runs = [
-    { scoreMs: 5000, startedAt: new Date("2026-08-30T23:50:00Z") },
-    { scoreMs: 9000, startedAt: new Date("2026-08-31T00:10:00Z") },
-    { scoreMs: 3000, startedAt: new Date("2026-08-31T08:00:00Z") },
-    { scoreMs: 20000, startedAt: new Date("2026-08-31T09:00:00Z") },
+    { scoreMs: 5000, at: new Date("2026-08-30T23:50:00Z") },
+    { scoreMs: 9000, at: new Date("2026-08-31T00:10:00Z") },
+    { scoreMs: 3000, at: new Date("2026-08-31T08:00:00Z") },
+    { scoreMs: 20000, at: new Date("2026-08-31T09:00:00Z") },
   ];
   const trend = dailyTrend(runs);
   assert.deepEqual(trend, [
