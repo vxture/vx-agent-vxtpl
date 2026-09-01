@@ -5,10 +5,12 @@ product is copied from. Those are deliberately the same thing: a template nobody
 runs drifts from reality, so vxtpl proves the platform integration surface by
 consuming it in production at `https://vxtpl.vxture.com`.
 
-Its product is **The 20-Second Challenge** - a bullet-dodging reaction game
-whose three subscription tiers (daily quota, personal record, global
-leaderboard + trend) run the platform's real quota / entitlement machinery
-with real users (ADR-006, `docs/20-specs/20-challenge-game.md`).
+Its product is **Emberstorm** (game mode: The 20-Second Challenge) - a
+bullet-dodging reaction game whose three subscription tiers (daily quota,
+personal record, global leaderboard + trend) run the platform's real quota /
+entitlement machinery with real users (ADR-006,
+`docs/20-specs/20-challenge-game.md`). `vxtpl` is the product code;
+Emberstorm is the brand (`BRAND.displayName`).
 
 It signs users in against the central accounts service (C1), gates them by
 subscription tier (C2), receives provisioning webhooks (C3), calls **Atlas** for

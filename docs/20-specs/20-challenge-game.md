@@ -1,4 +1,9 @@
-# The 20-Second Challenge - game and subscription specification
+# Emberstorm (The 20-Second Challenge) - game and subscription specification
+
+The product is named **Emberstorm** (`BRAND.displayName`) - the arena is a
+storm of amber embers converging on the player; "The 20-Second Challenge" is
+the game mode it ships. `vxtpl` stays the product CODE (platform key, name
+cascade) - plumbing, not brand.
 
 vxtpl's business domain (ADR-006): a 20-second bullet-dodging challenge whose
 three subscription tiers exercise the platform's quota / subscription /
