@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { QUALIFY_MS, formatScoreMs, type TrendPoint } from "../../game/rules";
 
-// The pro trend: daily best survival over the 30-day window, one line.
+// The pro trend: daily best survival over the CURRENT SEASON, one line.
 //
 // One series on purpose - the spec asks for "a trend curve", and a single
 // series needs no legend (the title names it) and cannot collide with itself.
@@ -27,13 +27,23 @@ interface Hover {
   py: number;
 }
 
-export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windowDays: number }) {
+export function TrendChart({
+  points,
+  startsAt,
+  label,
+}: {
+  points: TrendPoint[];
+  /** ISO instant the window opens at - the SEASON start (owner decision
+   * 2026-09-01: no hardcoded day count; the chart spans the season). */
+  startsAt: string;
+  label?: string;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
 
   const geo = useMemo(() => {
     const end = Date.parse(new Date().toISOString().slice(0, 10)); // today, UTC midnight
-    const start = end - (windowDays - 1) * DAY_MS;
+    const start = Math.min(Date.parse(startsAt.slice(0, 10)), end - DAY_MS);
     const x = (day: string) => M.left + ((Date.parse(day) - start) / (end - start || 1)) * PLOT_W;
     // The y domain is open at the top - 20s qualifies, it does not cap. Grow
     // to fit the best run, in 5s steps, and thin the gridlines as it grows.
@@ -53,7 +63,7 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
       return { px: M.left + (PLOT_W * i) / (tickCount - 1), label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}` };
     });
     return { dots, ticks, y, grid };
-  }, [points, windowDays]);
+  }, [points, startsAt]);
 
   const path = useMemo(
     () => geo.dots.map((d, i) => `${i === 0 ? "M" : "L"}${d.px.toFixed(1)},${d.py.toFixed(1)}`).join(" "),
@@ -72,7 +82,7 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
   }
 
   if (points.length === 0) {
-    return <p className="trend-empty">No finished runs in the last {windowDays} days yet - the curve starts with your next one.</p>;
+    return <p className="trend-empty">No finished runs this season yet - the curve starts with your next one.</p>;
   }
 
   const h = hover ? geo.dots[hover.index] : null;
@@ -83,7 +93,7 @@ export function TrendChart({ points, windowDays }: { points: TrendPoint[]; windo
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="trend-svg"
         role="img"
-        aria-label={`Daily best survival time over the last ${windowDays} days`}
+        aria-label={`Daily best survival time, ${label ?? "this season"}`}
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >

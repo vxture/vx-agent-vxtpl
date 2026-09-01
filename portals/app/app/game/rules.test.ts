@@ -61,10 +61,7 @@ test("history window widens with the ladder", () => {
     kind: "last10",
     limit: 10,
   });
-  assert.deepEqual(historyWindowFor(makeEntitlement("ws", "p", { tier: "pro" })), {
-    kind: "days30",
-    days: 30,
-  });
+  assert.deepEqual(historyWindowFor(makeEntitlement("ws", "p", { tier: "pro" })), { kind: "season" });
   assert.deepEqual(historyWindowFor(makeEntitlement("ws", "p", { tier: null })), { kind: "none" });
 });
 

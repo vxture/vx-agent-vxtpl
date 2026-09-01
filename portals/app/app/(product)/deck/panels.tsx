@@ -23,8 +23,8 @@ interface RecordsData {
   allowed: boolean;
   requiredTier?: Tier | null;
   requiredTierForTrend?: Tier | null;
-  window?: { kind: "last10"; limit: number } | { kind: "days30"; days: number };
-  season?: { key: string; label: string };
+  window?: { kind: "last10"; limit: number } | { kind: "season" };
+  season?: { key: string; label: string; startsAt: string; endsAt: string };
   top?: RunJson[];
   recent?: RunJson[];
   trend?: TrendPoint[] | null;
@@ -150,20 +150,24 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
 
           {data.trendAllowed ? (
             <div className="deck-trend">
-              <div className="deck-mod__sub">Daily best - {data.season?.label ?? "this season"} (30d max)</div>
-              <TrendChart points={data.trend ?? []} windowDays={30} />
+              <div className="deck-mod__sub">Daily best - {data.season?.label ?? "this season"}</div>
+              <TrendChart
+                points={data.trend ?? []}
+                startsAt={data.season?.startsAt ?? new Date().toISOString()}
+                label={data.season?.label}
+              />
             </div>
           ) : (
             <LockNote
-              note="Pro widens the window to 30 days and draws the daily-best curve - plus the global board."
+              note="Pro widens the window to the whole season and draws the daily-best curve - plus the global board."
               tier={data.requiredTierForTrend}
               cta="MOVE TO PRO"
             />
           )}
 
           <div className="deck-mod__sub">
-            Recent - {data.season?.label ?? "this season"} (
-            {data.window?.kind === "days30" ? "30 days" : "last 10"})
+            Recent - {data.season?.label ?? "this season"}
+            {data.window?.kind === "last10" ? " (last 10)" : ""}
           </div>
           <div className="deck-rows">
             {(data.recent ?? []).slice(0, 8).map((r, i) => (

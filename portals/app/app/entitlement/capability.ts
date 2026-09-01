@@ -13,7 +13,7 @@ import { TIERS, hasProductAccess } from "./types";
 // The game ladder (docs/20-specs/20-challenge-game.md) unlocks exactly one
 // capability per step: free plays under a daily quota, starter removes the
 // quota and gains personal history, pro gains the global leaderboard and the
-// 30-day trend. business/enterprise add nothing on the game axis - the design
+// season trend. business/enterprise add nothing on the game axis - the design
 // is a three-step ladder, and the cumulative matrix carries it upward for free.
 
 export type FeatureKey = string;
