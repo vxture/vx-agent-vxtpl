@@ -3,9 +3,10 @@
 # (deploy.yml / rollback.yml) after the image build. Single-stack, prod only
 # (ADR-002). worker02 is a data-array box, so a full-stack pull + up -d is fine.
 #
-#   bash deploy.sh all       # directories -> start -> verify
+#   bash deploy.sh all       # directories -> start -> verify -> prune
 #   bash deploy.sh start     # pull image (GHCR primary, ACR fallback) + up -d
 #   bash deploy.sh verify    # health check
+#   bash deploy.sh prune     # drop release images except the running one
 #
 # The image tag + registries come from the environment CI sets:
 #   IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG (primary = GHCR),
@@ -112,11 +113,39 @@ cmd_verify() {
   exit 1
 }
 
+cmd_prune() {
+  # Keep only the image the RUNNING app container uses (owner decision
+  # 2026-09-01: release images are ~330MB each and accumulate one per tag).
+  # Runs after verify in `all`, so a deploy that failed verification never
+  # prunes. Rollback is unaffected: rollback.yml re-pulls any historical tag
+  # from the registry with CI credentials. Matches both the GHCR primary and
+  # the ACR fallback alias (same trailing /<product>-app name).
+  local keep_id
+  keep_id="$(docker inspect --format '{{.Image}}' "${PROJECT_NAME}-app" 2>/dev/null || true)"
+  if [ -z "$keep_id" ]; then
+    log "prune skipped (no running app container)"
+    return 0
+  fi
+  local pruned=0 ref id
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    id="$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null || true)"
+    if [ -n "$id" ] && [ "$id" != "$keep_id" ]; then
+      if docker rmi "$ref" >/dev/null 2>&1; then
+        pruned=$((pruned + 1))
+        log "pruned ${ref}"
+      fi
+    fi
+  done < <(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "/${IMAGE_NAME}:" || true)
+  log "prune done (${pruned} old image(s) removed; kept the running one)"
+}
+
 cmd_all() {
   cmd_environment
   cmd_directories
   cmd_start
   cmd_verify
+  cmd_prune
 }
 
 case "${1:-}" in
@@ -125,5 +154,6 @@ case "${1:-}" in
   directories) cmd_directories ;;
   start)       cmd_start ;;
   verify)      cmd_verify ;;
-  *) echo "usage: bash deploy.sh {all|environment|directories|start|verify}"; exit 1 ;;
+  prune)       cmd_prune ;;
+  *) echo "usage: bash deploy.sh {all|environment|directories|start|verify|prune}"; exit 1 ;;
 esac
