@@ -169,8 +169,11 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
             Recent - {data.season?.label ?? "this season"}
             {data.window?.kind === "last10" ? " (last 10)" : ""}
           </div>
+          {/* No display cap: the API already bounds the list (last-10 for
+            * starter, RECENT_MAX for pro) and the rail body scrolls - a UI
+            * slice here silently hid the season window (owner 2026-09-01). */}
           <div className="deck-rows">
-            {(data.recent ?? []).slice(0, 8).map((r, i) => (
+            {(data.recent ?? []).map((r, i) => (
               <div key={i} className="deck-row">
                 <span className={r.outcome === "survived" ? "deck-row__value deck-row__value--win" : "deck-row__value"}>
                   {formatScoreMs(r.scoreMs ?? 0)}s
