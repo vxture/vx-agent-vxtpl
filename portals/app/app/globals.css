@@ -560,28 +560,34 @@ footer.page-links {
 .deck-arc-right {
   right: 4px; /* mirroring is the art's job (deck-arc__art--flip) */
 }
+/* At rest the frame is barely there - a faint breathing ghost in BOTH poses
+ * (open and folded alike); hovering or keyboard focus is the activated state
+ * that brings it up to full strength with the glow. */
 .deck-arc__art {
   display: block;
   width: 100%;
   height: 100%;
   background: url("/deck-frame-arc.png") center / contain no-repeat;
-  transition: transform 0.24s ease, filter 0.24s ease;
-  filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.25));
-  animation: deck-ember-pulse 2.6s ease-in-out infinite;
+  transition: transform 0.24s ease, filter 0.24s ease, opacity 0.3s ease;
+  opacity: 0.22;
+  animation: deck-ember-pulse 3.4s ease-in-out infinite;
 }
 .deck-arc__art--flip {
   transform: scaleX(-1);
 }
-.deck-arc:hover .deck-arc__art {
+.deck-arc:hover .deck-arc__art,
+.deck-arc:focus-visible .deck-arc__art {
+  animation: none;
+  opacity: 1;
   filter: drop-shadow(0 0 10px rgba(245, 190, 60, 0.55)) brightness(1.12);
 }
 @keyframes deck-ember-pulse {
   0%,
   100% {
-    opacity: 0.82;
+    opacity: 0.16;
   }
   50% {
-    opacity: 1;
+    opacity: 0.3;
   }
 }
 @media (prefers-reduced-motion: reduce) {
