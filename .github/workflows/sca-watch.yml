@@ -66,7 +66,7 @@ jobs:
       ISSUE_TITLE: "sca-watch: main is carrying a known vulnerability"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download osv-scanner
         shell: bash

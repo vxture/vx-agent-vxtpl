@@ -84,7 +84,7 @@ jobs:
       name: ${{ needs.detect.outputs.environment }}
     steps:
       - name: Checkout deploy sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
 
