@@ -53,8 +53,9 @@ updates:
       # PROPOSED; the registry above is what makes resolution possible at all.
       - dependency-name: '@vxture/*'
 
-  # Keep pinned Action versions (docker/build-push-action@v6, actions/checkout@v4,
-  # etc.) current - these live outside npm and would otherwise drift silently.
+  # Keep the pinned Action versions current - they live outside npm and would
+  # otherwise drift silently. Deliberately names no version here: a comment that
+  # lists them goes stale the first time one of these PRs merges.
   # This half has always worked: it needs no private registry.
   - package-ecosystem: github-actions
     directory: /
