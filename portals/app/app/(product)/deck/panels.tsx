@@ -78,11 +78,20 @@ export function DeckModule({
   );
 }
 
+/** A locked module's note plus its way out.
+ *
+ * The button is deliberately QUIET (owner review 2026-09-02): a solid amber
+ * slab in a side rail competes with the arena and reads as the deck shouting
+ * at the player to pay. These sit where the data would be, so they should look
+ * like the absent data - dim at rest, lighting up under the pointer, the same
+ * idiom as the arc ornaments. The two SOLID buttons on the deck stay solid:
+ * sign-in and no-subscription are the stage's own next step, not an aside in
+ * a rail. */
 function LockNote({ note, tier, cta }: { note: string; tier: Tier | null | undefined; cta: string }) {
   return (
     <div className="deck-lock">
       <p className="deck-lock__note">{note}</p>
-      <a className="deck-btn deck-btn-solid" href={subscribeUrl({ intent: "upgrade", targetTier: tier ?? undefined })}>
+      <a className="deck-btn deck-btn-quiet" href={subscribeUrl({ intent: "upgrade", targetTier: tier ?? undefined })}>
         {cta}
       </a>
     </div>
@@ -119,9 +128,9 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
 
       {data && !data.allowed && (
         <LockNote
-          note="Free plays every day, but nothing is kept. Starter records your last 10 runs with the best three pinned."
+          note="The free tier lets you play every day but keeps nothing. Starter records your last 10 runs, with your best three pinned above them."
           tier={data.requiredTier}
-          cta="MOVE TO STARTER"
+          cta="UPGRADE TO STARTER"
         />
       )}
 
@@ -160,9 +169,9 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
             </div>
           ) : (
             <LockNote
-              note="Pro widens the window to the whole season and draws the daily-best curve - plus the global board."
+              note="Pro widens the window from your last 10 runs to the whole season, draws your daily-best curve, and opens the global board."
               tier={data.requiredTierForTrend}
-              cta="MOVE TO PRO"
+              cta="UPGRADE TO PRO"
             />
           )}
 
@@ -206,9 +215,9 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
 
       {data && !data.allowed && (
         <LockNote
-          note="Pro puts your best run up against everyone's. Players appear as call signs - the board is global, identities are not."
+          note="Pro puts your best run up against everyone else's. Players appear as call signs - the board is global, identities are not."
           tier={data.requiredTier}
-          cta='MOVE TO PRO'
+          cta='UPGRADE TO PRO'
         />
       )}
 

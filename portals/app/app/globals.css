@@ -1154,6 +1154,22 @@ button.deck-orb:hover {
   background: var(--vxtpl-deck-gold-bright);
 }
 
+/* The side rails' upsell. Ghost-faint at rest, activated on hover - the same
+   idiom as the arc ornaments, and for the same reason: a rail is an aside, and
+   an aside that glows competes with the arena. Solid amber is reserved for the
+   stage's own next step (sign in, no subscription). */
+.deck-btn-quiet {
+  border-color: var(--vxtpl-deck-line-faint);
+  background: transparent;
+  color: var(--vxtpl-deck-dim);
+  font-weight: 700;
+}
+.deck-btn-quiet:hover {
+  border-color: var(--vxtpl-deck-line);
+  background: rgba(245, 166, 35, 0.08);
+  color: var(--vxtpl-deck-gold-bright);
+}
+
 .deck-dialog {
   max-width: 430px;
   padding: 24px 26px;
