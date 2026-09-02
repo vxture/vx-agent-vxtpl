@@ -5,6 +5,7 @@ import { getAuthUser } from "../../auth/lib/session";
 import { getEntitlementResolver } from "../../entitlement/resolver";
 import { ctaFor, hasDataAccess, hasProductAccess } from "../../entitlement/types";
 import { isDeployedStage } from "../../lib/deploy-stage";
+import { clearCookieOptions } from "../../auth/lib/cookie";
 import type { AccessState } from "../../access/types";
 
 // GET /api/access - the one call a product front door makes.

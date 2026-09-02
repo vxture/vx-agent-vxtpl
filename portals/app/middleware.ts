@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ssoAttemptCookieName, ssoAttemptCookieOptions } from "./app/auth/lib/sso";
 
 /**
  * Send an unverified visitor to the front door.
@@ -8,6 +9,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * verification are not available - and even if they were, verifying on every
  * request would put a Redis read and a signature check in front of every
  * navigation. The real decision belongs to `/api/access`, which the gate calls.
+ *
+ * Before either, though, it tries to avoid the question entirely. See the
+ * SILENT SSO block below: a visitor arriving from the platform is already
+ * signed in at the IdP, and asking them to press a button to say so is asking
+ * them to re-assert what accounts.vxture.com already knows.
  *
  * So the contract between the two layers is deliberately lopsided:
  *

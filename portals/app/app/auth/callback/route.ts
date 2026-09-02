@@ -4,6 +4,7 @@ import { exchangeCode, verifyToken } from "../lib/oidc";
 import { takeAuthState, putSession, type RpSession } from "../lib/session-store";
 import { sessionCookieOptions } from "../lib/cookie";
 import { randomToken } from "../lib/pkce";
+import { isInteractionRequired, ssoAttemptCookieName, ssoAttemptCookieOptions } from "../lib/sso";
 
 // GET /auth/callback (080-rp section 2.3/2.5): consume the single-use state,
 // exchange the code, verify id_token (nonce) + access_token, assert matching
@@ -20,9 +21,25 @@ export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state) return reject("missing code/state");
+  const error = url.searchParams.get("error");
 
-  const authState = await takeAuthState(cfg.clientId, state);
+  // An error response still carries our state, so consume it either way - a
+  // handshake that ended in an error must not stay replayable.
+  const authState = state ? await takeAuthState(cfg.clientId, state) : null;
+
+  if (error) {
+    // `login_required` and friends are the DESIGNED answer to prompt=none: the
+    // IdP has no session for this browser and we told it not to ask. That is
+    // information, not a failure - send the visitor where they were going and
+    // let the product show its own door. The middleware's marker cookie is
+    // already set, so this costs one redirect and does not repeat.
+    if (authState?.silent && isInteractionRequired(error)) {
+      return NextResponse.redirect(new URL(authState.returnTo, cfg.appOrigin || url.origin).toString());
+    }
+    return reject("authorization error");
+  }
+
+  if (!code || !state) return reject("missing code/state");
   if (!authState) return reject("unknown or replayed state");
 
   let tokens;

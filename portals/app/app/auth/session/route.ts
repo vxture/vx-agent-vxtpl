@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getOidcConfig } from "../lib/config";
 import { getAuthContext } from "../lib/session";
 import { resolveDisplayProfile } from "../lib/profile";
+import { clearCookieOptions } from "../lib/cookie";
 
 // GET /auth/session (080-rp section 2.2): read the cookie, resolve the RP session
 // (silent-refreshing a near-expiry access token), return the bootstrap claims.
