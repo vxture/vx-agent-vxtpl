@@ -80,7 +80,7 @@ jobs:
           test -n "$NODE_AUTH_TOKEN"
 
       - name: Checkout passed revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.sha.outputs.sha }}
 
