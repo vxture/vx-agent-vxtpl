@@ -8,6 +8,11 @@ name: db-init
 #
 #   gh workflow run db-init.yml -f action=apply -f confirm=yes -f expected_sha=<sha>
 #
+# The DDL applied is the DDL IN THIS CHECKOUT, packed and shipped to the host by
+# the job - never the copy a past deploy left in the deploy directory. That is
+# what makes expected_sha mean anything, and the increments are counted on both
+# sides so a tree that arrives empty fails instead of passing quietly.
+#
 # `apply` runs the three-part baseline + incr/ increments (idempotent create-once
 # + ADD COLUMN IF NOT EXISTS) against the production db container as the DB
 # superuser (docker exec, in-container trust), then sets the vxtpl_svc role's
@@ -103,6 +108,7 @@ jobs:
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
+          PINNED_SHA: ${{ github.sha }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
@@ -114,16 +120,41 @@ jobs:
           snake="${PRODUCT_CODE//-/_}"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 
+          # Ship the DDL from THIS checkout - the commit expected_sha pinned.
+          #
+          # It used to be applied from $REPO_DIR on the host, i.e. from whatever
+          # the last SUCCESSFUL deploy happened to rsync there, which made the
+          # version pin a promise this job could not keep. That cost a
+          # production outage: the 2026-09-01 run went green against a host
+          # still carrying v0.1.5, whose incr/ held a README and no .sql, so
+          # `shopt -s nullglob` silently applied zero increments, the challenge
+          # schema was never created, and every /api/game call 500'd until
+          # someone read the log closely enough to notice a missing line.
+          # Packing the tree here closes the gap between the pinned commit and
+          # the SQL the database actually sees.
+          test -d deploy/database/ddl || { echo "no deploy/database/ddl in this checkout" >&2; exit 1; }
+          incr_count="$(find deploy/database/ddl/incr -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
+          echo "[db-init] shipping DDL from ${PINNED_SHA:0:8}: $incr_count increment(s)"
+          tar -czf /tmp/db-init-ddl.tgz -C deploy database/ddl
+
           cat > /tmp/db-init.sh <<'REMOTE_SCRIPT'
           set -euo pipefail
-          cd "$REPO_DIR"
           DB="vxturebiz_${SNAKE}_prod"
           CONT="${PRODUCT_CODE}-db"
+          # The operator .env still comes from the deploy root - it lives on the
+          # host by design and never transits CI. Only the DDL is shipped.
           ENV_FILE="$(cd "$REPO_DIR/.." && pwd)/etc/.env"
+          DDL_DIR="$(mktemp -d)"
+          trap 'rm -rf "$DDL_DIR" "$DDL_TGZ"' EXIT
+          tar -xzf "$DDL_TGZ" -C "$DDL_DIR"
+          DDL="$DDL_DIR/database/ddl"
           run() { docker exec -i "$CONT" psql -U postgres -d "$DB" -v ON_ERROR_STOP=1 "$@"; }
           # The DDL carries vxtpl's real role name (vxtpl_svc) - it is applied
           # verbatim, with no substitution layer between the file and the database.
           apply_file() { run < "$1"; }
+          list_tables() {
+            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('vx_provision','local_authz','local_usage','vxtpl_game') ORDER BY 1;"
+          }
 
           # Service-role password. The role is created LOGIN-only (no password) by
           # 97_service_role.sql; the app connects as vxtpl_svc over TCP (scram),
@@ -140,22 +171,32 @@ jobs:
 
           if [ "$ACTION" = "verify" ]; then
             echo "[db-init] contract + domain schema tables:"
-            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('vx_provision','local_authz','local_usage','vxtpl_game') ORDER BY 1;"
+            list_tables
             echo "[db-init] service role state:"
             run -c "SELECT rolname, rolcanlogin, (rolpassword IS NOT NULL) AS has_password FROM pg_roles WHERE rolname = '${SNAKE}_svc';"
             if [ -n "$svc_pw" ]; then echo "[db-init] .env DATABASE_URL carries a svc password: yes"; else echo "[db-init] .env DATABASE_URL carries a svc password: no"; fi
             exit 0
           fi
 
-          for f in database/ddl/00_baseline.sql database/ddl/97_service_role.sql database/ddl/98_column_locks.sql; do
-            echo "[db-init] applying $f"
+          for f in "$DDL/00_baseline.sql" "$DDL/97_service_role.sql" "$DDL/98_column_locks.sql"; do
+            echo "[db-init] applying $(basename "$f")"
             apply_file "$f"
           done
+          # Increments, counted. CI told us how many the pinned commit carries,
+          # so "the glob matched nothing" can no longer pass as success - the
+          # exact failure that let a missing domain schema ship green.
           shopt -s nullglob
-          for f in database/ddl/incr/*.sql; do
+          applied=0
+          for f in "$DDL"/incr/*.sql; do
             echo "[db-init] applying incr $(basename "$f")"
             apply_file "$f"
+            applied=$((applied + 1))
           done
+          if [ "$applied" -ne "$EXPECTED_INCR" ]; then
+            echo "[db-init] FATAL: applied $applied increment(s); the pinned commit carries $EXPECTED_INCR" >&2
+            exit 1
+          fi
+          echo "[db-init] applied $applied increment(s), matching the pinned commit"
 
           # Give the service role its password so the app can authenticate. Source
           # of truth is the operator .env's DATABASE_URL. If it has none yet,
@@ -176,8 +217,13 @@ jobs:
           esc="$(printf '%s' "$svc_pw" | sed "s/'/''/g")"
           printf "ALTER ROLE %s_svc PASSWORD '%s';\n" "$SNAKE" "$esc" | run
           echo "[db-init] service-role password set"
+          # Every apply ends by SHOWING what the database now has. A structure
+          # change that reports only "done" is a change nobody checked.
+          echo "[db-init] resulting contract + domain schema tables:"
+          list_tables
           echo "[db-init] done."
           REMOTE_SCRIPT
-          scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 /tmp/db-init.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/db-init.sh"
-          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") SNAKE=$(printf %q "$snake") bash /tmp/db-init.sh" \
+          scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 \
+            /tmp/db-init.sh /tmp/db-init-ddl.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") SNAKE=$(printf %q "$snake") DDL_TGZ=/tmp/db-init-ddl.tgz EXPECTED_INCR=$(printf %q "$incr_count") bash /tmp/db-init.sh" \
             | ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s
