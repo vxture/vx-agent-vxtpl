@@ -16,6 +16,7 @@ export interface OidcConfig {
   authorizeUrl: string;
   tokenUrl: string;
   jwksUrl: string;
+  userInfoUrl: string;
   endSessionUrl: string;
 }
 
@@ -50,6 +51,13 @@ export function getOidcConfig(): OidcConfig {
     authorizeUrl: `${issuer}/oidc/authorize`,
     tokenUrl: `${issuer}/oidc/token`,
     jwksUrl: `${issuer}/oidc/jwks`,
+    // UserInfo is where the display claims actually live for this IdP: the
+    // discovery document advertises name / picture / email under
+    // claims_supported, but the id_token production accounts get back carries
+    // none of them (live finding 2026-09-02 - the deck fell through to the sub).
+    // Standard OIDC allows exactly that, so an RP that wants a person's name
+    // must ask UserInfo for it rather than assume the id_token is complete.
+    userInfoUrl: `${issuer}/oidc/userinfo`,
     endSessionUrl: `${issuer}/oidc/end_session`,
   };
 }

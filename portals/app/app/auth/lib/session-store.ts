@@ -1,9 +1,11 @@
 import Redis from "ioredis";
+import type { IdProfile } from "./claims";
 
 // RP session store on Redis (080-rp section 2.4). Key families are namespaced by
 // client_id so multiple RPs can share one Redis:
 //   vx:rp:{cid}:authstate:{state}  login handshake {verifier,nonce,returnTo}, ~600s, single-use
 //   vx:rp:{cid}:sess:{rpsid}       session bundle {tokens,sid,sub,...}, TTL ~ refresh lifetime
+//   vx:rp:{cid}:profile:{rpsid}    display profile {name,picture,email}, short TTL
 //   vx:rp:{cid}:sididx:{sid}       SET of rpsids for a given IdP sid (back-channel logout)
 //   vx:rp:{cid}:bclogout:{jti}     logout_token replay guard
 //
@@ -25,6 +27,7 @@ function redis(): Redis {
 const k = {
   authstate: (cid: string, state: string) => `vx:rp:${cid}:authstate:${state}`,
   sess: (cid: string, rpsid: string) => `vx:rp:${cid}:sess:${rpsid}`,
+  profile: (cid: string, rpsid: string) => `vx:rp:${cid}:profile:${rpsid}`,
   sididx: (cid: string, sid: string) => `vx:rp:${cid}:sididx:${sid}`,
   bclogout: (cid: string, jti: string) => `vx:rp:${cid}:bclogout:${jti}`,
 };
@@ -87,7 +90,33 @@ export async function deleteSession(cid: string, rpsid: string): Promise<void> {
     const sess = JSON.parse(raw) as RpSession;
     if (sess.sid) await r.srem(k.sididx(cid, sess.sid), rpsid);
   }
-  await r.del(k.sess(cid, rpsid));
+  await r.del(k.sess(cid, rpsid), k.profile(cid, rpsid));
+}
+
+// --- display profile cache -------------------------------------------------
+//
+// Kept in its OWN key rather than inside the session bundle on purpose: the
+// bundle holds the rotating refresh token, and a read-modify-write from the
+// display path could race a silent refresh and persist a retired token, which
+// would kill the session. A separate key makes the cache incapable of that.
+//
+// The TTL is short (not the session's ~30 days) so a renamed or re-avatared
+// account catches up on its own; a null-valued profile is cached too, so an
+// account the IdP has no name for costs one UserInfo call per window, not one
+// per page load.
+
+export async function putProfile(
+  cid: string,
+  rpsid: string,
+  profile: IdProfile,
+  ttlSeconds: number,
+): Promise<void> {
+  await redis().set(k.profile(cid, rpsid), JSON.stringify(profile), "EX", ttlSeconds);
+}
+
+export async function getProfile(cid: string, rpsid: string): Promise<IdProfile | null> {
+  const raw = await redis().get(k.profile(cid, rpsid));
+  return raw ? (JSON.parse(raw) as IdProfile) : null;
 }
 
 export async function sessionsForSid(cid: string, sid: string): Promise<string[]> {

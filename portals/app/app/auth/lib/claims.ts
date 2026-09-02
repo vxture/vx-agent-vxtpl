@@ -59,7 +59,9 @@ export interface AccessClaims {
   sub: string;
   active_org?: string;
   active_org_type?: string;
+  active_org_name?: string;
   active_workspace?: string;
+  active_workspace_name?: string;
   roles?: string[];
   account_status?: string;
 }
@@ -68,7 +70,9 @@ export interface AuthUser {
   sub: string; // full "usr_<uuid>" - stored verbatim by the product DB
   activeOrg: string | null;
   activeOrgType: string | null; // "personal" | "organization"
+  activeOrgName: string | null; // human label; the id is an internal key
   activeWorkspace: string | null;
+  activeWorkspaceName: string | null; // ditto - what a UI is allowed to show
   roles: string[]; // raw scope-prefixed, as issued
   accountStatus: string | null; // read per-request from token, never stored
   canManage: boolean;
@@ -86,20 +90,46 @@ export interface IdProfile {
   email: string | null;
 }
 
+export const EMPTY_PROFILE: IdProfile = { displayName: null, picture: null, email: null };
+
+/** The display claims out of any OIDC claims bag - an id_token payload or a
+ * UserInfo body, which carry the same names (OIDC core 5.1). */
+export function profileFromClaims(payload: Record<string, unknown>): IdProfile {
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return {
+    displayName: s(payload["name"]) ?? s(payload["nickname"]) ?? s(payload["preferred_username"]),
+    picture: s(payload["picture"]),
+    email: s(payload["email"]),
+  };
+}
+
 export function profileFromIdToken(idToken: string): IdProfile {
   try {
-    const payload = JSON.parse(
-      Buffer.from(idToken.split(".")[1] ?? "", "base64url").toString("utf8"),
-    ) as Record<string, unknown>;
-    const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-    return {
-      displayName: s(payload["name"]) ?? s(payload["nickname"]) ?? s(payload["preferred_username"]),
-      picture: s(payload["picture"]),
-      email: s(payload["email"]),
-    };
+    return profileFromClaims(
+      JSON.parse(Buffer.from(idToken.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<
+        string,
+        unknown
+      >,
+    );
   } catch {
-    return { displayName: null, picture: null, email: null };
+    return { ...EMPTY_PROFILE };
   }
+}
+
+/** Field-wise fill: `base` wins where it has a value, `extra` fills the holes.
+ * Used to let UserInfo complete an id_token that carries only some claims -
+ * whichever source has the name, the user gets a name. */
+export function mergeProfile(base: IdProfile, extra: IdProfile | null): IdProfile {
+  if (!extra) return base;
+  return {
+    displayName: base.displayName ?? extra.displayName,
+    picture: base.picture ?? extra.picture,
+    email: base.email ?? extra.email,
+  };
+}
+
+export function profileIsComplete(p: IdProfile): boolean {
+  return Boolean(p.displayName && p.picture && p.email);
 }
 
 export function toAuthUser(claims: AccessClaims): AuthUser {
@@ -108,7 +138,9 @@ export function toAuthUser(claims: AccessClaims): AuthUser {
     sub: claims.sub,
     activeOrg: claims.active_org ?? null,
     activeOrgType: claims.active_org_type ?? null,
+    activeOrgName: claims.active_org_name ?? null,
     activeWorkspace: claims.active_workspace ?? null,
+    activeWorkspaceName: claims.active_workspace_name ?? null,
     roles,
     accountStatus: claims.account_status ?? null,
     canManage: canManageWorkspace(roles),
