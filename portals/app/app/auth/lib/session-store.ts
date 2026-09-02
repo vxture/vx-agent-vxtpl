@@ -36,6 +36,9 @@ export interface AuthState {
   verifier: string;
   nonce: string;
   returnTo: string;
+  /** This handshake was a `prompt=none` attempt, so the callback treats an
+   * `login_required` answer as "no session there", not as a failure. */
+  silent?: boolean;
 }
 
 export interface RpSession {
