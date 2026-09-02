@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { contactLineFor, displayNameFor, workspaceLabelFor } from "./auth/lib/display";
 
 // The nav's sign-in / sign-out control.
 //
@@ -13,8 +14,10 @@ import { useEffect, useState } from "react";
 
 interface SessionUser {
   sub?: string;
-  email?: string;
+  email?: string | null;
+  displayName?: string | null;
   activeWorkspace?: string;
+  activeWorkspaceName?: string | null;
 }
 
 export function SessionControl() {
@@ -39,10 +42,17 @@ export function SessionControl() {
     );
   }
 
-  const who = state.user?.email ?? state.user?.sub ?? "signed in";
+  // Name, else email local part, else a neutral word - never the sub, and the
+  // workspace shows only if the token named it (owner rule 2026-09-02: ids are
+  // internal keys, so an unnamed workspace gets no tooltip rather than a uuid).
+  const who = displayNameFor(state.user, "Signed in");
+  const workspace = workspaceLabelFor(state.user);
+  const title = [contactLineFor(state.user), workspace && `workspace ${workspace}`]
+    .filter(Boolean)
+    .join(" - ");
   return (
     <form method="post" action="/auth/logout" className="nav-session">
-      <span title={state.user?.activeWorkspace ? `workspace ${state.user.activeWorkspace}` : undefined}>{who}</span>
+      <span title={title || undefined}>{who}</span>
       <button type="submit">Sign out</button>
     </form>
   );

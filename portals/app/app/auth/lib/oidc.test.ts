@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { verifyToken } from "./oidc";
+import { fetchUserInfo, verifyToken } from "./oidc";
 import type { OidcConfig } from "./config";
 
 const ISSUER = "https://accounts.vxture.com";
@@ -22,6 +22,7 @@ function testConfig(): OidcConfig {
     authorizeUrl: `${ISSUER}/oidc/authorize`,
     tokenUrl: `${ISSUER}/oidc/token`,
     jwksUrl: `${ISSUER}/oidc/jwks`,
+    userInfoUrl: `${ISSUER}/oidc/userinfo`,
     endSessionUrl: `${ISSUER}/oidc/end_session`,
   };
 }
@@ -97,4 +98,73 @@ test("exportJWK is available (sanity that jose keypair is usable)", async () => 
   const { publicKey } = await keys();
   const jwk = await exportJWK(publicKey);
   assert.equal(jwk.kty, "RSA");
+});
+
+// --- UserInfo -------------------------------------------------------------
+
+async function withStubbedFetch<T>(
+  handler: (url: string, init: RequestInit | undefined) => Response | Promise<Response>,
+  body: () => Promise<T>,
+): Promise<T> {
+  const real = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    Promise.resolve(handler(String(input), init))) as typeof fetch;
+  try {
+    return await body();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test("fetchUserInfo presents the access token and returns the claims", async () => {
+  const cfg = testConfig();
+  let seen = "";
+  const info = await withStubbedFetch(
+    (url, init) => {
+      assert.equal(url, `${ISSUER}/oidc/userinfo`);
+      seen = String((init?.headers as Record<string, string>).authorization);
+      return Response.json({ sub: "usr_1", name: "Ada L", email: "ada@x.com" });
+    },
+    () => fetchUserInfo(cfg, "at_123", "usr_1"),
+  );
+  assert.equal(seen, "Bearer at_123");
+  assert.equal(info?.name, "Ada L");
+});
+
+// A body for someone else is not this person's profile. Rendering it would put
+// one account's name and avatar on another's session, so it is dropped.
+test("fetchUserInfo drops a body whose sub is not the caller's", async () => {
+  const cfg = testConfig();
+  const info = await withStubbedFetch(
+    () => Response.json({ sub: "usr_someone_else", name: "Mallory" }),
+    () => fetchUserInfo(cfg, "at_123", "usr_1"),
+  );
+  assert.equal(info, null);
+});
+
+test("fetchUserInfo degrades to null, never throws", async () => {
+  const cfg = testConfig();
+  assert.equal(
+    await withStubbedFetch(
+      () => new Response("nope", { status: 401 }),
+      () => fetchUserInfo(cfg, "at_123", "usr_1"),
+    ),
+    null,
+  );
+  assert.equal(
+    await withStubbedFetch(
+      () => new Response("not json", { status: 200 }),
+      () => fetchUserInfo(cfg, "at_123", "usr_1"),
+    ),
+    null,
+  );
+  assert.equal(
+    await withStubbedFetch(
+      () => {
+        throw new Error("network down");
+      },
+      () => fetchUserInfo(cfg, "at_123", "usr_1"),
+    ),
+    null,
+  );
 });

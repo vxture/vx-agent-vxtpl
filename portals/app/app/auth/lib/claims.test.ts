@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  EMPTY_PROFILE,
   canManageWorkspace,
   isWorkspaceOwner,
+  mergeProfile,
   parseRoles,
+  profileFromClaims,
   profileFromIdToken,
+  profileIsComplete,
   toAuthUser,
 } from "./claims";
 
@@ -99,4 +103,44 @@ test("toAuthUser tolerates missing roles/context", () => {
   assert.deepEqual(user.roles, []);
   assert.equal(user.canManage, false);
   assert.equal(user.activeWorkspace, null);
+});
+
+test("toAuthUser carries the human names beside the ids", () => {
+  const user = toAuthUser({
+    sub: "usr_abc",
+    active_org: "org_1",
+    active_org_name: "Acme",
+    active_workspace: "ws_1",
+    active_workspace_name: "Acme Prod",
+  });
+  assert.equal(user.activeOrgName, "Acme");
+  assert.equal(user.activeWorkspaceName, "Acme Prod");
+  // Absent name claims are null, never the id filled in as a stand-in.
+  assert.equal(toAuthUser({ sub: "usr_x", active_workspace: "ws_1" }).activeWorkspaceName, null);
+});
+
+// UserInfo carries the same claim names as the id_token (OIDC core 5.1), which
+// is why one reader serves both - and why an id_token that omits them (what
+// production actually returns, live finding 2026-09-02) can be completed from
+// the UserInfo body rather than falling through to the sub.
+test("profileFromClaims reads a UserInfo body the same way", () => {
+  const p = profileFromClaims({ sub: "usr_1", name: "Ada L", picture: "https://a/i.png", email: "ada@x.com" });
+  assert.deepEqual(p, { displayName: "Ada L", picture: "https://a/i.png", email: "ada@x.com" });
+});
+
+test("mergeProfile fills holes without overwriting what the token already had", () => {
+  const token = { displayName: "Ada L", picture: null, email: null };
+  const info = { displayName: "Ignored", picture: "https://a/i.png", email: "ada@x.com" };
+  assert.deepEqual(mergeProfile(token, info), {
+    displayName: "Ada L",
+    picture: "https://a/i.png",
+    email: "ada@x.com",
+  });
+  assert.deepEqual(mergeProfile(token, null), token);
+});
+
+test("profileIsComplete gates the UserInfo call", () => {
+  assert.equal(profileIsComplete({ displayName: "Ada", picture: "p", email: "e" }), true);
+  assert.equal(profileIsComplete({ displayName: "Ada", picture: null, email: "e" }), false);
+  assert.equal(profileIsComplete(EMPTY_PROFILE), false);
 });

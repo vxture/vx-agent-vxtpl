@@ -94,3 +94,34 @@ fix, stated rather than papered over with a login button that lands on a 503.
 - **`/gate`, `/auth/*`, `/api/*` stay out of the matcher.** Gating the gate is an
   infinite redirect; gating `/auth/callback` breaks the request that sets the
   cookie; redirecting an API route to HTML surfaces as a JSON parse error.
+
+## Naming the person: the sub is an internal key
+
+**A `usr_<uuid>` is never displayed** (owner rule 2026-09-02). It scopes runs,
+quota and every product row, and it is what travels to the platform - but it is
+a key, not a name, and a product that prints one is telling the person it never
+asked the IdP who they are. The same holds for workspace and org ids: the token
+carries `active_workspace_name` / `active_org_name` for the human half, and an
+unnamed workspace renders as nothing rather than as its uuid.
+
+Two pieces implement it, and a copy inherits both:
+
+- `auth/lib/profile.ts` RESOLVES the display profile - name, avatar, email -
+  from the id_token first and then from UserInfo, because this IdP advertises
+  `name` / `picture` / `email` under `claims_supported` but does not put them in
+  the id_token. OIDC permits that split (core 5.3), so an RP that wants a name
+  has to go and ask. The result is cached per RP session for 10 minutes,
+  including when it comes back empty, in its OWN Redis key - never inside the
+  session bundle, whose read-modify-write would race the silent refresh and
+  could persist a retired refresh token. A UserInfo body whose `sub` is not the
+  caller's is dropped, not rendered.
+- `auth/lib/display.ts` LABELS the person: platform name, else the email local
+  part, else a caller-supplied fallback (the deck passes the player's call
+  sign - anonymous, stable, and not an identifier). Every candidate is checked
+  against the sub, so a caller that passes an identifier as its fallback gets it
+  dropped. That check is not theoretical: the deck shipped `sub.slice(0, 12)` as
+  its fallback and production showed a uuid where the name belongs.
+
+The rule is enforced in `display.test.ts`. Adding a new identity surface means
+calling `displayNameFor` / `contactLineFor`, not re-deriving a label from the
+session payload.

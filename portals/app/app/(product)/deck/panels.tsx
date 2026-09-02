@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../../entitlement/deeplink";
-import { formatScoreMs, type TrendPoint } from "../../game/rules";
+import { avatarInitial, contactLineFor, displayNameFor } from "../../auth/lib/display";
+import { callSign, formatScoreMs, type TrendPoint } from "../../game/rules";
 import type { Tier } from "../../entitlement/types";
 import { TrendChart } from "./trend-chart";
 
@@ -284,8 +285,10 @@ interface SessionUser {
   sub?: string;
   email?: string | null;
   activeWorkspace?: string;
-  /** id_token display profile (owner 2026-09-01): the strip shows the
-   * person - platform display name and avatar - never the sub. */
+  activeWorkspaceName?: string | null;
+  /** Display profile (owner 2026-09-01, id_token + UserInfo since
+   * 2026-09-02): the strip shows the person - platform display name and
+   * avatar - never the sub. */
   displayName?: string | null;
   picture?: string | null;
 }
@@ -320,16 +323,18 @@ export function AvatarBadge() {
   // session mid-visit - where the stage shows its own sign-in dialog) the
   // badge shows the local PILOT persona and the menu carries the sign-in.
   const authed = state?.authenticated === true;
-  // Platform display name and avatar first (owner 2026-09-01); email prefix
-  // is the fallback, the local PILOT persona is dev-only (the deck hides the
-  // badge entirely for signed-out visitors).
-  const email = state?.user?.email ?? "";
-  const name =
-    state?.user?.displayName ??
-    (email.includes("@") ? email.split("@")[0] : state?.user?.sub ? state.user.sub.slice(0, 12) : "pilot");
-  const picture = state?.user?.picture ?? null;
-  const initial = (name || "P").charAt(0).toUpperCase();
-  const who = [state?.user?.displayName, email || state?.user?.sub].filter(Boolean).join(" - ");
+  // Platform display name and avatar first (owner 2026-09-01); the email local
+  // part is the fallback, and below that the player's CALL SIGN - the same
+  // anonymous handle the board knows them by. The sub is never a label
+  // (owner rule 2026-09-02): it is the key that scopes their runs, and a
+  // `usr_<uuid>` across the topbar is a product admitting it never asked the
+  // IdP who this is. Without a session the badge is the dev-only PILOT persona
+  // (the deck hides it entirely for signed-out visitors).
+  const user = state?.user;
+  const name = displayNameFor(user, user?.sub ? callSign(user.sub) : "PILOT");
+  const picture = user?.picture ?? null;
+  const initial = avatarInitial(name);
+  const who = contactLineFor(user) || name;
 
   return (
     <div className="deck-avatar-wrap">

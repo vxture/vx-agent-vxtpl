@@ -87,6 +87,39 @@ export async function refreshTokens(cfg: OidcConfig, refreshToken: string): Prom
   return postToken(cfg, body);
 }
 
+const USERINFO_TIMEOUT_MS = 2000;
+
+/**
+ * UserInfo (OIDC core 5.3) with the caller's own access token. DISPLAY ONLY -
+ * never authorization: authorization reads verified access-token claims, and a
+ * bearer-authenticated JSON body is not that.
+ *
+ * Returns null on any failure (non-200, timeout, unparseable, sub mismatch)
+ * because a missing name must degrade to a fallback label, never to a broken
+ * identity strip. The sub check is the one hard rule here: a response whose sub
+ * is not the caller's is another person's profile, so it is dropped rather than
+ * rendered.
+ */
+export async function fetchUserInfo(
+  cfg: OidcConfig,
+  accessToken: string,
+  expectedSub: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(cfg.userInfoUrl, {
+      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(USERINFO_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as Record<string, unknown>;
+    if (typeof body?.sub !== "string" || body.sub !== expectedSub) return null;
+    return body;
+  } catch {
+    return null;
+  }
+}
+
 async function postToken(cfg: OidcConfig, body: URLSearchParams): Promise<TokenSet> {
   const res = await fetch(cfg.tokenUrl, {
     method: "POST",
