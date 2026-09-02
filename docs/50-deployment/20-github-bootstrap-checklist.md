@@ -91,3 +91,10 @@ variable in the path any more.
 - [ ] Release: `git tag vX.Y.Z && git push origin vX.Y.Z`, then approve the
       pending `production` deployment. DB structure changes go through
       `db-init.yml` (`confirm=yes` + `expected_sha`), never the deploy chain.
+- [ ] After a release that ADDS a `deploy/database/ddl/incr/` file, run
+      `db-init.yml` and read the log: it must print one `applying incr <file>`
+      line per increment and end with the resulting table list. The job ships
+      the DDL from the pinned commit and fails if the counts disagree, so a
+      green run now means the increments really landed - which the 2026-09-01
+      run did not (it applied the host's stale copy, silently applied nothing,
+      and left the challenge schema missing in production).
