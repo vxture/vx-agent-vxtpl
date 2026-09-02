@@ -215,8 +215,10 @@ export default function DeckPage() {
     }
   }
 
-  /** EXIT: mid-run it abandons the run (already spent - quota counts starts);
-   * otherwise it just resets the deck to idle. */
+  /** Leave the run: mid-run it abandons it (already spent - quota counts
+   * starts); otherwise there is nothing to leave and the deck stays as it is.
+   * That second half is why the EXIT button is gone (owner review
+   * 2026-09-02) - at idle it was a control with no visible effect. */
   const exitRun = useCallback(() => {
     setTicket(null);
     setResult(null);
@@ -317,26 +319,14 @@ export default function DeckPage() {
           </div>
         </div>
 
+        {/* Fullscreen first, then the person - the strip reads outward from
+            the stage it belongs to (owner review 2026-09-02).
+            There is no EXIT button. It did nothing on the screen where it was
+            usually seen: at idle there is no run to leave, so the click reset
+            state that was already reset. Mid-run it did work, but mid-run the
+            rails are folded and the pointer is on the arena - Escape is the
+            control that hand is already near, and it stays. */}
         <div className="deck-id">
-          {/* The avatar persona (and its PILOT fallback) is for the
-              signed-in deck ONLY - a signed-out visitor must never see a
-              name that looks like a session (live finding 2026-09-01). */}
-          {signedIn && (
-            <>
-              <AvatarBadge />
-              <span className="deck-id__sep" aria-hidden />
-              {/* EXIT = return to the home (idle) screen, abandoning any
-                  run. */}
-              <button
-                className="deck-id__btn"
-                onClick={exitRun}
-                title="Return home (leaves the run)"
-                aria-label="Return home"
-              >
-                EXIT
-              </button>
-            </>
-          )}
           <button
             className="deck-id__btn"
             onClick={toggleFullscreen}
@@ -345,6 +335,15 @@ export default function DeckPage() {
           >
             [ ]
           </button>
+          {/* The avatar persona (and its PILOT fallback) is for the
+              signed-in deck ONLY - a signed-out visitor must never see a
+              name that looks like a session (live finding 2026-09-01). */}
+          {signedIn && (
+            <>
+              <span className="deck-id__sep" aria-hidden />
+              <AvatarBadge />
+            </>
+          )}
         </div>
       </header>
 

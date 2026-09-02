@@ -51,8 +51,17 @@ function safeResolve(spec: string, importer: string): string | null {
 }
 
 /** Custom properties DEFINED (`--x:`), as opposed to merely used. */
+/**
+ * Custom properties DEFINED by a stylesheet.
+ *
+ * The leading boundary is load-bearing: a declaration always follows `{`, `;`
+ * or whitespace, while `.deck-btn--quiet:hover` puts `--quiet:` right after an
+ * identifier character. Without the boundary every BEM modifier that also
+ * carries a pseudo-class is reported as an unnamespaced token - which this
+ * guard did, to a real class, on the commit that added one.
+ */
 function definedIn(css: string): string[] {
-  return [...css.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]);
+  return [...css.matchAll(/(?:^|[{;\s])(--[a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]);
 }
 
 function dsTokens(): Set<string> {
@@ -166,6 +175,19 @@ test("dark mode is keyed on the class the design system sets, not the media quer
     `these switch on prefers-color-scheme: ${offenders.join(", ")}. The DS switches on \`.dark\`, ` +
       `so a media query here desynchronises the two halves of the page. Use \`.dark { ... }\`.`,
   );
+});
+
+test("a BEM modifier with a pseudo-class is not a token definition", () => {
+  // The regression this pins: `--quiet:` inside a selector is part of a class
+  // name, not a declaration. Reporting it sends the author renaming a class to
+  // satisfy a parser rather than a rule.
+  assert.deepEqual(definedIn(".deck-btn--quiet:hover { color: red; }"), []);
+  assert.deepEqual(definedIn(".a--b:focus-visible,.c--d:hover{}"), []);
+  // ...while the real thing is still caught, in every position it can occupy.
+  assert.deepEqual(definedIn(":root{--vxtpl-x:1;--vxtpl-y:2}"), ["--vxtpl-x", "--vxtpl-y"]);
+  assert.deepEqual(definedIn("  --vxtpl-z : 3;"), ["--vxtpl-z"]);
+  // A var() READ is not a definition.
+  assert.deepEqual(definedIn("color: var(--vxtpl-deck-dim);"), []);
 });
 
 test("every token vxtpl defines for itself is namespaced", () => {
