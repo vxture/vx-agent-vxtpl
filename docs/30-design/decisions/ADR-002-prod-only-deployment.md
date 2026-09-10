@@ -1,6 +1,7 @@
 # ADR-002: vxtpl deploys production only
 
-- **Status:** accepted
+- **Status:** accepted; amended by ADR-007 (2026-09-10) - the beta ROUTE now
+  ships in the template, off by default; vxtpl itself is still prod-only
 - **Date:** 2026-08-16 (records an owner decision taken during batch E)
 
 ## Context

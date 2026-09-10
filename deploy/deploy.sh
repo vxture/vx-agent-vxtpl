@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# On-host deployment lifecycle for the vxtpl production stack. Invoked by CI
-# (deploy.yml / rollback.yml) after the image build. Single-stack, prod only
-# (ADR-002). worker02 is a data-array box, so a full-stack pull + up -d is fine.
+# On-host deployment lifecycle for one vxtpl stack. Invoked by CI
+# (deploy.yml / rollback.yml) after the image build. TWO STACKS ON THE HOST
+# (ADR-007) - production under /srv/md0, beta under /srv/md1 - told apart by
+# PROJECT_NAME (CI passes it; <code> or <code>-beta), which prefixes every
+# container and the network. worker02 is a data-array box, so a full-stack
+# pull + up -d is fine.
 #
 #   bash deploy.sh all       # directories -> start -> verify -> prune
 #   bash deploy.sh start     # pull image (GHCR primary, ACR fallback) + up -d
@@ -14,7 +17,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/vxtpl
+ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/vxtpl or /srv/md1/vxtpl
 ENV_FILE="$ROOT/etc/.env"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 
@@ -22,7 +25,7 @@ COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 PRODUCT_CODE="${PRODUCT_CODE:-vxtpl}"
 PRODUCT_CODE_SNAKE="${PRODUCT_CODE//-/_}"
 IMAGE_NAME="${PRODUCT_CODE}-app"
-PROJECT_NAME="${PRODUCT_CODE}"
+PROJECT_NAME="${PROJECT_NAME:-$PRODUCT_CODE}"
 # The port the app listens on INSIDE the container. A LITERAL, matching the
 # registry allocation and every other product on this host (atlas 3100, runos
 # 3120, arda 3230). `verify` reaches it with `docker exec`, so it is the

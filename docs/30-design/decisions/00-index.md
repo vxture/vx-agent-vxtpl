@@ -15,3 +15,4 @@ vxtpl's decisions, not inherited ones.
 | [ADR-004](ADR-004-design-system-adoption.md) | vxtpl consumes the Vxture design system | accepted | 2026-08-17 |
 | [ADR-005](ADR-005-product-front-door.md) | A product verifies access at its front door | accepted | 2026-08-17 |
 | [ADR-006](ADR-006-challenge-game-domain.md) | vxtpl carries a real business domain - the 20-Second Challenge | accepted | 2026-08-31 |
+| [ADR-007](ADR-007-two-tiers-in-the-template.md) | the beta tier ships in the template, off until a product turns it on | accepted | 2026-09-10 |

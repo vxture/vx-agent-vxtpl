@@ -1,6 +1,10 @@
 name: rollback
 
-# Manual emergency rollback: re-point the production stack at a PREVIOUSLY BUILT
+# TWO TIERS (ADR-007): `environment` picks the stack, as db-init does.
+#
+#   gh workflow run rollback.yml -f environment=beta -f commit_sha=<sha>
+
+# Manual emergency rollback: re-point one stack (production or beta) at a PREVIOUSLY BUILT
 # image (no rebuild; only swaps the ${PRODUCT_CODE}-app image tag and recreates
 # that container). Find a known-good commit_sha from the host VERSION file
 # (cat /srv/md0/${PRODUCT_CODE}/deploy/VERSION) or `gh run list --workflow deploy.yml`.
@@ -12,13 +16,21 @@ name: rollback
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Which stack: production (/srv/md0) or beta (/srv/md1)"
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
+          - beta
       commit_sha:
         description: "Commit SHA of a PREVIOUSLY DEPLOYED build to roll back to"
         required: true
         type: string
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 permissions:
@@ -27,6 +39,8 @@ permissions:
 
 env:
   PRODUCT_CODE: vxtpl
+  STACK_ROOT: ${{ inputs.environment == 'beta' && '/srv/md1/vxtpl' || '/srv/md0/vxtpl' }}
+  PROJECT_NAME: ${{ inputs.environment == 'beta' && 'vxtpl-beta' || 'vxtpl' }}
 
 jobs:
   rollback:
@@ -34,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: production
+      name: ${{ inputs.environment }}
     steps:
       - name: Checkout target revision
         uses: actions/checkout@v7
@@ -110,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-/srv/md0/${PRODUCT_CODE}/deploy}"
+          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 
           cat > /tmp/rollback.sh <<'REMOTE_SCRIPT'
@@ -119,20 +133,21 @@ jobs:
           export IMAGE_REGISTRY="ghcr.io"
           export IMAGE_NAMESPACE="vxture"
           export IMAGE_TAG="$IMAGE_TAG"
+          export PROJECT_NAME="$PROJECT_NAME"
           export FALLBACK_IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
           export FALLBACK_IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           if [ -n "${ALIYUN_ACR_USERNAME:-}" ] && [ -n "${ALIYUN_ACR_PASSWORD:-}" ]; then
             printf '%s' "$ALIYUN_ACR_PASSWORD" | timeout 45 docker login "$ALIYUN_ACR_REGISTRY" -u "$ALIYUN_ACR_USERNAME" --password-stdin || true
           fi
-          echo "[rollback] recreating ${PRODUCT_CODE}-app at $IMAGE_TAG"
+          echo "[rollback] recreating ${PROJECT_NAME}-app at $IMAGE_TAG"
           bash deploy.sh start
           bash deploy.sh verify
           REMOTE_SCRIPT
           scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 /tmp/rollback.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/rollback.sh"
 
           remote_env=(
-            "PRODUCT_CODE=$PRODUCT_CODE" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$IMAGE_TAG"
+            "PRODUCT_CODE=$PRODUCT_CODE" "PROJECT_NAME=$PROJECT_NAME" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$IMAGE_TAG"
             "ALIYUN_ACR_REGISTRY=$ALIYUN_ACR_REGISTRY" "ALIYUN_ACR_NAMESPACE=$ALIYUN_ACR_NAMESPACE"
             "ALIYUN_ACR_USERNAME=$ALIYUN_ACR_USERNAME" "ALIYUN_ACR_PASSWORD=$ALIYUN_ACR_PASSWORD"
             "GHCR_USERNAME=$GHCR_USERNAME" "GHCR_TOKEN=$GHCR_TOKEN"
