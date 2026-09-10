@@ -49,6 +49,31 @@ before that fails at the deploy job's secret check, deploys nothing, and
 opens the usual deploy-failure issue. vxtpl itself keeps ADR-002's posture:
 no `beta` secrets, no beta stack, `vxtpl-beta` reserved and unregistered.
 
+## Amendment, 2026-09-10 (same day): configuration, not literals
+
+The first cut of this route wrote the two stack roots (`/srv/md0`, `/srv/md1`)
+and the project names into the workflows, with a `DEPLOY_DIR` secret as an
+override that expected the deploy SUBdirectory - a contract a product owner
+read as "the deploy directory on the host" and set to the stack root, which
+would have sent `rsync --delete` into `etc/` and `data/`. Every value the
+pipeline needs now comes from a GitHub layer and nothing is guessed:
+
+| Value | Layer | Name |
+|-------|-------|------|
+| product code | repo variable | `PRODUCT_CODE` |
+| stack root on the host | Environment variable, REQUIRED | `STACK_ROOT` |
+| compose project | Environment variable, REQUIRED | `PROJECT_NAME` |
+| ACR namespace | repo variable | `ALIYUN_ACR_NAMESPACE` |
+| ACR registry the host pulls from | Environment variable, optional | `ACR_PULL_REGISTRY` (a VPC host sets the org's `ALIYUN_ACR_INTERNAL_HOST`) |
+| GHCR namespace | context | `github.repository_owner` |
+| shared registry / tailnet / npm | org variables and secrets | as before |
+
+The deploy job, db-init and rollback refuse to run without the required
+ones, naming the missing variable and its layer. The deploy directory is
+always `<STACK_ROOT>/deploy`; the override is gone. vxtpl's `production`
+Environment carries `STACK_ROOT=/srv/md0/vxtpl` and `PROJECT_NAME=vxtpl`
+since 2026-09-10; a product's `beta` Environment carries its own.
+
 ## Consequences
 
 - A product that wants beta does four things outside the repo: the `beta`

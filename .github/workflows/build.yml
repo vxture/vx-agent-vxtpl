@@ -43,7 +43,8 @@ jobs:
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
     env:
-      GHCR_NAMESPACE: vxture
+      # The repository owner, never a literal.
+      GHCR_NAMESPACE: ${{ github.repository_owner }}
       ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
       ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
       VXTURE_NPM_REGISTRY: ${{ vars.VXTURE_NPM_REGISTRY }}
