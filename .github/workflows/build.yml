@@ -96,7 +96,8 @@ jobs:
           # vxtpl ships prod-only (ADR-002); a non-v tag never reaches deploy.yml,
           # so anything but a v*.*.* tag is a local/manual build and stages as dev.
           case "$REF_TYPE:$REF_NAME" in
-            tag:v*) stage="production" ;;
+            tag:v*)    stage="production" ;;
+            tag:beta-*) stage="beta" ;;
             *)      stage="dev" ;;
           esac
           # The immutable tag carries the STAGE as well as the commit, because

@@ -23,8 +23,9 @@ no hint about which of these steps is missing.
 
 - [x] **vxtpl** OIDC client registered, realm = customer, status active.
 - [ ] `vxtpl-beta` client. **Deliberately not registered** - vxtpl is prod-only
-      (ADR-002). A copy that wants a beta tier registers both, since the double
-      client is canonical (back-channel logout is a single-URI hard constraint).
+      (ADR-002). A product that turns the beta tier on (ADR-007) registers
+      `<code>-beta` before its first `beta-*` tag, since the double client is
+      canonical (back-channel logout is a single-URI hard constraint).
 - [x] `client_secret_hash` provisioned. **This same client_id/client_secret pair
       is also the S2S credential** (ADR-003) - there is no separate S2S secret to
       request, and asking for one is asking for something that does not exist.

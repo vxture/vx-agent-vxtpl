@@ -62,7 +62,8 @@ variable in the path any more.
       cutover is not executed** - the host `.env` and the edge vhost move in the
       same window, or the site 502s the way it did in liaison letter 50.
 - [x] `production` GitHub Environment + required reviewer (deploy pauses until
-      approved). No `beta` environment - prod only.
+      approved). No `beta` environment for vxtpl itself (ADR-002) - the ROUTE
+      exists (ADR-007); see "Turning the beta tier on" below for a product.
 - [x] Non-secret host secrets: `DEPLOY_HOST` = `vx-worker-02` (tailnet MagicDNS,
       IP `100.76.219.48`), `DEPLOY_USER` = `stone`, `DEPLOY_PORT` = `22`.
 - [x] Domain `vxtpl.vxture.com` created and resolving (shared edge -> worker02
@@ -98,3 +99,23 @@ variable in the path any more.
       green run now means the increments really landed - which the 2026-09-01
       run did not (it applied the host's stale copy, silently applied nothing,
       and left the challenge schema missing in production).
+
+### Turning the beta tier on (ADR-007; a product's choice, off for vxtpl)
+
+The workflows already route `beta-*` -> `beta`, `/srv/md1/<code>`, project
+`<code>-beta`. What a product supplies:
+
+- [ ] `beta` GitHub Environment (no reviewer): `gh api -X PUT repos/<org>/<repo>/environments/beta --input - <<< '{"wait_timer":0}'`.
+- [ ] Secrets on it: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT`, `DEPLOY_SSH_KEY`,
+      `DEPLOY_KNOWN_HOSTS` (the same host as production, entered again - GitHub
+      cannot share environment secrets) and `ENV_FILE_BASE64` for the BETA `.env`
+      (`NEXT_PUBLIC_APP_ENV=beta`, the beta port from the registry,
+      `POSTGRES_DB=vxturebiz_<snake>_beta`, `DATABASE_URL=...@<code>-beta-db:5432/vxturebiz_<snake>_beta`,
+      `OIDC_CLIENT_ID=<code>-beta`, `NEXT_PUBLIC_APP_URL=https://beta-<code>.vxture.com`).
+- [ ] The `<code>-beta` OIDC client registered (10-platform-registration-checklist).
+- [ ] SSH the host once: create `/srv/md1/<code>` on the second array, writable by `DEPLOY_USER`.
+- [ ] The `beta-<code>.vxture.com` vhost on the shared edge -> the beta port.
+- [ ] First beta release: `git tag beta-YYYYMMDD.1 <sha> && git push origin beta-YYYYMMDD.1`
+      (builds, deploys, no approval), then
+      `gh workflow run db-init.yml -f environment=beta -f action=apply -f confirm=yes -f expected_sha=<sha>`.
+      Deploy first (it creates the db container the DDL runs in), db-init second.

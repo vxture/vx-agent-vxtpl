@@ -1,5 +1,12 @@
 name: db-init
 
+# TWO TIERS (ADR-007): `environment` picks the stack - production on /srv/md0
+# (database vxturebiz_vxtpl_prod, container vxtpl-db) or beta on /srv/md1
+# (vxturebiz_vxtpl_beta, vxtpl-beta-db). The beta Environment has no
+# reviewer; the structure gate is still confirm + expected_sha.
+#
+#   gh workflow run db-init.yml -f environment=beta -f action=apply -f confirm=yes -f expected_sha=<sha>
+
 # The ONLY pipeline allowed to touch DB structure (governance section 6). Manual,
 # gated: confirm=yes + expected_sha pin (defeats a floating ref applying stale
 # DDL) + the production Environment's required-reviewer approval. The container
@@ -22,6 +29,14 @@ name: db-init
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Which stack: production (/srv/md0) or beta (/srv/md1)"
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
+          - beta
       action:
         description: "DDL action"
         required: true
@@ -40,7 +55,7 @@ on:
         type: string
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 permissions:
@@ -48,6 +63,11 @@ permissions:
 
 env:
   PRODUCT_CODE: vxtpl
+  # The tier's stack root, project name and database suffix - the same
+  # mapping deploy.yml's route step makes.
+  STACK_ROOT: ${{ inputs.environment == 'beta' && '/srv/md1/vxtpl' || '/srv/md0/vxtpl' }}
+  PROJECT_NAME: ${{ inputs.environment == 'beta' && 'vxtpl-beta' || 'vxtpl' }}
+  DB_ENV: ${{ inputs.environment == 'beta' && 'beta' || 'prod' }}
 
 jobs:
   db-init:
@@ -55,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: production
+      name: ${{ inputs.environment }}
     steps:
       - name: Gate on confirm + expected_sha
         shell: bash
@@ -116,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-/srv/md0/${PRODUCT_CODE}/deploy}"
+          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
           snake="${PRODUCT_CODE//-/_}"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 
@@ -139,8 +159,8 @@ jobs:
 
           cat > /tmp/db-init.sh <<'REMOTE_SCRIPT'
           set -euo pipefail
-          DB="vxturebiz_${SNAKE}_prod"
-          CONT="${PRODUCT_CODE}-db"
+          DB="vxturebiz_${SNAKE}_${DB_ENV}"
+          CONT="${PROJECT_NAME}-db"
           # The operator .env still comes from the deploy root - it lives on the
           # host by design and never transits CI. Only the DDL is shipped.
           ENV_FILE="$(cd "$REPO_DIR/.." && pwd)/etc/.env"
@@ -211,7 +231,7 @@ jobs:
             fi
             sed -i -E "s#(^DATABASE_URL=\"?postgresql://${SNAKE}_svc:)[^@]*@#\1${svc_pw}@#" "$ENV_FILE"
             echo "[db-init] no svc password in .env; generated one and patched DATABASE_URL"
-            docker restart "${PRODUCT_CODE}-app" >/dev/null 2>&1 || true
+            docker restart "${PROJECT_NAME}-app" >/dev/null 2>&1 || true
           fi
           # Pipe the ALTER over stdin (never argv) so the password stays out of ps.
           esc="$(printf '%s' "$svc_pw" | sed "s/'/''/g")"
@@ -225,5 +245,5 @@ jobs:
           REMOTE_SCRIPT
           scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 \
             /tmp/db-init.sh /tmp/db-init-ddl.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
-          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") SNAKE=$(printf %q "$snake") DDL_TGZ=/tmp/db-init-ddl.tgz EXPECTED_INCR=$(printf %q "$incr_count") bash /tmp/db-init.sh" \
+          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") PROJECT_NAME=$(printf %q "$PROJECT_NAME") DB_ENV=$(printf %q "$DB_ENV") SNAKE=$(printf %q "$snake") DDL_TGZ=/tmp/db-init-ddl.tgz EXPECTED_INCR=$(printf %q "$incr_count") bash /tmp/db-init.sh" \
             | ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s

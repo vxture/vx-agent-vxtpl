@@ -26,5 +26,7 @@ Two properties are worth knowing before reading those files:
   `PRODUCT_CODE` repo variable in the path - the deployed image is built from the
   repository as it stands.
 
-vxtpl is production-only (ADR-002): there is no beta environment and `deploy.yml`
-rejects any tag that is not `v*.*.*`.
+vxtpl is production-only (ADR-002), and since ADR-007 the workflows still
+carry the beta route: `beta-*` -> the `beta` Environment and `/srv/md1/<code>`,
+off until a product configures it (20-github-bootstrap-checklist, "Turning the
+beta tier on").

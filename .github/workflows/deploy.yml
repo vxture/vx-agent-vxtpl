@@ -1,15 +1,28 @@
 name: deploy
 
-# Tag-triggered production deploy. vxtpl runs PROD ONLY (owner decision - see
-# docs/30-design/decisions/ADR-002-prod-only-deployment.md): a v*.*.* tag builds
-# the image and deploys the production stack on the deploy host (worker02,
-# tailnet, non-VPC -> GHCR primary + ACR fallback).
+# Tag-triggered deploy, TWO TIERS on ONE HOST (ADR-007; brought back from the
+# yucer product on 2026-09-10):
+#
+#   v*.*.*  -> production: stack root /srv/md0/<code>, project <code>,
+#              paused on the production Environment's required reviewer.
+#   beta-*  -> beta:       stack root /srv/md1/<code>, project <code>-beta,
+#              no reviewer.
+#
+# Same host (worker02, tailnet, non-VPC -> GHCR primary + ACR fallback), same
+# image, two stacks that never collide: the compose project name prefixes
+# every container and the network, and each stack root holds its own
+# etc/.env (beta: its own port, the <code>-beta OIDC client, database
+# vxturebiz_<code>_beta) and data. The beta tier is OFF until a repo gives
+# the `beta` Environment its host secrets and env file (ADR-002 still holds
+# for vxtpl itself); a beta-* tag before that fails at the secret check and
+# deploys nothing.
 # The production GitHub Environment carries a required-reviewer gate, so the
 # deploy job pauses until approved.
 on:
   push:
     tags:
       - 'v*.*.*'
+      - 'beta-*'
   workflow_dispatch:
     inputs:
       explicit_environment:
@@ -20,11 +33,12 @@ on:
         options:
           - auto
           - production
+          - beta
 
 # Serialize per target environment (production), never per tag. An in-flight
 # deploy is not cancelled.
 concurrency:
-  group: deploy-production
+  group: deploy-${{ startsWith(github.ref_name, 'beta-') && 'beta' || 'production' }}
   cancel-in-progress: false
 
 permissions:
@@ -41,20 +55,37 @@ jobs:
     timeout-minutes: 5
     outputs:
       environment: ${{ steps.route.outputs.environment }}
+      stack_root: ${{ steps.route.outputs.stack_root }}
+      project_name: ${{ steps.route.outputs.project_name }}
     steps:
       - name: Route tag to GitHub Environment
         id: route
         shell: bash
         env:
           TAG: ${{ github.ref_name }}
+          OVERRIDE: ${{ inputs.explicit_environment || 'auto' }}
         run: |
           set -euo pipefail
           case "$TAG" in
             v*.*.*) environment=production ;;
-            *) echo "deploy.yml triggered on unsupported tag: $TAG" >&2; exit 1 ;;
+            beta-*) environment=beta ;;
+            *) environment="" ;;
           esac
-          echo "environment=$environment" >> "$GITHUB_OUTPUT"
-          echo "route: tag=$TAG -> environment=$environment"
+          if [ "$OVERRIDE" != "auto" ]; then environment="$OVERRIDE"; fi
+          if [ -z "$environment" ]; then
+            echo "deploy.yml triggered on unsupported tag: $TAG (v*.*.* or beta-*)" >&2; exit 1
+          fi
+          # THE TWO STACKS: array, directory and project name follow the tier.
+          case "$environment" in
+            production) stack_root="$STACK_ROOT"; project_name="${PRODUCT_CODE}" ;;
+            beta)       stack_root="/srv/md1/${PRODUCT_CODE}"; project_name="${PRODUCT_CODE}-beta" ;;
+          esac
+          {
+            echo "environment=$environment"
+            echo "stack_root=$stack_root"
+            echo "project_name=$project_name"
+          } >> "$GITHUB_OUTPUT"
+          echo "route: tag=$TAG -> environment=$environment stack_root=$stack_root project=$project_name"
 
   call-build:
     name: docker-build
@@ -127,6 +158,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           ENV_FILE_B64: ${{ secrets.ENV_FILE_BASE64 }}
+          STACK_ROOT: ${{ needs.detect.outputs.stack_root }}
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
@@ -150,6 +182,8 @@ jobs:
           DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
           PASSED_SHA: ${{ github.sha }}
           IMAGE_TAG: ${{ needs.call-build.outputs.image_tag }}
+          STACK_ROOT: ${{ needs.detect.outputs.stack_root }}
+          PROJECT_NAME: ${{ needs.detect.outputs.project_name }}
           ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
           ALIYUN_ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
           ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
@@ -159,7 +193,7 @@ jobs:
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-/srv/md0/${PRODUCT_CODE}/deploy}"
+          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
           image_tag="$IMAGE_TAG"
           test -n "$image_tag"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
@@ -191,6 +225,7 @@ jobs:
           export IMAGE_REGISTRY="ghcr.io"
           export IMAGE_NAMESPACE="vxture"
           export IMAGE_TAG="$IMAGE_TAG"
+          export PROJECT_NAME="$PROJECT_NAME"
           export FALLBACK_IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
           export FALLBACK_IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
           if [ -n "${GHCR_TOKEN:-}" ]; then
@@ -207,7 +242,7 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 /tmp/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.sh"
 
           remote_env=(
-            "PRODUCT_CODE=$PRODUCT_CODE" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$image_tag"
+            "PRODUCT_CODE=$PRODUCT_CODE" "PROJECT_NAME=$PROJECT_NAME" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$image_tag"
             "ALIYUN_ACR_REGISTRY=$ALIYUN_ACR_REGISTRY" "ALIYUN_ACR_NAMESPACE=$ALIYUN_ACR_NAMESPACE"
             "ALIYUN_ACR_USERNAME=$ALIYUN_ACR_USERNAME" "ALIYUN_ACR_PASSWORD=$ALIYUN_ACR_PASSWORD"
             "GHCR_USERNAME=$GHCR_USERNAME" "GHCR_TOKEN=$GHCR_TOKEN"

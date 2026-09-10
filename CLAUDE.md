@@ -76,10 +76,12 @@ they are triggered only by pushing a release tag:
 - `vX.Y.Z` tag - deploys the production stack. Gated by a required reviewer on
   the `production` GitHub Environment - the deploy job pauses until approved.
 
-vxtpl runs **prod-only** (ADR-002): there is no beta stack, no `beta` GitHub
-Environment, and `deploy.yml` rejects any tag that is not `v*.*.*`. The
-`vxtpl-beta` OIDC client stays reserved but unused. A product copied from vxtpl
-that wants two tiers adds the beta routing and a beta compose project itself.
+vxtpl itself runs **prod-only** (ADR-002), but since ADR-007 the template
+CARRIES the beta route: `beta-*` tags route to the `beta` GitHub Environment
+and a second stack under `/srv/md1/<code>` with compose project `<code>-beta`.
+It is OFF until a product gives the `beta` Environment its host secrets and
+env file; a `beta-*` tag before that deploys nothing. The `vxtpl-beta` OIDC
+client stays reserved and unregistered for vxtpl.
 
 `dev-*` and `varda-*` tags are platform-repo-only; product repos do not build
 develop/varda environments.
