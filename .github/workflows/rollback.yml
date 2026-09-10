@@ -7,7 +7,7 @@ name: rollback
 # Manual emergency rollback: re-point one stack (production or beta) at a PREVIOUSLY BUILT
 # image (no rebuild; only swaps the ${PRODUCT_CODE}-app image tag and recreates
 # that container). Find a known-good commit_sha from the host VERSION file
-# (cat /srv/md0/${PRODUCT_CODE}/deploy/VERSION) or `gh run list --workflow deploy.yml`.
+# (cat <STACK_ROOT>/deploy/VERSION) or `gh run list --workflow deploy.yml`.
 #
 #   gh workflow run rollback.yml -f commit_sha=<sha>
 #
@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Which stack: production (/srv/md0) or beta (/srv/md1)"
+        description: "Which stack - each Environment carries its own STACK_ROOT / PROJECT_NAME"
         required: true
         type: choice
         default: production
@@ -39,8 +39,6 @@ permissions:
 
 env:
   PRODUCT_CODE: vxtpl
-  STACK_ROOT: ${{ inputs.environment == 'beta' && '/srv/md1/vxtpl' || '/srv/md0/vxtpl' }}
-  PROJECT_NAME: ${{ inputs.environment == 'beta' && 'vxtpl-beta' || 'vxtpl' }}
 
 jobs:
   rollback:
@@ -49,12 +47,26 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
+    # INSIDE THE JOB, because an Environment's variables are only in scope for
+    # a job that declares the environment. STACK_ROOT / PROJECT_NAME are the
+    # Environment's (configuration, not literals) and are REQUIRED.
+    env:
+      STACK_ROOT: ${{ vars.STACK_ROOT }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
     steps:
       - name: Checkout target revision
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 1
+      - name: Require the Environment's variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          for v in STACK_ROOT PROJECT_NAME; do
+            [ -n "${!v:-}" ] || { echo "$v is not set on the '${{ inputs.environment }}' Environment" >&2; exit 1; }
+          done
+          case "$STACK_ROOT" in /*) ;; *) echo "STACK_ROOT must be absolute: $STACK_ROOT" >&2; exit 1 ;; esac
 
       - name: Resolve image tag
         id: sha
@@ -93,7 +105,7 @@ jobs:
           IMAGE_TAG: ${{ steps.sha.outputs.image_tag }}
         run: |
           set -euo pipefail
-          docker buildx imagetools inspect "ghcr.io/vxture/${PRODUCT_CODE}-app:${IMAGE_TAG}" >/dev/null
+          docker buildx imagetools inspect "ghcr.io/${{ github.repository_owner }}/${PRODUCT_CODE}-app:${IMAGE_TAG}" >/dev/null
 
       - name: Join tailnet and prepare SSH
         uses: ./.github/actions/tailnet-ssh-connect
@@ -113,8 +125,9 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
           IMAGE_TAG: ${{ steps.sha.outputs.image_tag }}
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY || vars.ALIYUN_ACR_REGISTRY }}
+          GHCR_NAMESPACE: ${{ github.repository_owner }}
           ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
           ALIYUN_ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
           ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
@@ -124,17 +137,17 @@ jobs:
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
+          deploy_dir="${STACK_ROOT}/deploy"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 
           cat > /tmp/rollback.sh <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd "$REPO_DIR"
           export IMAGE_REGISTRY="ghcr.io"
-          export IMAGE_NAMESPACE="vxture"
+          export IMAGE_NAMESPACE="$GHCR_NAMESPACE"
           export IMAGE_TAG="$IMAGE_TAG"
           export PROJECT_NAME="$PROJECT_NAME"
-          export FALLBACK_IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
+          export FALLBACK_IMAGE_REGISTRY="$ACR_PULL_REGISTRY"
           export FALLBACK_IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           if [ -n "${ALIYUN_ACR_USERNAME:-}" ] && [ -n "${ALIYUN_ACR_PASSWORD:-}" ]; then
@@ -148,6 +161,7 @@ jobs:
 
           remote_env=(
             "PRODUCT_CODE=$PRODUCT_CODE" "PROJECT_NAME=$PROJECT_NAME" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$IMAGE_TAG"
+            "GHCR_NAMESPACE=$GHCR_NAMESPACE" "ACR_PULL_REGISTRY=$ACR_PULL_REGISTRY"
             "ALIYUN_ACR_REGISTRY=$ALIYUN_ACR_REGISTRY" "ALIYUN_ACR_NAMESPACE=$ALIYUN_ACR_NAMESPACE"
             "ALIYUN_ACR_USERNAME=$ALIYUN_ACR_USERNAME" "ALIYUN_ACR_PASSWORD=$ALIYUN_ACR_PASSWORD"
             "GHCR_USERNAME=$GHCR_USERNAME" "GHCR_TOKEN=$GHCR_TOKEN"

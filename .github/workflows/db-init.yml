@@ -1,8 +1,8 @@
 name: db-init
 
-# TWO TIERS (ADR-007): `environment` picks the stack - production on /srv/md0
-# (database vxturebiz_vxtpl_prod, container vxtpl-db) or beta on /srv/md1
-# (vxturebiz_vxtpl_beta, vxtpl-beta-db). The beta Environment has no
+# TWO TIERS (ADR-007): `environment` picks the stack; where it lives and what
+# it is called are that Environment's STACK_ROOT / PROJECT_NAME variables
+# (database vxturebiz_vxtpl_prod or _beta, container <PROJECT_NAME>-db). The beta Environment has no
 # reviewer; the structure gate is still confirm + expected_sha.
 #
 #   gh workflow run db-init.yml -f environment=beta -f action=apply -f confirm=yes -f expected_sha=<sha>
@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Which stack: production (/srv/md0) or beta (/srv/md1)"
+        description: "Which stack - each Environment carries its own STACK_ROOT / PROJECT_NAME"
         required: true
         type: choice
         default: production
@@ -63,11 +63,6 @@ permissions:
 
 env:
   PRODUCT_CODE: vxtpl
-  # The tier's stack root, project name and database suffix - the same
-  # mapping deploy.yml's route step makes.
-  STACK_ROOT: ${{ inputs.environment == 'beta' && '/srv/md1/vxtpl' || '/srv/md0/vxtpl' }}
-  PROJECT_NAME: ${{ inputs.environment == 'beta' && 'vxtpl-beta' || 'vxtpl' }}
-  DB_ENV: ${{ inputs.environment == 'beta' && 'beta' || 'prod' }}
 
 jobs:
   db-init:
@@ -76,6 +71,13 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
+    # INSIDE THE JOB, because an Environment's variables are only in scope for
+    # a job that declares the environment. STACK_ROOT / PROJECT_NAME are the
+    # Environment's (configuration, not literals) and are REQUIRED.
+    env:
+      STACK_ROOT: ${{ vars.STACK_ROOT }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      DB_ENV: ${{ inputs.environment == 'beta' && 'beta' || 'prod' }}
     steps:
       - name: Gate on confirm + expected_sha
         shell: bash
@@ -95,6 +97,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+      - name: Require the Environment's variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          for v in STACK_ROOT PROJECT_NAME; do
+            [ -n "${!v:-}" ] || { echo "$v is not set on the '${{ inputs.environment }}' Environment" >&2; exit 1; }
+          done
+          case "$STACK_ROOT" in /*) ;; *) echo "STACK_ROOT must be absolute: $STACK_ROOT" >&2; exit 1 ;; esac
 
       - name: Validate secrets
         shell: bash
@@ -132,11 +142,10 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
+          deploy_dir="${STACK_ROOT}/deploy"
           snake="${PRODUCT_CODE//-/_}"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 

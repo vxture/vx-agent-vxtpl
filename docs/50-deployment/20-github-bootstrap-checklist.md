@@ -102,10 +102,15 @@ variable in the path any more.
 
 ### Turning the beta tier on (ADR-007; a product's choice, off for vxtpl)
 
-The workflows already route `beta-*` -> `beta`, `/srv/md1/<code>`, project
-`<code>-beta`. What a product supplies:
+The workflows route `beta-*` -> the `beta` Environment; WHERE the stack lives
+and what it is called are that Environment's own variables (ADR-007
+amendment). What a product supplies:
 
 - [ ] `beta` GitHub Environment (no reviewer): `gh api -X PUT repos/<org>/<repo>/environments/beta --input - <<< '{"wait_timer":0}'`.
+- [ ] Environment variables on it: `STACK_ROOT` (e.g. `/srv/md1/<code>`, the
+      second array) and `PROJECT_NAME` (`<code>-beta`); `gh variable set STACK_ROOT --env beta --body /srv/md1/<code>`.
+      The deploy refuses to run without them. `production` carries its own
+      (`/srv/md0/<code>`, `<code>`).
 - [ ] Secrets on it: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT`, `DEPLOY_SSH_KEY`,
       `DEPLOY_KNOWN_HOSTS` (the same host as production, entered again - GitHub
       cannot share environment secrets) and `ENV_FILE_BASE64` for the BETA `.env`

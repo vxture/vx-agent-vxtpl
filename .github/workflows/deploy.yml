@@ -3,9 +3,9 @@ name: deploy
 # Tag-triggered deploy, TWO TIERS on ONE HOST (ADR-007; brought back from the
 # yucer product on 2026-09-10):
 #
-#   v*.*.*  -> production: stack root /srv/md0/<code>, project <code>,
+#   v*.*.*  -> production: the production Environment's STACK_ROOT / PROJECT_NAME,
 #              paused on the production Environment's required reviewer.
-#   beta-*  -> beta:       stack root /srv/md1/<code>, project <code>-beta,
+#   beta-*  -> beta:       the beta Environment's STACK_ROOT / PROJECT_NAME (e.g. /srv/md1/<code>, <code>-beta),
 #              no reviewer.
 #
 # Same host (worker02, tailnet, non-VPC -> GHCR primary + ACR fallback), same
@@ -55,8 +55,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       environment: ${{ steps.route.outputs.environment }}
-      stack_root: ${{ steps.route.outputs.stack_root }}
-      project_name: ${{ steps.route.outputs.project_name }}
     steps:
       - name: Route tag to GitHub Environment
         id: route
@@ -75,17 +73,8 @@ jobs:
           if [ -z "$environment" ]; then
             echo "deploy.yml triggered on unsupported tag: $TAG (v*.*.* or beta-*)" >&2; exit 1
           fi
-          # THE TWO STACKS: array, directory and project name follow the tier.
-          case "$environment" in
-            production) stack_root="$STACK_ROOT"; project_name="${PRODUCT_CODE}" ;;
-            beta)       stack_root="/srv/md1/${PRODUCT_CODE}"; project_name="${PRODUCT_CODE}-beta" ;;
-          esac
-          {
-            echo "environment=$environment"
-            echo "stack_root=$stack_root"
-            echo "project_name=$project_name"
-          } >> "$GITHUB_OUTPUT"
-          echo "route: tag=$TAG -> environment=$environment stack_root=$stack_root project=$project_name"
+          echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "route: tag=$TAG -> environment=$environment"
 
   call-build:
     name: docker-build
@@ -119,7 +108,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Validate deployment secrets
+      - name: Validate deployment secrets and variables
+        # EVERY VALUE COMES FROM A GITHUB LAYER (ADR-007 amendment, 2026-09-10):
+        # org vars/secrets for the shared registry and tailnet, repo vars for
+        # the product, Environment vars for where THIS tier lives. Nothing is
+        # guessed; a missing one stops here, named with its layer.
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -129,15 +122,21 @@ jobs:
           ALIYUN_ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
           TAILSCALE_OAUTH_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TAILSCALE_OAUTH_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          STACK_ROOT: ${{ vars.STACK_ROOT }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
         run: |
           set -euo pipefail
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USER"
-          test -n "$DEPLOY_SSH_KEY"
-          test -n "$ALIYUN_ACR_REGISTRY"
-          test -n "$ALIYUN_ACR_NAMESPACE"
-          test -n "$TAILSCALE_OAUTH_CLIENT_ID"
-          test -n "$TAILSCALE_OAUTH_CLIENT_SECRET"
+          need() { [ -n "${!1:-}" ] || { echo "$1 is not set - $2" >&2; exit 1; }; }
+          need DEPLOY_HOST "Environment secret"
+          need DEPLOY_USER "Environment secret"
+          need DEPLOY_SSH_KEY "Environment secret"
+          need ALIYUN_ACR_REGISTRY "org variable, shared to this repo"
+          need ALIYUN_ACR_NAMESPACE "repo variable"
+          need TAILSCALE_OAUTH_CLIENT_ID "org secret, shared to this repo"
+          need TAILSCALE_OAUTH_CLIENT_SECRET "org secret, shared to this repo"
+          need STACK_ROOT "Environment variable: the stack root on the host, e.g. /srv/md0/vxtpl"
+          need PROJECT_NAME "Environment variable: the compose project, e.g. vxtpl or vxtpl-beta"
+          case "$STACK_ROOT" in /*) ;; *) echo "STACK_ROOT must be absolute: $STACK_ROOT" >&2; exit 1 ;; esac
 
       - name: Join tailnet and prepare SSH
         uses: ./.github/actions/tailnet-ssh-connect
@@ -158,11 +157,11 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           ENV_FILE_B64: ${{ secrets.ENV_FILE_BASE64 }}
-          STACK_ROOT: ${{ needs.detect.outputs.stack_root }}
+          STACK_ROOT: ${{ vars.STACK_ROOT }}
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          stack_root="/srv/md0/${PRODUCT_CODE}"
+          stack_root="$STACK_ROOT"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
           if ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "test -f '$stack_root/etc/.env'"; then
             echo "[bootstrap] $stack_root/etc/.env exists - skipping"
@@ -179,11 +178,16 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
           PASSED_SHA: ${{ github.sha }}
           IMAGE_TAG: ${{ needs.call-build.outputs.image_tag }}
-          STACK_ROOT: ${{ needs.detect.outputs.stack_root }}
-          PROJECT_NAME: ${{ needs.detect.outputs.project_name }}
+          STACK_ROOT: ${{ vars.STACK_ROOT }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          # The registry the HOST pulls the fallback image from: the org's public
+          # ACR host, or - for a host inside the Aliyun VPC - an Environment's
+          # ACR_PULL_REGISTRY set to the org's ALIYUN_ACR_INTERNAL_HOST value.
+          ACR_PULL_REGISTRY: ${{ vars.ACR_PULL_REGISTRY || vars.ALIYUN_ACR_REGISTRY }}
+          # The GHCR namespace is the repository's owner - never a literal.
+          GHCR_NAMESPACE: ${{ github.repository_owner }}
           ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
           ALIYUN_ACR_NAMESPACE: ${{ vars.ALIYUN_ACR_NAMESPACE }}
           ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
@@ -193,7 +197,9 @@ jobs:
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${DEPLOY_DIR:-${STACK_ROOT}/deploy}"
+          # ALWAYS <stack root>/deploy: deploy.sh finds etc/.env and data/ one level
+          # up, and this directory is rsync --delete'd on every deploy. No override.
+          deploy_dir="${STACK_ROOT}/deploy"
           image_tag="$IMAGE_TAG"
           test -n "$image_tag"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
@@ -223,10 +229,10 @@ jobs:
           set -euo pipefail
           cd "$REPO_DIR"
           export IMAGE_REGISTRY="ghcr.io"
-          export IMAGE_NAMESPACE="vxture"
+          export IMAGE_NAMESPACE="$GHCR_NAMESPACE"
           export IMAGE_TAG="$IMAGE_TAG"
           export PROJECT_NAME="$PROJECT_NAME"
-          export FALLBACK_IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
+          export FALLBACK_IMAGE_REGISTRY="$ACR_PULL_REGISTRY"
           export FALLBACK_IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
           if [ -n "${GHCR_TOKEN:-}" ]; then
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
@@ -243,6 +249,7 @@ jobs:
 
           remote_env=(
             "PRODUCT_CODE=$PRODUCT_CODE" "PROJECT_NAME=$PROJECT_NAME" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$image_tag"
+            "GHCR_NAMESPACE=$GHCR_NAMESPACE" "ACR_PULL_REGISTRY=$ACR_PULL_REGISTRY"
             "ALIYUN_ACR_REGISTRY=$ALIYUN_ACR_REGISTRY" "ALIYUN_ACR_NAMESPACE=$ALIYUN_ACR_NAMESPACE"
             "ALIYUN_ACR_USERNAME=$ALIYUN_ACR_USERNAME" "ALIYUN_ACR_PASSWORD=$ALIYUN_ACR_PASSWORD"
             "GHCR_USERNAME=$GHCR_USERNAME" "GHCR_TOKEN=$GHCR_TOKEN"
