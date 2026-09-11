@@ -92,13 +92,22 @@ variable in the path any more.
 - [ ] Release: `git tag vX.Y.Z && git push origin vX.Y.Z`, then approve the
       pending `production` deployment. DB structure changes go through
       `db-init.yml` (`confirm=yes` + `expected_sha`), never the deploy chain.
-- [ ] After a release that ADDS a `deploy/database/ddl/incr/` file, run
-      `db-init.yml` and read the log: it must print one `applying incr <file>`
-      line per increment and end with the resulting table list. The job ships
-      the DDL from the pinned commit and fails if the counts disagree, so a
-      green run now means the increments really landed - which the 2026-09-01
+- [ ] After a commit that ADDS a `deploy/database/ddl/incr/` file, run
+      `db-init.yml` (it does not wait for a release: the pinned commit's DDL is
+      rsync'd to `<STACK_ROOT>/db-init/<sha>/`) and read the log: one
+      `applying incr <file>` line per NEW increment, `N applied, M already
+      recorded`, then the resulting table list. db-init keeps a ledger
+      (ADR-008, `vxtpl_meta.applied_ddl`): each file applies once, the
+      00 / 97 / 98 trio on a fresh database only. The counts are still checked
+      on both sides, so a tree that arrives short fails - which the 2026-09-01
       run did not (it applied the host's stale copy, silently applied nothing,
       and left the challenge schema missing in production).
+- [ ] ONCE, for a database that predates the ledger: db-init refuses to run
+      until told where the database stands -
+      `gh workflow run db-init.yml -f environment=production -f action=apply -f confirm=yes -f expected_sha=<sha> -f bootstrap_through=0003`
+      records baseline + 0001..0003 as applied and carries on. Passing it again
+      once the ledger has rows is refused. `action=verify` prints the ledger's
+      count and last five rows.
 
 ### Turning the beta tier on (ADR-007; a product's choice, off for vxtpl)
 
