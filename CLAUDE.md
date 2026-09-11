@@ -158,8 +158,15 @@ The deploy chain is `deploy.yml` (tag -> production Environment -> approval) ->
 `build.yml` (reusable; GHCR primary + ACR fallback, dedup by `sha-<short>` tag) ->
 `deploy/deploy.sh` over the tailnet (`tailnet-ssh-connect` composite action).
 `rollback.yml` re-points the app container at a previously built image, and
-`db-init.yml` is the only path that touches DB structure. The product code is a
-literal in these files - there is no build-time substitution step.
+`db-init.yml` is the only path that touches DB structure. It keeps a ledger
+(ADR-008): `deploy/database/ddl/ledger.sql` creates `vxtpl_meta.applied_ddl`,
+the remote half is `deploy/db-init-remote.sh` (rehearsable locally with
+DB_URL), and each DDL file applies ONCE - the 00/97/98 trio on a fresh database
+only, each increment when not yet recorded. A database that predates the ledger
+is bootstrapped once with the workflow input `bootstrap_through=NNNN`.
+Increments are written for a fresh database; they are NOT expected to be
+no-ops against a schema newer than themselves. The product code is a literal
+in these files - there is no build-time substitution step.
 
 ## Secret hygiene (four layers)
 

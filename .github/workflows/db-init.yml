@@ -15,10 +15,16 @@ name: db-init
 #
 #   gh workflow run db-init.yml -f action=apply -f confirm=yes -f expected_sha=<sha>
 #
-# The DDL applied is the DDL IN THIS CHECKOUT, packed and shipped to the host by
-# the job - never the copy a past deploy left in the deploy directory. That is
-# what makes expected_sha mean anything, and the increments are counted on both
-# sides so a tree that arrives empty fails instead of passing quietly.
+# The DDL applied is the DDL IN THIS CHECKOUT, rsync'd to the host by the job
+# into <STACK_ROOT>/db-init/<sha> - never the copy a past deploy left in the
+# deploy directory. That is what makes expected_sha mean anything, and the
+# increments are counted on both sides so a tree that arrives empty fails
+# instead of passing quietly.
+#
+# EACH FILE APPLIES ONCE (ADR-008). The remote half, deploy/db-init-remote.sh,
+# keeps a ledger (vxtpl_meta.applied_ddl): the 00 / 97 / 98 trio on a fresh
+# database only, each increment when not yet recorded. A database that predates
+# the ledger is bootstrapped once with `bootstrap_through=NNNN`.
 #
 # `apply` runs the three-part baseline + incr/ increments (idempotent create-once
 # + ADD COLUMN IF NOT EXISTS) against the production db container as the DB
@@ -53,6 +59,11 @@ on:
         description: "Commit SHA this run must match (version pin)"
         required: true
         type: string
+      bootstrap_through:
+        description: "ONE-TIME, for a database that predates the ledger (ADR-008): the last increment it already has, e.g. 0003. Leave empty otherwise."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-${{ inputs.environment }}
@@ -139,13 +150,13 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
           PINNED_SHA: ${{ github.sha }}
+          BOOTSTRAP_THROUGH: ${{ inputs.bootstrap_through }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           set -euo pipefail
           port="${DEPLOY_PORT:-22}"
-          deploy_dir="${STACK_ROOT}/deploy"
           snake="${PRODUCT_CODE//-/_}"
           ssh_opts=(-i ~/.ssh/deploy_key -p "$port" -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30)
 
@@ -164,95 +175,17 @@ jobs:
           test -d deploy/database/ddl || { echo "no deploy/database/ddl in this checkout" >&2; exit 1; }
           incr_count="$(find deploy/database/ddl/incr -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')"
           echo "[db-init] shipping DDL from ${PINNED_SHA:0:8}: $incr_count increment(s)"
-          tar -czf /tmp/db-init-ddl.tgz -C deploy database/ddl
+          # To its own directory, keyed by the sha; the running stack's deploy/
+          # is never touched, and a structure change does not wait for a release.
+          ddl_dir="${STACK_ROOT}/db-init/${PINNED_SHA}"
+          ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$ddl_dir/database'"
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p $port -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=30" \
+            deploy/database/ddl/ "$DEPLOY_USER@$DEPLOY_HOST:$ddl_dir/database/ddl/"
 
-          cat > /tmp/db-init.sh <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          DB="vxturebiz_${SNAKE}_${DB_ENV}"
-          CONT="${PROJECT_NAME}-db"
-          # The operator .env still comes from the deploy root - it lives on the
-          # host by design and never transits CI. Only the DDL is shipped.
-          ENV_FILE="$(cd "$REPO_DIR/.." && pwd)/etc/.env"
-          DDL_DIR="$(mktemp -d)"
-          trap 'rm -rf "$DDL_DIR" "$DDL_TGZ"' EXIT
-          tar -xzf "$DDL_TGZ" -C "$DDL_DIR"
-          DDL="$DDL_DIR/database/ddl"
-          run() { docker exec -i "$CONT" psql -U postgres -d "$DB" -v ON_ERROR_STOP=1 "$@"; }
-          # The DDL carries vxtpl's real role name (vxtpl_svc) - it is applied
-          # verbatim, with no substitution layer between the file and the database.
-          apply_file() { run < "$1"; }
-          list_tables() {
-            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('vx_provision','local_authz','local_usage','vxtpl_game') ORDER BY 1;"
-          }
-
-          # Service-role password. The role is created LOGIN-only (no password) by
-          # 97_service_role.sql; the app connects as vxtpl_svc over TCP (scram),
-          # so the role needs a password matching the operator .env's DATABASE_URL
-          # (postgresql://<svc>:PASSWORD@host...). Parse it here - it lives only on
-          # the host and never transits CI. Empty if the URL carries no password.
-          svc_pw=""
-          if [ -f "$ENV_FILE" ]; then
-            db_url="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | sed 's/^DATABASE_URL=//')"
-            db_url="${db_url%\"}"; db_url="${db_url#\"}"
-            creds="${db_url#*://}"; creds="${creds%%@*}"
-            case "$creds" in *:*) svc_pw="${creds#*:}" ;; esac
-          fi
-
-          if [ "$ACTION" = "verify" ]; then
-            echo "[db-init] contract + domain schema tables:"
-            list_tables
-            echo "[db-init] service role state:"
-            run -c "SELECT rolname, rolcanlogin, (rolpassword IS NOT NULL) AS has_password FROM pg_roles WHERE rolname = '${SNAKE}_svc';"
-            if [ -n "$svc_pw" ]; then echo "[db-init] .env DATABASE_URL carries a svc password: yes"; else echo "[db-init] .env DATABASE_URL carries a svc password: no"; fi
-            exit 0
-          fi
-
-          for f in "$DDL/00_baseline.sql" "$DDL/97_service_role.sql" "$DDL/98_column_locks.sql"; do
-            echo "[db-init] applying $(basename "$f")"
-            apply_file "$f"
-          done
-          # Increments, counted. CI told us how many the pinned commit carries,
-          # so "the glob matched nothing" can no longer pass as success - the
-          # exact failure that let a missing domain schema ship green.
-          shopt -s nullglob
-          applied=0
-          for f in "$DDL"/incr/*.sql; do
-            echo "[db-init] applying incr $(basename "$f")"
-            apply_file "$f"
-            applied=$((applied + 1))
-          done
-          if [ "$applied" -ne "$EXPECTED_INCR" ]; then
-            echo "[db-init] FATAL: applied $applied increment(s); the pinned commit carries $EXPECTED_INCR" >&2
-            exit 1
-          fi
-          echo "[db-init] applied $applied increment(s), matching the pinned commit"
-
-          # Give the service role its password so the app can authenticate. Source
-          # of truth is the operator .env's DATABASE_URL. If it has none yet,
-          # generate one, patch DATABASE_URL in place (600 file, host-only), and
-          # bounce the app so it reconnects with the new URL - keeping runtime and
-          # DB in agreement without a full .env re-bootstrap.
-          if [ -z "$svc_pw" ]; then
-            svc_pw="$(openssl rand -hex 24 2>/dev/null || head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-            if [ ! -f "$ENV_FILE" ]; then
-              echo "[db-init] ERROR: $ENV_FILE not found; cannot persist svc password" >&2
-              exit 1
-            fi
-            sed -i -E "s#(^DATABASE_URL=\"?postgresql://${SNAKE}_svc:)[^@]*@#\1${svc_pw}@#" "$ENV_FILE"
-            echo "[db-init] no svc password in .env; generated one and patched DATABASE_URL"
-            docker restart "${PROJECT_NAME}-app" >/dev/null 2>&1 || true
-          fi
-          # Pipe the ALTER over stdin (never argv) so the password stays out of ps.
-          esc="$(printf '%s' "$svc_pw" | sed "s/'/''/g")"
-          printf "ALTER ROLE %s_svc PASSWORD '%s';\n" "$SNAKE" "$esc" | run
-          echo "[db-init] service-role password set"
-          # Every apply ends by SHOWING what the database now has. A structure
-          # change that reports only "done" is a change nobody checked.
-          echo "[db-init] resulting contract + domain schema tables:"
-          list_tables
-          echo "[db-init] done."
-          REMOTE_SCRIPT
-          scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 \
-            /tmp/db-init.sh /tmp/db-init-ddl.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
-          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") PROJECT_NAME=$(printf %q "$PROJECT_NAME") DB_ENV=$(printf %q "$DB_ENV") SNAKE=$(printf %q "$snake") DDL_TGZ=/tmp/db-init-ddl.tgz EXPECTED_INCR=$(printf %q "$incr_count") bash /tmp/db-init.sh" \
+          # THE REMOTE HALF IS A FILE IN THE REPO (deploy/db-init-remote.sh),
+          # not a heredoc here, so it can be rehearsed locally with DB_URL=...
+          # (ADR-008). It keeps the ledger: each DDL file applies once.
+          scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 deploy/db-init-remote.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/db-init.sh"
+          printf '%s\n' "REPO_DIR=$(printf %q "$ddl_dir") ENV_FILE=$(printf %q "${STACK_ROOT}/etc/.env") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") PROJECT_NAME=$(printf %q "$PROJECT_NAME") DB_ENV=$(printf %q "$DB_ENV") SNAKE=$(printf %q "$snake") GIT_SHA=$(printf %q "$PINNED_SHA") EXPECTED_INCR=$(printf %q "$incr_count") BOOTSTRAP_THROUGH=$(printf %q "$BOOTSTRAP_THROUGH") bash /tmp/db-init.sh" \
             | ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s
