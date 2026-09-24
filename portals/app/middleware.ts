@@ -64,6 +64,27 @@ export const config = {
    *   /api/*           routes enforce their own access and answer JSON; a 302
    *                    to an HTML page would surface as a JSON parse error
    *   /_next, favicon  build output and assets
+   *   /logo.svg        public brand asset, must be fetchable by anyone
+   *
+   * **`public/` files served at the root are NOT excluded by `_next/*`.** Next
+   * serves them from `/`, so middleware runs for them: an anonymous `GET
+   * /logo.svg` matched this pattern and 302'd to the gate. Putting the file in
+   * `public/` is necessary but not sufficient - the asset has to be named here
+   * too, the same way `favicon.ico` already is. (2026-09-25: owner asked for
+   * `https://vxtpl.vxture.com/logo.svg` to be reachable.)
+   *
+   * Named one by one on purpose, rather than a blanket "anything with a dot":
+   * this matcher is the product's front door, and widening it by pattern is how
+   * a real page ends up ungated by accident.
    */
-  matcher: ["/((?!gate|auth|api|_next/static|_next/image|favicon.ico).*)"],
+  /*
+   * `logo\.svg$` 的 `$` 不是装饰：否定前瞻里的分支是**前缀匹配**，不加锚点的
+   * `logo\.svg` 会把 `/logo.svgx` 也排除掉——那等于给一个不存在的路径开了门。
+   * 同样的宽松也存在于上面几个既有分支（`gate` 会顺带放行 `/gateway`，
+   * `favicon.ico` 会放行 `/favicon.icox`）。那几条不在本次改动范围内，
+   * 但记在这里：它们该收紧成精确匹配。
+   */
+  matcher: [
+    "/((?!gate|auth|api|_next/static|_next/image|favicon.ico|logo\\.svg$).*)",
+  ],
 };
