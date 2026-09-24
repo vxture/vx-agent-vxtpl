@@ -8,7 +8,7 @@
 ## Context
 
 The demo product `vxtpl` is deployed and running on **worker02** (tailnet
-MagicDNS `vx-worker-02`, IP `100.76.219.48`), app port
+MagicDNS `vx-worker-02`, IP `<worker-02-tailnet-ip>`), app port
 **`APP_PUBLISH_PORT=3232`** (avoids arda's 3230/3231), stack root
 `/srv/md0/vxtpl`. The container's `/api/health` is verified 200.
 
@@ -21,7 +21,7 @@ and `/status` return 404).
 
 Add a `vxtpl.vxture.com` vhost to the shared edge (vxture project repo
 `deploy/nginx/sites-enabled/`) with upstream **`vx-worker-02:3232`** (IP form
-`100.76.219.48:3232` if edge-container MagicDNS is unavailable), then run
+`<worker-02-tailnet-ip>:3232` if edge-container MagicDNS is unavailable), then run
 `sudo bash deploy/scripts/20-sync-nginx-config.sh` (does `nginx -t` + reload).
 
 ## vhost config
@@ -45,7 +45,7 @@ server {
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
     client_max_body_size 25m;
     resolver 100.100.100.100 valid=30s ipv6=off;
-    set $upstream "vx-worker-02:3232";     # or "100.76.219.48:3232" if MagicDNS is unavailable
+    set $upstream "vx-worker-02:3232";     # or "<worker-02-tailnet-ip>:3232" if MagicDNS is unavailable
     location = /api/usage/flush { return 404; }   # internal endpoint, not public
     location / {
         proxy_pass http://$upstream;

@@ -13,7 +13,7 @@ The platform edge (worker-01 nginx) renders two things on every deploy:
   every agent-line product;
 - `agents-upstream.map` - `<host> -> <upstream host:port>`, generated from the
   **product registry**. The row for this product currently reads
-  `vxtpl.vxture.com 100.76.219.48:4000;` (worker-02's tailnet IP + the app's
+  `vxtpl.vxture.com <worker-02-tailnet-ip>:4000;` (worker-02's tailnet IP + the app's
   published port).
 
 So the only thing this product controls about its edge routing is **one field in

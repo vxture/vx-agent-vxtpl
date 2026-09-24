@@ -65,7 +65,7 @@ variable in the path any more.
       approved). No `beta` environment for vxtpl itself (ADR-002) - the ROUTE
       exists (ADR-007); see "Turning the beta tier on" below for a product.
 - [x] Non-secret host secrets: `DEPLOY_HOST` = `vx-worker-02` (tailnet MagicDNS,
-      IP `100.76.219.48`), `DEPLOY_USER` = `stone`, `DEPLOY_PORT` = `22`.
+      IP `<worker-02-tailnet-ip>`), `DEPLOY_USER` = `stone`, `DEPLOY_PORT` = `22`.
 - [x] Domain `vxtpl.vxture.com` created and resolving (shared edge -> worker02
       over the tailnet); vhost source in `configs/edge/`.
 - [x] Org-level shared credentials available to the repo: `NODE_AUTH_TOKEN`,
