@@ -1,6 +1,15 @@
 import type { OidcConfig } from "./config";
 import { verifyToken, refreshTokens } from "./oidc";
 import { getSession, putSession, type RpSession } from "./session-store";
+
+/** The store and IdP calls freshSession needs; injectable so the race is testable without Redis. */
+export interface SessionDeps {
+  getSession: typeof getSession;
+  putSession: typeof putSession;
+  refreshTokens: typeof refreshTokens;
+}
+
+const defaultDeps: SessionDeps = { getSession, putSession, refreshTokens };
 import { toAuthUser, type AccessClaims, type AuthUser } from "./claims";
 
 // Per-request auth (080-rp section 2.6 / 2.9): rpsid -> session -> silent refresh
@@ -27,14 +36,8 @@ export async function getAuthContext(
   cfg: OidcConfig,
   rpsid: string,
 ): Promise<{ user: AuthUser; accessToken: string; idToken: string } | null> {
-  let session = await getSession(cfg.clientId, rpsid);
+  const session = await freshSession(cfg, rpsid);
   if (!session) return null;
-
-  const now = Math.floor(Date.now() / 1000);
-  if (session.accessExpiresAt - now <= REFRESH_SKEW_SECONDS && session.refreshToken) {
-    session = await tryRefresh(cfg, rpsid, session);
-    if (!session) return null; // refresh failed -> session invalid
-  }
 
   let claims: AccessClaims;
   try {
@@ -45,13 +48,55 @@ export async function getAuthContext(
   return { user: toAuthUser(claims), accessToken: session.accessToken, idToken: session.idToken };
 }
 
+/** The stored session, refreshed first if its access token is near expiry. */
+export async function freshSession(
+  cfg: OidcConfig,
+  rpsid: string,
+  deps: SessionDeps = defaultDeps,
+): Promise<RpSession | null> {
+  const session = await deps.getSession(cfg.clientId, rpsid);
+  if (!session) return null;
+  if (!nearExpiry(session)) return session;
+  return refreshOnce(cfg, rpsid, session, deps); // null -> refresh failed, session invalid
+}
+
+function nearExpiry(session: RpSession): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  return session.accessExpiresAt - now <= REFRESH_SKEW_SECONDS && !!session.refreshToken;
+}
+
+// SINGLE-FLIGHT. The IdP rotates refresh tokens: each one works exactly once.
+// Several requests resolve the same session at once (parallel client fetches,
+// route handlers, server actions), and after the access token expires every one
+// of them read the same stale session. Each presented the same refresh token;
+// the first won and the rest got invalid_grant as a replay and returned null -
+// a signed-in member saw a 401 or the sign-in prompt. Concurrent callers for one
+// rpsid in this process now share one refresh (mirrored from vx-agent-yucer#517).
+const inflight = new Map<string, Promise<RpSession | null>>();
+
+function refreshOnce(
+  cfg: OidcConfig,
+  rpsid: string,
+  session: RpSession,
+  deps: SessionDeps,
+): Promise<RpSession | null> {
+  const key = `${cfg.clientId}:${rpsid}`;
+  let pending = inflight.get(key);
+  if (!pending) {
+    pending = tryRefresh(cfg, rpsid, session, deps).finally(() => inflight.delete(key));
+    inflight.set(key, pending);
+  }
+  return pending;
+}
+
 async function tryRefresh(
   cfg: OidcConfig,
   rpsid: string,
   session: RpSession,
+  deps: SessionDeps,
 ): Promise<RpSession | null> {
   try {
-    const tokens = await refreshTokens(cfg, session.refreshToken!);
+    const tokens = await deps.refreshTokens(cfg, session.refreshToken!);
     const next: RpSession = {
       ...session,
       accessToken: tokens.access_token,
@@ -60,9 +105,16 @@ async function tryRefresh(
       refreshToken: tokens.refresh_token ?? session.refreshToken,
       accessExpiresAt: Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 300),
     };
-    await putSession(cfg.clientId, rpsid, next, cfg.sessionTtlSeconds);
+    await deps.putSession(cfg.clientId, rpsid, next, cfg.sessionTtlSeconds);
     return next;
   } catch {
+    // Another process may have rotated this token between our read and our
+    // refresh (single-flight is per process). If the store now holds a
+    // different, fresh session, that one is valid - use it.
+    const current = await deps.getSession(cfg.clientId, rpsid).catch(() => null);
+    if (current && current.refreshToken !== session.refreshToken && !nearExpiry(current)) {
+      return current;
+    }
     // invalid_grant (expired/revoked/replayed) -> session is dead
     return null;
   }

@@ -13,14 +13,12 @@ import type { AccessState } from "../../access/types";
 // It exists because the two facts a gate needs live in different places by
 // design: identity comes from the RP session and entitlement is never in the
 // token (D12 - always fetched via C2). A client fetching /auth/session and
-// /api/entitlement in parallel would be reading the same session twice, and
-// those two reads race: both call getAuthUser, which silently refreshes an
-// access token inside 60s of expiry using a ROTATING refresh token. One
-// rotation wins, the other gets invalid_grant - so a perfectly signed-in user
-// can see "authenticated" from one call and 401 from the other.
+// /api/entitlement in parallel would be reading the same session twice. Those
+// two reads used to race on the ROTATING refresh token; session.ts now
+// single-flights the refresh, so that is fixed at the root for every caller.
 //
-// Resolving once server-side removes the race, halves the Redis and JWKS work,
-// and lets the gate render a single decision instead of reconciling two.
+// Resolving once server-side still halves the Redis and JWKS work, and lets the
+// gate render a single decision instead of reconciling two.
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
