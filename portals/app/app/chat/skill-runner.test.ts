@@ -213,7 +213,9 @@ test("the chat workflow sends the converted document to Atlas under the Runos ta
 
   const rejected = stub({}, { sample: true, riskLevel: "write" });
   await assert.rejects(
-    resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, { skillCode: DOCUMENT_CONVERSION_SKILL }),
+    resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, {
+      modelCode: "chat/default", skillCode: DOCUMENT_CONVERSION_SKILL,
+    }),
     ChatConversionError,
   );
   assert.deepEqual(rejected.map(({ name }) => name), ["runos_discover", "runos_resolve"]);

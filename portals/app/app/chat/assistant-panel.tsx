@@ -100,7 +100,7 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
         {active.error && <p role="alert">{active.error}</p>}
         <div>
           <Input aria-label="Message assistant" value={active.draft} onChange={(event) => chat.setDraft(event.target.value)} maxLength={500} disabled={active.busy} />
-          <Button type="submit" disabled={active.busy || !active.draft.trim()}>Send</Button>
+          <Button type="submit" disabled={active.busy || !chat.canSend || !active.draft.trim()}>Send</Button>
         </div>
       </form>
     </section>

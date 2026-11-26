@@ -8,7 +8,12 @@
  */
 
 export type Check = { state: "verified" | "waiting" | "blocked" | "unavailable"; detail: string };
-export type Probe = "c3-replay" | "atlas-inference" | "runos-invoke";
+export const PROBES = ["c3-replay", "atlas-inference", "atlas-model-inference", "runos-invoke"] as const;
+export type Probe = (typeof PROBES)[number];
+export type ProbeCommand =
+  | { probe: Exclude<Probe, "atlas-model-inference"> }
+  | { probe: "atlas-model-inference"; modelCode: string };
+export type AtlasModelChoice = { code: string; name: string; provider: string };
 
 export type PlatformReport = {
   checkedAt: string;
@@ -16,6 +21,7 @@ export type PlatformReport = {
   scopeKey: string | null;
   actions: Record<Probe, boolean>;
   actionDetails: Record<Probe, string>;
+  atlasModelChoices: AtlasModelChoice[];
   checks: {
     issuer: Check;
     session: Check;
@@ -25,6 +31,7 @@ export type PlatformReport = {
     entitlements: Check;
     provisioning: Check;
     atlas: Check;
+    atlasModels: Check;
     runos: Check;
   };
 };
@@ -32,8 +39,13 @@ export type PlatformReport = {
 export type ProbeReceipt = {
   ok: boolean;
   detail: string;
+  code?: "WORKSPACE_CHANGED" | "ATLAS_MODEL_UNAVAILABLE";
   receipt?: string;
+  responseText?: string;
   evidence?:
-    | { provider: "atlas"; taskId: string; endpointCode: string; modelCode: string }
+    | ({ provider: "atlas"; taskId: string; modelCode: string } & (
+      | { endpointCode: string; requestedModelCode?: never }
+      | { requestedModelCode: string; endpointCode?: never }
+    ))
     | { provider: "runos"; taskId: string; capabilityId: string; outcomeAcknowledged: true };
 };

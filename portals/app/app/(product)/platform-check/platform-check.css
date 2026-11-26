@@ -64,6 +64,11 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.platform-demo__model-select {
+  width: min(100%, 32rem);
+  margin-block: 0.5rem;
+}
+
 .platform-demo__group {
   width: 3.25rem;
   color: var(--muted-foreground);

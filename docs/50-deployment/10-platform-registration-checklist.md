@@ -63,10 +63,16 @@ no hint about which of these steps is missing.
 
 ## Provider grants
 
-- [ ] **Atlas inference.** Set \`ATLAS_API_URL\` and register the product grant for
-  the demo endpoint \`chat/default\`. The product reads the granted endpoints
-  with the workspace OBO token. Run the sample in \`/platform-check\` and record
-  the endpoint, model, request ID and task ID. Atlas owns inference metering.
+- [ ] **Atlas route inference.** Set `ATLAS_API_URL` and use Opera to grant the product
+  an active chat route. The product reads `GET /v1/model-routes` with the workspace
+  OBO ticket and applies the current product tier. Run the sample in
+  `/platform-check` and record the selected route, model, request ID and task ID.
+  Atlas owns inference metering.
+- [ ] **Atlas direct model inference.** In the same workspace, use the designated
+  operator to load the Atlas catalog and select a chat model reachable through
+  a product route grant or covered by a matching tenant model grant. Run
+  the model action in `/platform-check` and record the requested model,
+  serving model, request ID and task ID. Atlas authorizes the call.
 - [ ] **Runos capability.** Set `RUNOS_API_URL` and set
   `PLATFORM_DEMO_RUNOS_CAPABILITY_ID=markitdown.document-to-markdown` for the
   designated operator and workspace. Confirm the caller can discover the
@@ -85,14 +91,14 @@ no hint about which of these steps is missing.
 
 Check the deployed version using `pnpm doctor --stage production --url
 https://vxtpl.ruyin.work --expect-version <version>`. Verify Atlas and Runos URL
-presence, the active Atlas demo endpoint, and the approved read-only Runos
+presence, an active authorized Atlas chat route eligible at the product tier, and the approved read-only Runos
 capability in the designated workspace. The product needs
 `PLATFORM_DEMO_WORKSPACE_ID`, `PLATFORM_DEMO_SUBJECT`, and
 `PLATFORM_DEMO_RUNOS_CAPABILITY_ID` for the metered demonstration.
 
 Use Accounts to sign in as the designated user. Verify the assigned seat, C2
 read, provisioning ACK and missed-delivery recovery, then retain the C3 event
-ID, Atlas request ID, and Runos call ID and outcome acknowledgement. Finish
+ID, both Atlas request IDs, and Runos call ID and outcome acknowledgement. Finish
 with logout from another product in the same central session and check the
 Vxtpl gate transition.
 
@@ -104,5 +110,6 @@ Vxtpl gate transition.
 | C2 admission and entitlement | Check an assigned member, an unassigned member and test subscription states | Admission and denial are distinct from expired subscriptions and unavailable responses |
 | C3 delivery and reconciliation | Verify provisioning state, platform delivery ACK, duplicate event and missed-delivery recovery | Compare platform acknowledgement with local state at the same event sequence |
 | C3 usage and replay | Run the explicit usage probe and read the platform receipt and quota | The original event ID is returned on replay and workspace quota reflects the real event |
-| Atlas | Granted endpoint check and explicit inference probe | Nonempty response, model and correlated request ID. Confirm metering with Atlas evidence when in scope |
+| Atlas route | Authorized route check and inference by `endpointCode` | Nonempty response, requested route, serving model and correlated request ID |
+| Atlas model | Live catalog and inference by `modelCode` | Nonempty response, requested and serving models, and correlated request ID |
 | Runos | Entitled discovery and explicit read probe | Matching capability and call ID plus acknowledged outcome |

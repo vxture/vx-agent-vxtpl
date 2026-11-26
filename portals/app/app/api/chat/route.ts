@@ -4,12 +4,13 @@ import { readWorkspaceSession } from "../../auth/lib/workspace-session";
 import { hasWorkspaceSeat } from "../../entitlement/workspace-authority";
 import { readWorkspaceEntitlement } from "../../entitlement/resolver";
 import { canUseFeature } from "../../entitlement/capability";
-import { AtlasError } from "../../chat/atlas-client";
-import { findModel, findSkill, gatedModels, gatedSkills } from "../../chat/catalog";
+import { AtlasError, getAtlasClientConfig } from "../../chat/atlas-client";
+import { chooseChatModel, findSkill, gatedMockModels, gatedSkills, readAtlasChatModels, type GatedOption } from "../../chat/catalog";
 import { ChatConversionError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
 import { CHAT_SCOPE_HEADER } from "../../chat/types";
-import { hasProductAccess } from "../../entitlement/types";
+import { hasProductAccess, type Entitlement } from "../../entitlement/types";
+import { isDeployedStage } from "../../lib/deploy-stage";
 import { CHAT_TURNS_PER_MINUTE, allowChatTurn } from "../../chat/rate-limit";
 
 // GET/POST /api/chat - the tier-gated chat turn.
@@ -22,6 +23,8 @@ import { CHAT_TURNS_PER_MINUTE, allowChatTurn } from "../../chat/rate-limit";
 export const dynamic = "force-dynamic";
 
 const USAGE_METRIC = "vxtpl.chat.messages";
+const MODEL_NOT_GRANTED = "\u5f53\u524d\u6240\u9009\u6a21\u578b\u5df2\u4e0d\u53ef\u7528\uff0c\u5df2\u4fdd\u7559\u4f60\u7684\u6d88\u606f\u3002";
+const MODEL_CATALOG_UNAVAILABLE = "\u6682\u65f6\u65e0\u6cd5\u8bfb\u53d6\u53ef\u7528\u6a21\u578b\u3002";
 
 interface Caller {
   session: Extract<Awaited<ReturnType<typeof readWorkspaceSession>>, { status: "ready" | "development" }>;
@@ -39,6 +42,9 @@ function atlasChatError(failure: AtlasError): NextResponse {
   const { code } = failure.envelope;
   const retryable = failure.retryable;
   const headers = new Headers({ "cache-control": "no-store" });
+  if (code === "ENDPOINT_NOT_ROUTABLE" || code === "MODEL_NOT_ROUTABLE" || code === "NOT_ENTITLED") {
+    return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
+  }
   if (code === "RATE_LIMITED") {
     const retryAfterMs = retryable ? failure.retryAfterMs : undefined;
     let error = retryable ? "The model is busy. Try again shortly." : "The model is currently rate limited.";
@@ -85,24 +91,39 @@ async function resolveCaller(): Promise<Caller | NextResponse> {
   };
 }
 
+async function readModelChoices(caller: Caller, entitlement: Entitlement): Promise<GatedOption[]> {
+  const config = getAtlasClientConfig();
+  if (config) return readAtlasChatModels(config, caller.identity.mint, entitlement);
+  if (isDeployedStage()) throw new Error("Atlas is not configured.");
+  return gatedMockModels(entitlement);
+}
+
 export async function GET(): Promise<Response> {
   const caller = await resolveCaller();
   if (caller instanceof NextResponse) return caller;
 
+  let entitlement: Entitlement;
   try {
-    const entitlement = await readWorkspaceEntitlement(caller.session);
+    entitlement = await readWorkspaceEntitlement(caller.session);
     if (hasProductAccess(entitlement) && !await hasWorkspaceSeat(caller.session)) {
       return accessError(403, "PRODUCT_SEAT_REQUIRED", "Product access is not assigned.");
     }
+  } catch {
+    return accessError(503, "WORKSPACE_ACCESS_UNAVAILABLE", "Workspace access could not be checked.");
+  }
+  const productAccess = hasProductAccess(entitlement);
+  try {
+    const models = productAccess ? await readModelChoices(caller, entitlement) : [];
     return NextResponse.json({
       scopeKey: caller.scopeKey,
       tier: entitlement.tier,
-      productAccess: hasProductAccess(entitlement),
-      models: gatedModels(entitlement),
+      productAccess,
+      models,
+      defaultModelCode: chooseChatModel(models) ?? null,
       skills: gatedSkills(entitlement),
     }, { headers: { "cache-control": "no-store" } });
   } catch {
-    return accessError(503, "WORKSPACE_ACCESS_UNAVAILABLE", "Workspace access could not be checked.");
+    return accessError(503, "MODEL_CATALOG_UNAVAILABLE", MODEL_CATALOG_UNAVAILABLE);
   }
 }
 
@@ -143,7 +164,10 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "history must end with a user message" }, { status: 400 });
   }
 
-  const modelCode = typeof raw?.modelCode === "string" ? raw.modelCode : undefined;
+  const modelCode = raw?.modelCode;
+  if (modelCode !== undefined && typeof modelCode !== "string") {
+    return accessError(400, "INVALID_MODEL_CODE", "Model code must be a string.");
+  }
   const skillCode = typeof raw?.skillCode === "string" ? raw.skillCode : undefined;
 
   let entitlement;
@@ -160,15 +184,15 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Check feature entitlement before calling any metered service.
-  if (modelCode !== undefined) {
-    const model = findModel(modelCode);
-    if (!model) return NextResponse.json({ error: `unknown model '${modelCode}'` }, { status: 400 });
-    if (!canUseFeature(entitlement, model.featureKey)) {
-      return NextResponse.json(
-        { error: `model '${modelCode}' not entitled at tier '${entitlement.tier ?? "none"}'` },
-        { status: 403 },
-      );
-    }
+  let models: GatedOption[];
+  try {
+    models = await readModelChoices(caller, entitlement);
+  } catch {
+    return accessError(503, "MODEL_CATALOG_UNAVAILABLE", MODEL_CATALOG_UNAVAILABLE);
+  }
+  const selectedModel = chooseChatModel(models, modelCode);
+  if (!selectedModel) {
+    return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
   }
   if (skillCode !== undefined) {
     const skill = findSkill(skillCode);
@@ -183,7 +207,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let reply;
   try {
-    reply = await getChatResolver().reply(messages, caller.identity, { modelCode, skillCode });
+    reply = await getChatResolver().reply(messages, caller.identity, { modelCode: selectedModel, skillCode });
   } catch (err) {
     if (err instanceof AtlasError) return atlasChatError(err);
     if (err instanceof ChatConversionError) {

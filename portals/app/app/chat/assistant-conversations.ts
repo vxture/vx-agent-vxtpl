@@ -40,6 +40,7 @@ export function useAssistantConversations(
   const [activeId, setActiveId] = useState(1);
   const [conversations, setConversations] = useState(() => [emptyConversation(1)]);
   const active = conversations.find((conversation) => conversation.id === activeId) ?? conversations[0];
+  const canSend = Boolean(modelCode && scopeKey);
 
   function update(id: number, patch: Partial<Conversation>) {
     setConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, ...patch } : conversation));
@@ -74,5 +75,5 @@ export function useAssistantConversations(
     }
   }
 
-  return { active, conversations, setActiveId, start, clear, send, setDraft: (draft: string) => update(active.id, { draft }) };
+  return { active, conversations, canSend, setActiveId, start, clear, send, setDraft: (draft: string) => update(active.id, { draft }) };
 }

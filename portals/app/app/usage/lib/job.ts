@@ -32,7 +32,7 @@ type UsageJobConfig = { mode: "manual" | "on" } | { mode: "demo"; scope: UsageSc
  * @returns The reporting mode and, for acceptance, the only eligible row.
  * @throws {Error} When a configured mode or acceptance scope is invalid.
  */
-export function usageJobConfig(env: NodeJS.ProcessEnv = process.env): UsageJobConfig {
+export function usageJobConfig(env: Readonly<Record<string, string | undefined>> = process.env): UsageJobConfig {
   const mode = env.USAGE_FLUSH_MODE;
   if (!mode) return { mode: "manual" };
   if (mode === "on") return { mode };
