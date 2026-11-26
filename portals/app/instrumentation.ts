@@ -1,5 +1,5 @@
 /**
- * Starts the product's provisioning reconciliation in the Node runtime.
+ * Starts product background jobs in the Node runtime.
  * @package @vxtpl/app
  * @layer Application
  * @category Bootstrap
@@ -10,6 +10,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     const { startProvisioningReconciliation } = await import("./app/provisioning/lib/reconcile");
+    const { startUsageJob } = await import("./app/usage/lib/job");
     startProvisioningReconciliation();
+    startUsageJob();
   }
 }

@@ -143,11 +143,15 @@ evict the workspace snapshot. The Redis write checks the marker captured before
 the platform request so a delayed response cannot restore an evicted snapshot.
 When Redis is unavailable, C2 reads the platform directly.
 
-The internal job calls `POST /api/usage/flush` with its job token. The worker
-uses the configured OIDC client to exchange a platform service ticket for each
-workspace and sends the original amount, end-user attribution and idempotency
-key. A valid 200 receipt with `event_id` and completed cache eviction clears
-the local row. Unconfirmed rows keep their original keys for replay.
+The Node runtime starts the usage worker when `USAGE_FLUSH_MODE` is set. It
+runs at startup and five minutes after each pass. `POST /api/usage/flush` runs
+the same job on demand with the internal job token. Both entry points acquire
+the same Redis lease within a deployed stack.
+
+The worker exchanges a platform service ticket for each workspace and sends
+the original amount, end-user attribution and idempotency key. A valid 200
+receipt with `event_id` and completed cache eviction clears the local row.
+Unconfirmed rows keep their original keys for replay.
 
 ## How a chat turn flows
 

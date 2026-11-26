@@ -1,4 +1,4 @@
-import type { UsageStore, UsageRow } from "./store";
+import type { UsageStore, UsageRow, UsageScope } from "./store";
 import { getPrismaClient } from "../../lib/db";
 
 // Prisma-backed UsageStore over local_usage.raw. Used when DATABASE_URL is set.
@@ -20,9 +20,9 @@ export class PrismaUsageStore implements UsageStore {
     });
   }
 
-  async unflushed(limit: number): Promise<UsageRow[]> {
+  async unflushed(limit: number, scope?: UsageScope): Promise<UsageRow[]> {
     const p = await getPrismaClient();
-    const rows = await p.raw.findMany({ where: { flushed: false }, take: limit });
+    const rows = await p.raw.findMany({ where: { flushed: false, ...scope }, take: limit });
     return rows.map((r) => ({
       workspaceId: r.workspaceId,
       metric: r.metric,

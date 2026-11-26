@@ -13,9 +13,15 @@ export interface UsageRow {
   flushed: boolean;
 }
 
+export interface UsageScope {
+  workspaceId: string;
+  endUserId: string;
+  idempotencyKey: string;
+}
+
 export interface UsageStore {
   record(row: Omit<UsageRow, "flushed">): Promise<void>;
-  unflushed(limit: number): Promise<UsageRow[]>;
+  unflushed(limit: number, scope?: UsageScope): Promise<UsageRow[]>;
   markFlushed(idempotencyKeys: string[]): Promise<void>;
 }
 
@@ -28,13 +34,14 @@ export class InMemoryUsageStore implements UsageStore {
       this.rows.set(row.idempotencyKey, { ...row, flushed: false });
     }
   }
-  async unflushed(limit: number): Promise<UsageRow[]> {
-    const out: UsageRow[] = [];
-    for (const r of this.rows.values()) {
-      if (!r.flushed) out.push(r);
-      if (out.length >= limit) break;
+  async unflushed(limit: number, scope?: UsageScope): Promise<UsageRow[]> {
+    if (scope) {
+      const row = this.rows.get(scope.idempotencyKey);
+      return row && !row.flushed && row.workspaceId === scope.workspaceId && row.endUserId === scope.endUserId
+        ? [row]
+        : [];
     }
-    return out;
+    return [...this.rows.values()].filter((row) => !row.flushed).slice(0, limit);
   }
   async markFlushed(keys: string[]): Promise<void> {
     for (const k of keys) {

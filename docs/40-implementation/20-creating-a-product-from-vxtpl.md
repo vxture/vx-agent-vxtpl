@@ -121,6 +121,20 @@ configuration and the public runtime. Add `--expect-version <version>` when
 checking a release candidate. Signed-in workspace operations and their real
 receipts complete platform acceptance.
 
+## Enable the usage worker
+
+Use `USAGE_FLUSH_MODE=demo` with the configured `PLATFORM_DEMO_WORKSPACE_ID`,
+`PLATFORM_DEMO_SUBJECT` and `USAGE_FLUSH_DEMO_KEY`. The key is the one written
+to the local usage buffer by the approved business action. In the included
+chat flow it is the returned task ID. The job submits only the row matching
+all three values. Check the original platform event ID and the local
+`flushed` flag after delivery.
+
+Set `USAGE_FLUSH_MODE=on` when the product's registered metrics and full buffer
+are ready for regular reporting. The product worker runs on startup and five
+minutes after each pass. Leave the mode unset for deployments that already
+schedule the internal endpoint externally.
+
 ## Adding a beta tier
 
 vxtpl is production-only (ADR-002). If your product needs beta: add `beta-*` tag
