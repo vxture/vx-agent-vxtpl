@@ -257,7 +257,8 @@ surfaces under `portals/app/app/` and their components; the domain schemas beyon
 the three reserved contract schemas (`vx_provision` / `local_authz` /
 `local_usage` are reserved names and must not be reused for domain data);
 role/permission catalog values; the contents of the capability matrix
-(`portals/app/app/entitlement/capability.ts`) and the model/skill catalog; the
+(`portals/app/app/entitlement/capability.ts`), route presentation and tier rules,
+and the example skill catalog; the
 `20-specs/` product definition; domain guardrails.
 
 The distinction is mechanism versus content. vxtpl fills every exemplar slot with

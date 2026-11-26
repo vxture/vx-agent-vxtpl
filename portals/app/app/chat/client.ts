@@ -15,6 +15,7 @@ export interface ChatContext {
   tier: string | null;
   productAccess: boolean;
   models: GatedOption[];
+  defaultModelCode?: string | null;
   skills: GatedOption[];
 }
 
@@ -27,23 +28,38 @@ export class ChatRequestError extends Error {
 async function readResult<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null) as T & { code?: string; error?: string } | null;
   if (!response.ok || !body) {
-    throw new ChatRequestError(response.status, body?.code, body?.error ?? `Unable to complete the request (HTTP ${response.status}).`);
+    const message = response.status === 502 || response.status === 504
+      ? "\u6682\u672a\u6536\u5230\u6a21\u578b\u56de\u590d\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"
+      : `Unable to complete the request (HTTP ${response.status}).`;
+    throw new ChatRequestError(response.status, body?.code, body?.error ?? message);
   }
   return body;
 }
 
 export async function readChatContext(): Promise<ChatContext> {
-  const response = await fetch("/api/chat", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+  const response = await fetch("/api/chat", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
   const context = await readResult<ChatContext>(response);
   if (!context.scopeKey) throw new ChatRequestError(503, "SESSION_UNAVAILABLE", "Workspace verification is unavailable.");
   return context;
 }
 
 export async function requestChatTurn(history: ChatMessage[], scopeKey: string, options: ChatOptions): Promise<ChatReply> {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "content-type": "application/json", [CHAT_SCOPE_HEADER]: scopeKey },
-    body: JSON.stringify({ history, ...options }),
-  });
-  return readResult<ChatReply>(response);
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json", [CHAT_SCOPE_HEADER]: scopeKey },
+      body: JSON.stringify({ history, ...options }),
+      signal: AbortSignal.timeout(options.skillCode ? 210_000 : 140_000),
+    });
+    const reply = await readResult<ChatReply>(response);
+    if (reply.message?.role !== "assistant" || typeof reply.message.content !== "string" || !reply.message.content.trim()) {
+      throw new ChatRequestError(502, "EMPTY_MODEL_REPLY", "\u6a21\u578b\u6ca1\u6709\u8fd4\u56de\u56de\u590d\uff0c\u8bf7\u91cd\u8bd5\u3002");
+    }
+    return reply;
+  } catch (failure) {
+    if (failure instanceof DOMException && failure.name === "TimeoutError") {
+      throw new ChatRequestError(504, "CHAT_TIMEOUT", "\u7b49\u5f85\u56de\u590d\u8d85\u65f6\uff0c\u5df2\u4fdd\u7559\u4f60\u7684\u6d88\u606f\u3002");
+    }
+    throw failure;
+  }
 }

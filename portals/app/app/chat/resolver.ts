@@ -3,10 +3,9 @@ import { BRAND } from "@vxtpl/shared/brand";
 import {
   getAtlasClientConfig,
   fetchChatCompletion,
-  DEFAULT_ENDPOINT_CODE,
   type AtlasClientConfig,
 } from "./atlas-client";
-import { findSkill } from "./catalog";
+import { DEFAULT_MOCK_MODEL, findSkill } from "./catalog";
 import { runSkill } from "./skill-runner";
 import { assertMockAllowed } from "../lib/deploy-stage";
 import type { MintOptions } from "../lib/s2s-token";
@@ -35,8 +34,10 @@ export interface ChatIdentity {
 }
 
 export interface ChatResolver {
-  reply(history: ChatMessage[], identity: ChatIdentity, options?: ChatOptions): Promise<ChatReply>;
+  reply(history: ChatMessage[], identity: ChatIdentity, options: ResolvedChatOptions): Promise<ChatReply>;
 }
+
+type ResolvedChatOptions = ChatOptions & { modelCode: string };
 
 export class ChatConversionError extends Error {
   constructor(readonly callId?: string) {
@@ -63,7 +64,7 @@ export class MockChatResolver implements ChatResolver {
   async reply(history: ChatMessage[], _identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
     const last = history[history.length - 1];
     const echo = last?.content ?? "";
-    const modelCode = options.modelCode ?? DEFAULT_ENDPOINT_CODE;
+    const modelCode = options.modelCode ?? DEFAULT_MOCK_MODEL;
     const skillNote = options.skillCode ? ` [skill: ${options.skillCode}]` : "";
     return {
       mode: "mock",
@@ -83,8 +84,8 @@ export class MockChatResolver implements ChatResolver {
 export class AtlasChatResolver implements ChatResolver {
   constructor(private readonly cfg: AtlasClientConfig) {}
 
-  async reply(history: ChatMessage[], identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
-    const modelCode = options.modelCode ?? DEFAULT_ENDPOINT_CODE;
+  async reply(history: ChatMessage[], identity: ChatIdentity, options: ResolvedChatOptions): Promise<ChatReply> {
+    const { modelCode } = options;
     // ONE task id spans the whole turn - the Runos skill invocation, the outcome
     // report that closes it, and the Atlas inference call. Both planes require
     // it and both store it verbatim, so a turn that spent a capability call and

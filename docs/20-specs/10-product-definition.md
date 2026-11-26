@@ -80,8 +80,8 @@ they should, and are worth stating where a reader will meet them:
 ## Entitlement model
 
 vxtpl's capability matrix (`portals/app/app/entitlement/capability.ts`) is the
-exemplar of a product blank zone filled in: concrete feature keys for three chat
-models, four skills, and the game's five `game:*` keys, gated cumulatively
+exemplar of a product blank zone filled in: tier rules for granted Atlas
+routes, skills, and the game's five `game:*` keys, gated cumulatively
 across the five subscription tiers. The *mechanism* - `canUseFeature`,
 `minTierFor`, the `hasProductAccess` / `hasDataAccess` / `ctaFor` formulas, and
 the value domains imported from `@vxture/shared` - is rigid and shared
@@ -93,9 +93,9 @@ locally against `vxtpl_game.run` (the product counts, the platform never
 adjudicates), with a platform-configured `limits["vxtpl.game.runs_per_day"]`
 overriding the product default when present - the sales number always wins.
 
-Gating is fail-closed at every layer: an unresolvable entitlement denies access
-rather than defaulting to a tier, and an ungated model or skill is refused with a
-403 at the API before any S2S token is minted.
+Gating is fail-closed at every layer. The API combines the workspace
+entitlement with the live Atlas route directory and rejects a denied model or
+skill with 403 before any inference or skill invocation.
 
 ## Data
 

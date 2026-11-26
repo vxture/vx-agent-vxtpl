@@ -137,8 +137,9 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
   const [error, setError] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantWide, setAssistantWide] = useState(false);
-  const assistantModel = ctx?.productAccess ? ctx.models.find((model) => model.allowed)?.code : undefined;
-  const modelCode = ctx?.models.find((model) => model.code === preferredModel && model.allowed)?.code ?? assistantModel ?? ctx?.models[0]?.code ?? "";
+  const eligibleModels = ctx?.models.filter((model) => model.allowed) ?? [];
+  const assistantModel = eligibleModels.find((model) => model.code === ctx?.defaultModelCode)?.code ?? eligibleModels[0]?.code;
+  const modelCode = eligibleModels.find((model) => model.code === preferredModel)?.code ?? assistantModel;
   const skillCode = ctx?.skills.find((skill) => skill.code === preferredSkill && skill.allowed)?.code ?? NO_SKILL;
   const assistant = useAssistantConversations(blocked ? undefined : assistantModel, ctx?.scopeKey, onAccessFailure);
   const logRef = useRef<HTMLDivElement>(null);
@@ -146,18 +147,18 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, busy]);
 
   async function send() {
     const text = input.trim();
-    if (!text || sending.current || blocked || !ctx) return;
+    if (!text || sending.current || blocked || !ctx || !modelCode) return;
     sending.current = true;
     setError(null);
     const next = [...messages, { role: "user" as const, content: text }];
     setBusy(true);
     try {
       const body = await requestChatTurn(next, ctx.scopeKey, {
-        modelCode: modelCode || undefined,
+        modelCode,
         skillCode: skillCode || undefined,
       });
       setMessages([...next, body.message]);
@@ -186,7 +187,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
     <WorkspaceRegions
       width="1920"
       renderHeader={(actions, control) => <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />}
-      right={assistantModel ? {
+      right={assistantModel || assistantOpen ? {
         title: "AI assistant",
         assistant: true,
         open: assistantOpen,
@@ -230,10 +231,10 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
           >
-            {messages.length === 0 && (
+            {messages.length === 0 && !busy && (
               <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
             )}
-            {messages.map((m, i) => (
+            {(busy ? [...messages, { role: "user", content: input.trim() }] : messages).map((m, i) => (
               <div
                 key={i}
                 style={{
@@ -253,7 +254,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                 {m.content}
               </div>
             ))}
-            {busy && <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>thinking...</span>}
+            {busy && <span role="status" style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</span>}
           </div>
           <div className="chat-composer">
             <div className="chat-composer__row">
@@ -261,18 +262,20 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                 style={{ flex: 1, minWidth: 0 }}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && send()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) void send();
+                }}
                 placeholder={skillCode === DOCUMENT_CONVERSION_SKILL ? "Paste a short HTML document" : "Type a short message"}
                 maxLength={MAX_MESSAGE_LENGTH}
                 disabled={busy || blocked}
               />
-              <Button onClick={send} disabled={busy || blocked || !input.trim()}>
+              <Button onClick={send} disabled={busy || blocked || !modelCode || !input.trim()}>
                 {busy ? "..." : "Send"}
               </Button>
             </div>
 
             <div className="chat-toolbar">
-              {ctx ? (
+              {ctx && modelCode ? (
                 <>
                   <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
                   <PillSelect
@@ -282,6 +285,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                     onChange={setSkillCode}
                   />
                 </>
+              ) : ctx ? (
+                <span role="status">{"\u5f53\u524d\u5de5\u4f5c\u7a7a\u95f4\u6ca1\u6709\u53ef\u7528\u7684\u5bf9\u8bdd\u6a21\u578b\u3002"}</span>
               ) : (
                 <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
               )}
@@ -293,6 +298,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                 </span>
               )}
             </div>
+            {error && <p role="alert" style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem" }}>{error}</p>}
           </div>
         </Card>
 
@@ -338,8 +344,6 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
           </Stack>
         )}
       </div>
-
-      {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
 
       <nav className="page-links" aria-label="Chat diagnostics">
         <a href="/status">-&gt; integration status</a>

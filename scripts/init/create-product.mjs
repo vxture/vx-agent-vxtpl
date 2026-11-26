@@ -102,7 +102,8 @@ function deriveFiles(paths, includeExample) {
     "- [ ] Confirm product registration, the environment's confidential OIDC client and all registered redirect URIs.\n" +
     "- [ ] Confirm the allocated port, edge route, designated test workspace, product seat and coverage.\n" +
     "- [ ] Register the provisioning delivery URL, signature secret, usage metrics and internal flush schedule.\n" +
-    "- [ ] Confirm the Atlas endpoints and Runos capabilities used in this product.\n" +
+    "- [ ] Grant the product an Atlas chat route in Opera. In `/platform-check`, run the route sample and the direct-model sample with an Atlas-authorized model. Keep both request IDs.\n" +
+    "- [ ] Confirm the Runos grant and keep the live capability and outcome receipts.\n" +
     "- [ ] Validate the live workspace, receipts and same-session logout before release.\n\n" +
     "Use the [integration general rules](https://claude.ai/code/artifact/20e37039-ea59-4c5d-9fab-ba3ca3ad54f0) " +
     "and the [integration example](https://claude.ai/code/artifact/f0bd83c7-6296-4200-a7d8-108b7755f584).\n");

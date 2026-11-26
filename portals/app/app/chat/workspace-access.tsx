@@ -82,6 +82,10 @@ export function ChatWorkspaceAccess({ children }: { children: (access: Workspace
 
   function onAccessFailure(error: unknown, scopeKey: string) {
     if (scopeKey !== lastScope.current) return true;
+    if (error instanceof ChatRequestError && error.code === "MODEL_NOT_GRANTED") {
+      check(false);
+      return false;
+    }
     const next = accessStatus(error);
     if (!next) return false;
     setStatus(next);

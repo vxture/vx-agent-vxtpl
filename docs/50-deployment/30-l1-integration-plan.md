@@ -32,11 +32,14 @@ alone would have produced a client that was wrong in three places.
   value is what lets a turn that spent a capability call and model tokens be
   totalled back up as one unit of work; two ids would silently make that
   impossible.
-- **The model catalog is now checkable.** `GET /v1/endpoints` answers what vxtpl
-  may actually route to, resolved by the same code path a call authorizes
-  through. `/platform-check` reconciles the shipped catalog against it and names
-  any entry that would 404 - the failure that previously surfaced as a user
-  clicking a model in production.
+- **Live route discovery.** Chat and `/platform-check` read Atlas
+  `GET /v1/model-routes` to find active chat routes granted to the calling
+  product. Both paths apply the workspace tier and recheck the directory
+  before inference.
+- **Direct model inference.** The designated operator can read the active
+  catalog in `/platform-check` and run the same sample by `modelCode`. Atlas
+  checks the selected model's grants during inference. Route and model
+  receipts retain the requested target and the serving model.
 - **Skills never auto-retry.** Every attempt is billed and audited, and the
   operations most worth retrying are the ones that are not idempotent.
 
@@ -46,10 +49,9 @@ alone would have produced a client that was wrong in three places.
 
 1. `OIDC_CLIENT_SECRET` for vxtpl in the host `.env`. One credential unlocks both
    login and every S2S call.
-2. Atlas product-endpoint grants for vxtpl. Without one, every call is
-   `403 NOT_ENTITLED` regardless of token validity. `chat/default` alone is
-   enough to start; `/platform-check` will then report exactly which of the
-   shipped catalog entries are live.
+2. Atlas product route grants for vxtpl. Grant at least one active chat route
+   eligible at the test workspace's tier, then check the selected route in
+   `/platform-check`.
 3. Workspace coverage. Minting is gated on vxtpl itself holding a subscription or
    provisioned state in the workspace it speaks for - the check is on the CALLER,
    not the callee.

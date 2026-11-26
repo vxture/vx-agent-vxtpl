@@ -101,7 +101,8 @@ with the shared internal job token already used by the usage flush route.
 Open `/platform-check` from the workspace home. The first action reads the
 Accounts issuer and keys, the verified workspace session, the OBO exchange,
 current product access, the first roster page, entitlements, the provisioned
-instance state, the Atlas endpoint grant and the Runos capability catalog.
+instance state, the Atlas authorized chat routes and the Runos capability catalog.
+The designated operator also sees the Atlas direct-model catalog.
 The roster row displays a count for the first page. Each row requires evidence
 from its own source.
 
@@ -116,9 +117,13 @@ product seat. The server confirms the current seat before each action.
 1. Run the C3 usage replay. Keep the returned original event ID as the receipt.
    The same UTC-day workspace key is sent twice through the worker's
    workspace-bound product service client.
-2. Run Atlas inference and Runos invocation. Each sends fixed sample content
-   in one attempt per UTC day. Keep the Atlas request ID and Runos call ID.
-   Runos also confirms receipt of the outcome report.
+2. Run both Atlas inference samples and the Runos invocation. Each action
+   uses fixed sample content and its own daily attempt limit. The Atlas route
+   action uses the first active authorized chat route eligible at the product
+   tier. The model action rereads the active model catalog and sends the chosen
+   code for Atlas to authorize. Record the requested target, actual model,
+   request ID and task ID for each. Runos also confirms receipt of the
+   outcome report.
 3. Trigger provisioning through the platform and recheck the workspace's stored
    state. Confirm logout by keeping the demo open and signing out of another
    product under the same Accounts session. The demo returns to the gate.
@@ -172,13 +177,16 @@ whole integration chain:
    minted against, and what Atlas attributes the call to.
 2. **Entitlement** - `entitlement/resolver.ts` resolves the workspace's tier via
    C2 with the current OBO ticket and the shared 45-second cache.
-3. **Gate** - `entitlement/capability.ts` checks the selected model and skill
-   against `CAPABILITY_MATRIX`. This happens before anything is spent: an
-   ungated selection is a 403 with no token minted and no capability invoked.
+3. **Gate** - The API checks the current product seat and combines the Atlas
+   route directory with the workspace tier. A model must be an active chat
+   route. The Vxtpl tier and skill checks use `entitlement/capability.ts`.
+   A denied selection returns 403 before any inference or skill invocation.
 4. **Token** - `lib/s2s-token.ts` mints an on-behalf-of S2S token by RFC 8693
    exchange. Tokens live 300 seconds and are cached per (audience, mode,
    identity) with a 30-second margin. See ADR-003 for why there is no
-   `ATLAS_S2S_TOKEN`.
+   `ATLAS_S2S_TOKEN`. The same OBO identity reads `GET /v1/model-routes` and
+   makes the chat request. The server fetches routes on page load and before
+   each turn.
 5. **Skill** (optional) - `chat/skill-runner.ts` runs the Runos loop:
    discover -> resolve -> invoke -> report_outcome. It searches the catalog
    rather than hard-coding capability ids, because the entitled catalog is

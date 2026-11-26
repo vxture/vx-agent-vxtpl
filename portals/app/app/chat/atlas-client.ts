@@ -129,11 +129,6 @@ async function throwAtlasError(res: Response): Promise<never> {
   throw new AtlasError(res.status, envelope);
 }
 
-// "chat/default" is the reference's own example of a global stable endpointCode.
-// vxtpl holds no per-model grant and no per-tenant taskProfile, so it routes by
-// endpointCode - the same choice /v1/embed and /v1/rerank would make.
-export const DEFAULT_ENDPOINT_CODE = "chat/default";
-
 // Atlas's own upstream time-to-first-byte timeout is 30s, and it may try an
 // endpoint's fallback model after the primary times out - so one call can
 // legitimately exceed 60s. This is the ceiling that lets Atlas finish rather
@@ -193,7 +188,11 @@ async function atlasFetch(
   return send();
 }
 
-export interface ChatCallOptions {
+export type AtlasChatTarget =
+  | { endpointCode: string; modelCode?: never }
+  | { modelCode: string; endpointCode?: never };
+
+export type ChatCallOptions = AtlasChatTarget & {
   /**
    * The agent task this call belongs to. REQUIRED by Atlas since v0.15.0
    * (`400 TASK_ID_REQUIRED` without it), and deliberately the SAME value vxtpl
@@ -203,8 +202,7 @@ export interface ChatCallOptions {
    * substitute - that identifies one call, not the work it belongs to.
    */
   taskId: string;
-  endpointCode?: string;
-}
+};
 
 export async function fetchChatCompletion(
   cfg: AtlasClientConfig,
@@ -212,10 +210,12 @@ export async function fetchChatCompletion(
   messages: ChatMessage[],
   opts: ChatCallOptions,
 ): Promise<AtlasCompletion> {
-  const endpointCode = opts.endpointCode ?? DEFAULT_ENDPOINT_CODE;
   // Also Atlas's C3 idempotency key, and the only way to correlate this call in
   // its request log - so it is generated here rather than left to the server.
   const requestId = randomUUID();
+  const target = opts.modelCode === undefined
+    ? { endpointCode: opts.endpointCode }
+    : { modelCode: opts.modelCode };
 
   const res = await atlasFetch(
     cfg,
@@ -242,7 +242,7 @@ export async function fetchChatCompletion(
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          endpointCode,
+          ...target,
           messages,
           ...(tenantId ? { tenantId } : {}),
           taskId: opts.taskId,
@@ -254,9 +254,12 @@ export async function fetchChatCompletion(
   );
   if (!res.ok) await throwAtlasError(res);
   const raw = (await res.json()) as ChatCompletionResponse;
+  if (typeof raw.message?.content !== "string" || !raw.message.content.trim()) {
+    throw new AtlasError(502, { code: "EMPTY_MODEL_REPLY", message: "The model returned an empty reply." });
+  }
   const reported = raw.usage && raw.usage.totalTokens > 0 ? raw.usage : null;
   return {
-    message: { role: "assistant", content: raw.message?.content ?? "" },
+    message: { role: "assistant", content: raw.message.content },
     modelCode: raw.modelCode,
     usage: reported,
     latencyMs: raw.latencyMs,
@@ -276,21 +279,35 @@ export interface AtlasModel {
    * removal. This pair is the ONLY advance warning a consumer gets that a model
    * is going away - without reading it, the notification is a 404 at call time.
    */
-  state: "active" | "deprecated" | "inactive";
+  state: string;
   deprecatedAt: string | null;
 }
 
+function isAtlasModel(row: unknown): row is AtlasModel {
+  if (!row || typeof row !== "object") return false;
+  const { modelCode, modelName, provider, protocol, capabilities, state, deprecatedAt } = row as Record<string, unknown>;
+  return typeof modelCode === "string" && !!modelCode.trim() &&
+    typeof modelName === "string" && typeof provider === "string" && typeof protocol === "string" &&
+    Array.isArray(capabilities) && capabilities.every((value) => typeof value === "string") &&
+    typeof state === "string" && (deprecatedAt === null || typeof deprecatedAt === "string");
+}
+
 /**
- * The global model catalog. NOT grant-filtered - it lists every model Atlas
- * knows about, not the ones vxtpl may route to - so it is an auth and
- * connectivity probe, not a model picker. For "what may I actually call", use
- * `listGrantedEndpoints` below.
+ * Reads the Atlas global runtime catalog. Atlas enforces grants when a model
+ * is invoked. Use listGrantedEndpoints for the product-specific route list.
+ * @param cfg - Atlas runtime configuration.
+ * @param identity - Server-owned ticket exchange identity.
+ * @returns Atlas model summaries.
+ * @throws {AtlasError} If Atlas rejects the read or sends an invalid directory.
  */
 export async function listAtlasModels(cfg: AtlasClientConfig, identity: MintOptions): Promise<AtlasModel[]> {
   const res = await atlasFetch(cfg, identity, "/v1/models", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
   if (!res.ok) await throwAtlasError(res);
-  const raw = (await res.json()) as AtlasModel[];
-  return Array.isArray(raw) ? raw : [];
+  const raw: unknown = await res.json();
+  if (!Array.isArray(raw) || !raw.every(isAtlasModel)) {
+    throw new AtlasError(502, { code: "INVALID_MODEL_CATALOG", message: "Atlas returned an invalid model directory." });
+  }
+  return raw;
 }
 
 /** Connectivity + auth probe. Spends no model tokens. */
@@ -325,15 +342,32 @@ export interface GrantedEndpoint {
    * for either, but only one of them is ours to fix; omitting them would read as
    * "you were never granted this".
    */
-  state: "active" | "inactive" | "missing";
+  state: string;
 }
 
+function isGrantedEndpoint(row: unknown): row is GrantedEndpoint {
+  if (!row || typeof row !== "object") return false;
+  const { endpointCode, category, state } = row as Record<string, unknown>;
+  return typeof endpointCode === "string" && endpointCode.trim().length > 0 &&
+    (category === null || typeof category === "string") && typeof state === "string";
+}
+
+/**
+ * Reads the product's Atlas route directory using the same identity as inference.
+ * @param cfg - Atlas runtime configuration.
+ * @param identity - Server-owned ticket exchange identity.
+ * @returns The directory rows, including unavailable grants.
+ * @throws {AtlasError} If Atlas rejects the read or sends an invalid directory.
+ */
 export async function listGrantedEndpoints(
   cfg: AtlasClientConfig,
   identity: MintOptions,
 ): Promise<GrantedEndpoint[]> {
-  const res = await atlasFetch(cfg, identity, "/v1/endpoints", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
+  const res = await atlasFetch(cfg, identity, "/v1/model-routes", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
   if (!res.ok) await throwAtlasError(res);
-  const raw = (await res.json()) as { endpoints?: GrantedEndpoint[] };
-  return raw.endpoints ?? [];
+  const raw = (await res.json()) as { endpoints?: unknown } | null;
+  if (!Array.isArray(raw?.endpoints) || !raw.endpoints.every(isGrantedEndpoint)) {
+    throw new AtlasError(502, { code: "INVALID_MODEL_CATALOG", message: "Atlas returned an invalid route directory." });
+  }
+  return raw.endpoints;
 }

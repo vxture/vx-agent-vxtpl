@@ -70,7 +70,7 @@ routes, styles, metrics, capabilities, Prisma model and domain DDL.
 
 ## What you still own
 
-1. **Fill the exemplar zone.** The capability matrix, the model/skill catalog, the
+1. **Fill the exemplar zone.** The capability matrix, route presentation and tier rules, the skill catalog, the
    product surfaces under `portals/app/app/`, and the role/permission catalog are
    worked examples to replace - not mechanism to preserve. The boundary is in
    `CLAUDE.md` under "Rigid zone / exemplar zone".
@@ -87,15 +87,16 @@ routes, styles, metrics, capabilities, Prisma model and domain DDL.
 ## Apply the Atlas and Runos patterns
 
 The generated product includes `/chat` and the separate `/platform-check`.
-In a registered workspace, send a short question using **Standard** for the
-Atlas-only flow. Select **Convert and summarize HTML** and send
+In a registered workspace with an assigned seat, send a short question using
+the default available Atlas route. Select **Convert and summarize HTML** and send
 `<h1>Weekly report</h1><p>The team shipped the workspace update.</p>`
 for the combined flow. The app runs the authorized Runos converter, feeds
 its Markdown into Atlas, and shows the result and call references.
 
 | Application decision | Template entry point | What the next product supplies |
 | --- | --- | --- |
-| Model-only operation | `chat/atlas-client.ts`, `chat/resolver.ts` | Model endpoint code granted to the product, prompt and result presentation |
+| Inference by route | `chat/catalog.ts`, `chat/resolver.ts` | Product tier policy, prompt and result presentation. Configure route grants in Opera. |
+| Inference by model | `chat/atlas-client.ts`, `platform-demo/verification.ts` | A model selected from the live catalog and authorized by Atlas. Use the designated operator in the template. |
 | Connector-only operation | `runos/document-conversion.ts` | An entitled capability, operation, risk level, input mapping and expected result |
 | Connector followed by inference | `chat/resolver.ts` | Domain sequencing and whether an unavailable capability stops the operation |
 | Feature admission and cost | `api/chat/route.ts`, `entitlement/capability.ts`, `usage/lib/flush.ts` | Feature tier, allowed action, registered product metric and unit |
@@ -103,7 +104,37 @@ its Markdown into Atlas, and shows the result and call references.
 
 Application paths are relative to `portals/app/app/`. Keep the server's
 verified Accounts identity, seat check and OBO token exchange in front of
-interactive calls. A completed chat turn has one task ID across both
+interactive calls. Read Atlas `GET /v1/model-routes` with the OBO ticket and
+use active rows with category `chat`. The default is the first route eligible
+under the product tier. Send the selected `endpointCode` to `/v1/chat` after
+rechecking the directory. Vxtpl uses the route code as the label for new
+routes and admits them from Pro onward. Adding a grant for an eligible tier
+takes effect on the next directory read and requires no product release.
+
+Open `/platform-check` as the designated operator to compare both Atlas paths
+using the same sample. The route action sends `endpointCode`. The direct-model
+action reads `GET /v1/models`, offers active catalog entries, and sends
+`modelCode`. Atlas evaluates the requested model against its grants at call
+time. Each action records the requested target, the model that served the
+response, and the request and task IDs.
+
+Both variants use the same server adapter. Supply the target selected from
+the corresponding Atlas directory and the server-derived OBO identity.
+
+```ts
+import { fetchChatCompletion } from "./chat/atlas-client";
+
+const byRoute = await fetchChatCompletion(config, identity, messages, {
+  taskId: routeTaskId,
+  endpointCode: selectedRouteCode,
+});
+const byModel = await fetchChatCompletion(config, identity, messages, {
+  taskId: modelTaskId,
+  modelCode: selectedModelCode,
+});
+```
+
+A completed chat turn has one task ID across both
 providers and uses that ID as its product metering key. The providers return
 their own request or call IDs and account for their own usage. A product
 reports its own business unit once, such as a served chat turn.
