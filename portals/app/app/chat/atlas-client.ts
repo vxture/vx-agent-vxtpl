@@ -271,6 +271,8 @@ export async function fetchChatCompletion(
 export interface AtlasModel {
   modelCode: string;
   modelName: string;
+  /** Optional during rollout from Atlas versions predating typed catalogs. */
+  modelType?: string;
   provider: string;
   protocol: string;
   capabilities: string[];
@@ -285,9 +287,10 @@ export interface AtlasModel {
 
 function isAtlasModel(row: unknown): row is AtlasModel {
   if (!row || typeof row !== "object") return false;
-  const { modelCode, modelName, provider, protocol, capabilities, state, deprecatedAt } = row as Record<string, unknown>;
+  const { modelCode, modelName, modelType, provider, protocol, capabilities, state, deprecatedAt } = row as Record<string, unknown>;
   return typeof modelCode === "string" && !!modelCode.trim() &&
-    typeof modelName === "string" && typeof provider === "string" && typeof protocol === "string" &&
+    typeof modelName === "string" && (modelType === undefined || typeof modelType === "string") &&
+    typeof provider === "string" && typeof protocol === "string" &&
     Array.isArray(capabilities) && capabilities.every((value) => typeof value === "string") &&
     typeof state === "string" && (deprecatedAt === null || typeof deprecatedAt === "string");
 }

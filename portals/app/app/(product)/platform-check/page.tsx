@@ -13,7 +13,7 @@ import { useRef, useState } from "react";
 import { Button, NativeSelect, StatusBadge } from "../../ds";
 import { ProductContent } from "../../framework/product-content";
 import { productGateHref } from "../../framework/product-experience";
-import type { Check, PlatformReport, Probe, ProbeReceipt } from "../../platform-demo/types";
+import { DAILY_PROBES, type Check, type PlatformReport, type Probe, type ProbeReceipt } from "../../platform-demo/types";
 import "./platform-check.css";
 
 const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[] = [
@@ -45,6 +45,7 @@ const states = {
 } as const;
 
 type ProbeOutcome = { receipt?: ProbeReceipt; error?: string };
+type ProbeOutcomes = Partial<Record<Probe, ProbeOutcome>>;
 
 function CheckBadge({ state }: { state: Check["state"] }) {
   return <StatusBadge tone={states[state].tone} dot>{states[state].label}</StatusBadge>;
@@ -60,7 +61,7 @@ export default function PlatformCheckPage() {
   const [report, setReport] = useState<PlatformReport | null>(null);
   const [busy, setBusy] = useState<"report" | Probe | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [outcomes, setOutcomes] = useState<Partial<Record<Probe, ProbeOutcome>>>({});
+  const [outcomes, setOutcomes] = useState<ProbeOutcomes>({});
   const [modelCode, setModelCode] = useState("");
   const pending = useRef(false);
   const count = rows.filter(({ id }) => report?.checks[id]?.state === "verified").length;
@@ -75,12 +76,20 @@ export default function PlatformCheckPage() {
     try {
       const response = await fetch("/api/platform-check", { cache: "no-store", signal: AbortSignal.timeout(40_000) });
       const current = await readResponse<PlatformReport>(response);
-      if (!current.scopeKey || current.scopeKey !== previousScope) {
-        setOutcomes({});
+      const sameScope = !!current.scopeKey && current.scopeKey === previousScope;
+      if (!sameScope) {
         setModelCode("");
       } else {
         setModelCode((selected) => current.atlasModelChoices?.some(({ code }) => code === selected) ? selected : "");
       }
+      setOutcomes((previous) => {
+        const next: ProbeOutcomes = sameScope ? { ...previous } : {};
+        for (const probe of DAILY_PROBES) {
+          const receipt = current.receipts?.[probe];
+          if (receipt) next[probe] = { receipt };
+        }
+        return next;
+      });
       setReport(current);
     } catch (failure) {
       setOutcomes({});
@@ -191,7 +200,7 @@ export default function PlatformCheckPage() {
                         aria-label="Atlas 直调模型"
                         value={modelCode}
                         onChange={(event) => setModelCode(event.target.value)}
-                        disabled={busy !== null}
+                        disabled={busy !== null || !report.actions[probe]}
                         className="platform-demo__model-select"
                       >
                         <option value="">选择模型</option>

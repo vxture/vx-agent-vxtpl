@@ -79,14 +79,16 @@ test("Atlas verification independently exercises the route and direct model path
 
   // Redis reserves the daily attempt only after live target selection succeeds.
   t.mock.method(Redis.prototype, "connect", async () => {});
-  const keys = new Set<string>();
-  const reserve = t.mock.method(Redis.prototype, "set", async (key: string) => {
-    if (keys.has(key)) return null;
-    keys.add(key);
+  const keys = new Map<string, string>();
+  const write = t.mock.method(Redis.prototype, "set", async (key: string, value: string, _mode: string, _ttl: number, nx?: string) => {
+    if (nx === "NX" && keys.has(key)) return null;
+    keys.set(key, value);
     return "OK";
   });
+  const read = t.mock.method(Redis.prototype, "mget", async (...names: string[]) => names.map((key) => keys.get(key) ?? null));
   let granted = true;
   let modelActive = true;
+  let typedCatalog = true;
   let modelAllowed = true;
   let catalogReads = 0;
   const route = "acceptance-dialogue";
@@ -121,9 +123,16 @@ test("Atlas verification independently exercises the route and direct model path
         return Response.json({ ...scope, status: "active", tier: "pro", bundled: false, limits: {}, quota_pools: [] });
       case "/v1/model-routes":
         return Response.json({ endpoints: granted ? [{ endpointCode: route, category: "chat", state: "active" }] : [] });
-      case "/v1/models":
+      case "/v1/models": {
         catalogReads++;
-        return Response.json([{ ...model, state: modelActive ? "active" : "inactive" }]);
+        const entries = [
+          { ...model, state: modelActive ? "active" : "inactive", modelType: "chat" },
+          { ...model, modelCode: "different-vector-model", state: "active", modelType: "embedding", capabilities: ["chat"] },
+          { ...model, modelCode: "different-rank-model", state: "active", modelType: "rerank" },
+          { ...model, modelCode: "legacy-model", state: "active" },
+        ];
+        return Response.json(typedCatalog ? entries : entries.map((entry) => ({ ...entry, modelType: undefined })));
+      }
       case "/v1/chat": {
         const body = JSON.parse(String(init?.body));
         const target = body.modelCode ? { modelCode: body.modelCode } : { endpointCode: body.endpointCode };
@@ -142,6 +151,7 @@ test("Atlas verification independently exercises the route and direct model path
   assert.equal(report.actions["atlas-inference"], true);
   assert.equal(report.actions["atlas-model-inference"], true);
   assert.deepEqual(report.atlasModelChoices, [{ code: model.modelCode, name: model.modelName, provider: model.provider }]);
+  assert.deepEqual(report.receipts, {});
 
   process.env.PLATFORM_DEMO_SUBJECT = "another-operator";
   const ordinaryReport = await readPlatformReport(session);
@@ -149,20 +159,29 @@ test("Atlas verification independently exercises the route and direct model path
   assert.deepEqual(ordinaryReport.atlasModelChoices, []);
   assert.equal((await runPlatformProbe(session, direct)).status, 403);
   assert.equal(catalogReads, 1);
+  assert.equal(read.mock.callCount(), 1);
   process.env.PLATFORM_DEMO_SUBJECT = session.sub;
 
+  typedCatalog = false;
+  const legacyAtlas = await readPlatformReport(session);
+  assert.equal(legacyAtlas.actions["atlas-inference"], true);
+  assert.equal(legacyAtlas.checks.atlasModels.state, "unavailable");
+  assert.equal(legacyAtlas.actions["atlas-model-inference"], false);
+  assert.equal((await runPlatformProbe(session, direct)).status, 503);
+  typedCatalog = true;
   granted = false;
   assert.equal((await runPlatformProbe(session, routed)).status, 403);
+  assert.equal((await runPlatformProbe(session, { ...direct, modelCode: "different-vector-model" })).status, 409);
   modelActive = false;
   assert.equal((await runPlatformProbe(session, direct)).status, 409);
-  assert.equal(reserve.mock.callCount(), 0);
+  assert.equal(write.mock.callCount(), 0);
   granted = true;
   modelActive = true;
   const { status, result } = await runPlatformProbe(session, routed);
   assert.equal(status, 200);
   assert.equal(result.receipt, "atlas-receipt");
   assert.equal(result.evidence?.provider === "atlas" && result.evidence.endpointCode, route);
-  assert.equal(reserve.mock.callCount(), 1);
+  assert.equal(write.mock.callCount(), 2);
 
   const directReply = await runPlatformProbe(session, direct);
   assert.equal(directReply.status, 200);
@@ -170,9 +189,17 @@ test("Atlas verification independently exercises the route and direct model path
   assert.equal(directEvidence?.provider === "atlas" && directEvidence.requestedModelCode, model.modelCode);
   assert.equal(directEvidence?.provider === "atlas" && directEvidence.modelCode, "atlas-serving-model");
   assert.equal(directReply.result.responseText, "Reply");
-  assert.equal(keys.size, 2);
+  assert.equal(keys.size, 4);
   assert.equal((await runPlatformProbe(session, direct)).status, 409);
   assert.deepEqual(calls, [{ endpointCode: route }, { modelCode: model.modelCode }]);
+
+  const restored = await readPlatformReport({ ...session, sessionId: "new-rp-session" });
+  assert.equal(restored.actions["atlas-inference"], false);
+  assert.equal(restored.actions["atlas-model-inference"], false);
+  assert.deepEqual(restored.receipts, { "atlas-inference": result, "atlas-model-inference": directReply.result });
+  const differentScope = await readPlatformReport({ ...session, scopeKey: "different-scope" });
+  assert.deepEqual(differentScope.receipts, {});
+  assert.equal(differentScope.actions["atlas-inference"], false);
 
   // Clear only the fixture's reservations to simulate another acceptance day.
   keys.clear();

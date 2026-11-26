@@ -69,10 +69,13 @@ no hint about which of these steps is missing.
   `/platform-check` and record the selected route, model, request ID and task ID.
   Atlas owns inference metering.
 - [ ] **Atlas direct model inference.** In the same workspace, use the designated
-  operator to load the Atlas catalog and select a chat model reachable through
+  operator to load an Atlas catalog that supplies `modelType` and select a chat model reachable through
   a product route grant or covered by a matching tenant model grant. Run
   the model action in `/platform-check` and record the requested model,
   serving model, request ID and task ID. Atlas authorizes the call.
+- [ ] Reload `/platform-check` in the same UTC day and run preflight as the
+  same designated operator. Confirm both successful receipts return and
+  that used probes are disabled.
 - [ ] **Runos capability.** Set `RUNOS_API_URL` and set
   `PLATFORM_DEMO_RUNOS_CAPABILITY_ID=markitdown.document-to-markdown` for the
   designated operator and workspace. Confirm the caller can discover the
