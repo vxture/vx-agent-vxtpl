@@ -113,10 +113,11 @@ takes effect on the next directory read and requires no product release.
 
 Open `/platform-check` as the designated operator to compare both Atlas paths
 using the same sample. The route action sends `endpointCode`. The direct-model
-action reads `GET /v1/models`, offers active catalog entries, and sends
+action reads `GET /v1/models`, offers active entries with `modelType: "chat"`, and sends
 `modelCode`. Atlas evaluates the requested model against its grants at call
 time. Each action records the requested target, the model that served the
-response, and the request and task IDs.
+response, and the request and task IDs. Successful receipts are available
+to the same designated operator in the current UTC day after preflight.
 
 Both variants use the same server adapter. Supply the target selected from
 the corresponding Atlas directory and the server-derived OBO identity.

@@ -28,12 +28,17 @@ import { chooseChatModel, readAtlasChatModels } from "../chat/catalog";
 import type { MintOptions } from "../lib/s2s-token";
 import { getRunosClientConfig } from "../runos/client";
 import { checkRunosSample, runRunosSample } from "./runos-sample";
-import { PROBES, type AtlasModelChoice, type Check, type PlatformReport, type Probe, type ProbeCommand, type ProbeReceipt } from "./types";
+import {
+  DAILY_PROBES, PROBES, type AtlasModelChoice, type Check, type DailyProbe, type PlatformReport,
+  type Probe, type ProbeCommand, type ProbeReceipt,
+} from "./types";
 
 const verified = (detail: string): Check => ({ state: "verified", detail });
 const waiting = (detail: string): Check => ({ state: "waiting", detail });
 const unavailable = (detail = "当前无法完成核验"): Check => ({ state: "unavailable", detail });
 const workspaceRequired = () => waiting("登录后选择工作空间");
+const DAILY_ATTEMPT_USED = "该操作在本 UTC 日已发起";
+const DAILY_TTL_SECONDS = 86_400;
 
 function designatedOperator(session: SignedWorkspace): boolean {
   return session.workspaceId === process.env.PLATFORM_DEMO_WORKSPACE_ID
@@ -100,10 +105,11 @@ async function checkAtlas(session: SignedWorkspace, entitlement: Entitlement | n
     : { state: "blocked", detail: "当前工作空间没有可用的 Atlas 对话路由" };
 }
 
-async function readAtlasModelChoices(config: AtlasClientConfig, identity: MintOptions): Promise<AtlasModelChoice[]> {
+async function readAtlasModelChoices(config: AtlasClientConfig, identity: MintOptions): Promise<AtlasModelChoice[] | null> {
   const models = await listAtlasModels(config, identity);
+  if (models.length && models.every(({ modelType }) => !modelType?.trim())) return null;
   return models
-    .filter(({ state }) => state === "active")
+    .filter(({ state, modelType }) => state === "active" && modelType === "chat")
     .map(({ modelCode, modelName, provider }) => ({ code: modelCode, name: modelName, provider }));
 }
 
@@ -119,11 +125,63 @@ async function checkAtlasModels(
     return { check: { state: "blocked", detail: "当前工作空间没有产品套餐权益" }, choices: [] };
   }
   const choices = await readAtlasModelChoices(cfg, { subjectToken: session.accessToken });
+  if (!choices) return { check: unavailable("Atlas 目录尚未提供模型类型"), choices: [] };
   const check = choices.length
-    ? verified(`目录中有 ${choices.length} 个启用模型，调用时由 Atlas 核验授权`)
-    : { state: "blocked" as const, detail: "Atlas 目录中没有启用模型" };
+    ? verified(`目录中有 ${choices.length} 个启用对话模型，调用时由 Atlas 核验授权`)
+    : { state: "blocked" as const, detail: "Atlas 目录中没有启用对话模型" };
   return { check, choices };
 }
+
+// Daily attempts and scoped receipts
+
+function utcDay(): string {
+  return new Date().toISOString().slice(0, 10).replaceAll("-", "");
+}
+
+function dailyProbeKeys(session: SignedWorkspace, probe: DailyProbe, day: string) {
+  const attempt = `vx:acceptance:${deployStage()}:${BRAND.productCode}:${session.workspaceId}:${probe}:${day}`;
+  return { attempt, receipt: `${attempt}:receipt:${session.scopeKey}` };
+}
+
+function parseReceipt(raw: string | null): ProbeReceipt | undefined {
+  if (!raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as ProbeReceipt | null;
+    return value?.ok === true && typeof value.detail === "string" && typeof value.receipt === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function applyDailyProbeState(
+  session: SignedWorkspace,
+  actions: PlatformReport["actions"],
+  details: PlatformReport["actionDetails"],
+): Promise<PlatformReport["receipts"]> {
+  const day = utcDay();
+  const keys = DAILY_PROBES.map((probe) => dailyProbeKeys(session, probe, day));
+  const receipts: PlatformReport["receipts"] = {};
+  try {
+    const values = await rpRedis().mget(...keys.flatMap(({ attempt, receipt }) => [attempt, receipt]));
+    DAILY_PROBES.forEach((probe, index) => {
+      const receipt = parseReceipt(values[2 * index + 1]);
+      if (receipt) receipts[probe] = receipt;
+      if (values[2 * index] !== null || receipt) {
+        actions[probe] = false;
+        details[probe] = receipt ? "已恢复本 UTC 日的验收回执" : DAILY_ATTEMPT_USED;
+      }
+    });
+  } catch {
+    for (const probe of DAILY_PROBES) {
+      if (!actions[probe]) continue;
+      actions[probe] = false;
+      details[probe] = "暂时无法读取验收日限";
+    }
+  }
+  return receipts;
+}
+
+// Platform report
 
 export async function readPlatformReport(session: SignedWorkspace | null): Promise<PlatformReport> {
   const missing = workspaceRequired();
@@ -195,10 +253,13 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
     actions[probe] = required.state === "verified" && check.state === "verified";
     actionDetails[probe] = required.state !== "verified" || actions[probe] ? required.detail : check.detail;
   }
+  const receipts = session && designatedOperator(session) && checks.access.state === "verified"
+    ? await applyDailyProbeState(session, actions, actionDetails)
+    : {};
   checks.issuer = await issuerRequest;
   return {
     stage: deployStage(), checkedAt: new Date().toISOString(),
-    scopeKey: session?.scopeKey ?? null, actions, actionDetails, atlasModelChoices, checks,
+    scopeKey: session?.scopeKey ?? null, actions, actionDetails, atlasModelChoices, receipts, checks,
   };
 }
 
@@ -220,7 +281,7 @@ export async function runPlatformProbe(session: SignedWorkspace, command: ProbeC
     if (!await authority.allowed()) {
       return { status: 403, result: { ok: false, detail: "平台准入未通过" } };
     }
-    const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const day = utcDay();
     if (probe === "c3-replay") return await checkUsageReplay(session, day, baseUrl);
     const identity = { subjectToken: session.accessToken };
     const taskId = `${BRAND.productCode}-acceptance-${randomUUID()}`;
@@ -235,6 +296,9 @@ export async function runPlatformProbe(session: SignedWorkspace, command: ProbeC
       let target: AtlasChatTarget;
       if (command.probe === "atlas-model-inference") {
         const choices = await readAtlasModelChoices(atlas, identity);
+        if (!choices) {
+          return { status: 503, result: { ok: false, detail: "Atlas 目录尚未提供模型类型" } };
+        }
         if (!choices.some(({ code }) => code === command.modelCode)) {
           return { status: 409, result: {
             ok: false, code: "ATLAS_MODEL_UNAVAILABLE", detail: "所选模型已不可用，请重新核验以刷新模型目录",
@@ -250,11 +314,20 @@ export async function runPlatformProbe(session: SignedWorkspace, command: ProbeC
       }
       invoke = () => runAtlasSample(atlas, identity, target, taskId);
     }
-    const key = `vx:acceptance:${deployStage()}:${BRAND.productCode}:${session.workspaceId}:${probe}:${day}`;
-    if (!await rpRedis().set(key, taskId, "EX", 86_400, "NX")) {
-      return { status: 409, result: { ok: false, detail: "该操作在本 UTC 日已发起" } };
+    const keys = dailyProbeKeys(session, probe, day);
+    const redis = rpRedis();
+    if (!await redis.set(keys.attempt, taskId, "EX", DAILY_TTL_SECONDS, "NX")) {
+      return { status: 409, result: { ok: false, detail: DAILY_ATTEMPT_USED } };
     }
     const result = await invoke();
+    if (result.ok) {
+      try {
+        await redis.set(keys.receipt, JSON.stringify(result), "EX", DAILY_TTL_SECONDS);
+      } catch (error) {
+        console.error("[platform-check] unable to store acceptance receipt", { taskId, probe, error });
+        result.detail = `${result.detail}，当前回执暂时无法从新会话恢复`;
+      }
+    }
     return { status: result.ok ? 200 : 502, result };
   } catch (error) {
     if (error instanceof AtlasError && error.envelope.code === "NOT_ENTITLED") {

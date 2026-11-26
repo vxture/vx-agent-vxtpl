@@ -10,6 +10,8 @@
 export type Check = { state: "verified" | "waiting" | "blocked" | "unavailable"; detail: string };
 export const PROBES = ["c3-replay", "atlas-inference", "atlas-model-inference", "runos-invoke"] as const;
 export type Probe = (typeof PROBES)[number];
+export const DAILY_PROBES = ["atlas-inference", "atlas-model-inference", "runos-invoke"] as const satisfies readonly Probe[];
+export type DailyProbe = (typeof DAILY_PROBES)[number];
 export type ProbeCommand =
   | { probe: Exclude<Probe, "atlas-model-inference"> }
   | { probe: "atlas-model-inference"; modelCode: string };
@@ -22,6 +24,7 @@ export type PlatformReport = {
   actions: Record<Probe, boolean>;
   actionDetails: Record<Probe, string>;
   atlasModelChoices: AtlasModelChoice[];
+  receipts: Partial<Record<DailyProbe, ProbeReceipt>>;
   checks: {
     issuer: Check;
     session: Check;

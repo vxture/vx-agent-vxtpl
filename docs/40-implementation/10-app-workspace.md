@@ -120,8 +120,9 @@ product seat. The server confirms the current seat before each action.
 2. Run both Atlas inference samples and the Runos invocation. Each action
    uses fixed sample content and its own daily attempt limit. The Atlas route
    action uses the first active authorized chat route eligible at the product
-   tier. The model action rereads the active model catalog and sends the chosen
-   code for Atlas to authorize. Record the requested target, actual model,
+   tier. The model action rereads the catalog for active entries with
+   `modelType: "chat"` and sends the chosen code for Atlas to authorize.
+   Record the requested target, actual model,
    request ID and task ID for each. Runos also confirms receipt of the
    outcome report.
 3. Trigger provisioning through the platform and recheck the workspace's stored
@@ -130,6 +131,11 @@ product seat. The server confirms the current seat before each action.
 
 Record the tested environment, build, workspace, time and receipts in the
 [batch tracker](../70-workplan/10-template-foundation-batches.md).
+Preflight restores successful receipts for the current UTC day after a
+refresh or sign-in for the same designated account, organization and
+workspace. A used daily attempt remains blocked even if it has no recoverable
+receipt. The route, direct-model and Runos actions reserve attempts
+independently.
 Use the [integration general rules](https://claude.ai/code/artifact/20e37039-ea59-4c5d-9fab-ba3ca3ad54f0)
 and [product integration example](https://claude.ai/code/artifact/f0bd83c7-6296-4200-a7d8-108b7755f584)
 for the platform interface contract.
