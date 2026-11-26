@@ -1,33 +1,4 @@
-import { BRAND } from "@vxtpl/shared/brand";
-import { assertInternalTarget } from "../lib/internal-target";
 import { EMPTY_ENTITLEMENT, type Entitlement, type QuotaPool } from "./types";
-
-// C2 caller (product_200 section 3, product_220 section 3). Calls the platform
-// entitlement endpoint over the internal network with the shared internal-auth
-// header, and parses the envelope tolerantly (unknown added fields ignored,
-// missing fields defaulted). Never sends the secret to the browser.
-//
-// CREDENTIAL CLASS, flagged: `x-vxture-internal-auth` is a shared token, and
-// the integration general rules retire shared-password credentials for
-// product-to-product calls (new products must not be born on a retired
-// credential class) without naming the replacement for the PLATFORM
-// channels (/platform/*, /usage/*) themselves.
-// Liaison letter 140 asks the platform line to name it; until answered, this
-// header stays - it is what production runs on, and inventing a replacement
-// inside a product repo is exactly what the rules forbid.
-
-export interface PlatformClientConfig {
-  baseUrl: string;
-  authToken: string;
-  product: string;
-}
-
-export function getPlatformClientConfig(): PlatformClientConfig | null {
-  const baseUrl = process.env.PLATFORM_API_URL;
-  const authToken = process.env.PLATFORM_INTERNAL_AUTH_TOKEN;
-  if (!baseUrl || !authToken) return null; // -> Mock resolver
-  return { baseUrl, authToken, product: BRAND.productCode };
-}
 
 function num(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
@@ -52,6 +23,7 @@ export function parseEntitlementEnvelope(
   }
   const pools: QuotaPool[] = Array.isArray(o.quota_pools)
     ? (o.quota_pools as unknown[]).flatMap((p) => {
+        if (!p || typeof p !== "object") return [];
         const pp = p as Record<string, unknown>;
         const metric = str(pp.metric);
         return metric
@@ -74,20 +46,4 @@ export function parseEntitlementEnvelope(
     limits,
     quota_pools: pools,
   };
-}
-
-export async function fetchEntitlement(
-  cfg: PlatformClientConfig,
-  workspaceId: string,
-): Promise<Entitlement> {
-  const url = assertInternalTarget(
-    `${cfg.baseUrl.replace(/\/$/, "")}/platform/entitlements` +
-      `?workspace_id=${encodeURIComponent(workspaceId)}&product=${encodeURIComponent(cfg.product)}`,
-  );
-  const res = await fetch(url, {
-    headers: { "x-vxture-internal-auth": cfg.authToken, accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`entitlement endpoint ${res.status}`);
-  return parseEntitlementEnvelope(workspaceId, cfg.product, await res.json());
 }

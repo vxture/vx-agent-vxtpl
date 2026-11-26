@@ -1,0 +1,53 @@
+/**
+ * Table edge columns and inline selection visibility.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Styles
+ * @author AI-Generated
+ * @date 2026-11-25
+ */
+
+.management-table {
+  --vxtpl-management-edge: var(--spacing-sidebar-collapsed, 64px);
+  min-inline-size: 0;
+}
+
+.management-table :is(th, td):first-child:not([colspan]) {
+  width: var(--vxtpl-management-edge);
+  min-width: var(--vxtpl-management-edge);
+  max-width: var(--vxtpl-management-edge);
+  padding-inline: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.management-index-header,
+.management-index-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  gap: 4px;
+}
+
+.management-index-cell {
+  display: inline-grid;
+  justify-items: center;
+  min-block-size: 24px;
+  min-inline-size: 32px;
+}
+
+.management-index-cell > * { grid-area: 1 / 1; }
+.management-index-cell .management-index-checkbox { opacity: 0; }
+.management-index-cell:is(:hover, :focus-within, [data-checked]) .management-index-checkbox { opacity: 1; }
+.management-index-cell:has(.management-index-checkbox):is(:hover, :focus-within, [data-checked]) .management-index-number { opacity: 0; }
+
+@media (hover: none) {
+  .management-index-cell:has(.management-index-checkbox) .management-index-number { opacity: 0; }
+  .management-index-cell .management-index-checkbox { opacity: 1; }
+}
+
+.management-table-heading { margin-block: 24px 8px; }
+.management-table-filter { margin-block: 12px; max-inline-size: 320px; }
+.management-breadcrumb { margin-block-end: 16px; font-size: 13px; color: var(--muted-foreground); }
+.management-row-detail { margin-block-start: 16px; padding-block-start: 16px; border-block-start: 1px solid var(--border); }

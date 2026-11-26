@@ -7,11 +7,11 @@ that keep the module copyable.
 ## Layering
 
 ```
-(product)/page.tsx               THE app: the deck at `/` - phase machine, rails, quota, CTAs
-(product)/deck/game-view.tsx     renderer: arrow-key input, canvas, countdown ONLY
-(product)/deck/panels.tsx        side modules: record, board, avatar menu (self-fetching)
-(product)/deck/trend-chart.tsx   the daily-best curve (deck-grounded via .deck token override)
-(product)/challenge/page.tsx     redirect to `/` (old links only)
+play/page.tsx                    deck at /play: phase machine, rails, quota, CTAs
+play/deck/game-view.tsx          renderer: arrow-key input, canvas, countdown
+play/deck/panels.tsx             side modules: record, board, avatar menu (self-fetching)
+play/deck/trend-chart.tsx        daily-best curve (deck-grounded via .deck token override)
+(product)/challenge/page.tsx     redirects old links to /play
 game/engine.ts                   pure sim: seeded RNG, spawn curves, collision
 game/rules.ts                    pure product rules: quota, windows, trend, call signs
 game/store.ts / prisma-store.ts  persistence port: in-memory | vxtpl_game.run

@@ -6,7 +6,6 @@ import { buildStatus, parseDbUrl, statusMode } from "./status";
 const SECRETS = {
   OIDC_CLIENT_SECRET: "SENTINEL_oidc_secret_zzz",
   POSTGRES_PASSWORD: "SENTINEL_pg_pw_zzz",
-  PLATFORM_INTERNAL_AUTH_TOKEN: "SENTINEL_platform_tok_zzz",
   PROVISION_WEBHOOK_SECRET: "SENTINEL_wh_secret_zzz",
   PROVISION_WEBHOOK_SECRET_NEXT: "SENTINEL_wh_next_zzz",
   INTERNAL_JOB_TOKEN: "SENTINEL_job_tok_zzz",
@@ -40,7 +39,7 @@ test("NO SECRET VALUE ever appears in the status output", () => {
 test("secrets are reported as presence booleans only", () => {
   const s = buildStatus(FULL_ENV, "t");
   assert.equal(s.c1.clientSecretConfigured, true);
-  assert.equal(s.c2.authTokenConfigured, true);
+  assert.equal(s.c2.productTicketConfigured, true);
   assert.equal(s.c3.webhookSecretConfigured, true);
   assert.equal(s.c3.webhookRotationConfigured, true);
   assert.equal(s.c3.internalJobTokenConfigured, true);
@@ -51,9 +50,9 @@ test("secrets are reported as presence booleans only", () => {
   assert.equal(empty.s2s.configured, false);
 });
 
-test("resolver = platform only when both API url and token are set", () => {
+test("resolver = platform only when OIDC product ticket and platform URL are set", () => {
   assert.equal(buildStatus(FULL_ENV, "t").c2.resolver, "platform");
-  assert.equal(buildStatus({ PLATFORM_API_URL: "x" }, "t").c2.resolver, "mock");
+  assert.equal(buildStatus({ OIDC_RP_ENABLED: "on", PLATFORM_API_URL: "x" }, "t").c2.resolver, "unavailable");
   assert.equal(buildStatus({}, "t").c2.resolver, "mock");
 });
 
@@ -63,13 +62,13 @@ test("chat.resolver = atlas as soon as ATLAS_API_URL is set - the bearer is mint
   assert.equal(buildStatus({}, "t").chat.resolver, "mock");
 });
 
-test("a deployed stage missing platform config is flagged as running on mocks", () => {
-  assert.equal(buildStatus({ ...FULL_ENV, DEPLOY_STAGE: "production" }, "t").mockOnDeployedStage, false);
-  assert.equal(buildStatus({ DEPLOY_STAGE: "production" }, "t").mockOnDeployedStage, true);
-  assert.equal(buildStatus({ DEPLOY_STAGE: "beta" }, "t").mockOnDeployedStage, true);
+test("a deployed stage missing platform config is flagged as incomplete", () => {
+  assert.equal(buildStatus({ ...FULL_ENV, DEPLOY_STAGE: "production" }, "t").integrationConfigIncomplete, false);
+  assert.equal(buildStatus({ DEPLOY_STAGE: "production" }, "t").integrationConfigIncomplete, true);
+  assert.equal(buildStatus({ DEPLOY_STAGE: "beta" }, "t").integrationConfigIncomplete, true);
   // dev is where the mocks belong, so it is never flagged.
-  assert.equal(buildStatus({ DEPLOY_STAGE: "dev" }, "t").mockOnDeployedStage, false);
-  assert.equal(buildStatus({}, "t").mockOnDeployedStage, false);
+  assert.equal(buildStatus({ DEPLOY_STAGE: "dev" }, "t").integrationConfigIncomplete, false);
+  assert.equal(buildStatus({}, "t").integrationConfigIncomplete, false);
 });
 
 test("parseDbUrl extracts host/db/role and DROPS the password", () => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Banner, Card, CardContent, CardHeader, CardTitle, Grid, Section, StatusBadge } from "../../ds";
 import type { IntegrationStatus } from "../../lib/status";
+import { ProductContent } from "../../framework/product-content";
 
 // Integration-status dashboard (product_240 verification surface): at-a-glance
 // view of all platform-integration config + live channel probes. Data comes from
@@ -73,7 +74,7 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <main className="page">
+    <ProductContent>
       <div className="eyebrow">Verification surface</div>
       <Section
         level={1}
@@ -82,15 +83,13 @@ export default function StatusPage() {
       >
         {gate && <p style={{ color: "var(--vxtpl-slate)" }}>{gate}</p>}
 
-        {status?.mockOnDeployedStage && (
+        {status?.integrationConfigIncomplete && (
           <Banner
             tone="danger"
-            title="Serving mock data on a deployed stage"
+            title="Integration configuration incomplete"
             description={
               <span className="block max-w-[62ch]">
-                A platform base URL is missing, so entitlement or chat is answering from a mock resolver. Everything
-                below about tiers and models is fabricated. This state only persists because{" "}
-                <code>ALLOW_MOCK_ON_DEPLOY=on</code> is set - without it the app refuses to start.
+                Check the product OIDC client, platform API and Atlas URL before running live probes.
               </span>
             }
           />
@@ -141,7 +140,7 @@ export default function StatusPage() {
               </CardHeader>
               <CardContent>
                 <Field k="platform API" v={boolBadge(status.c2.platformApiConfigured)} />
-                <Field k="internal-auth token" v={boolBadge(status.c2.authTokenConfigured)} />
+                <Field k="product ticket" v={boolBadge(status.c2.productTicketConfigured)} />
                 <Field k="console URL" v={status.c2.consoleUrl ?? "-"} />
                 <Field k="cache TTL (ms)" v={status.c2.cacheTtlMs} />
               </CardContent>
@@ -249,11 +248,11 @@ export default function StatusPage() {
         </Card>
       </Section>
 
-      <footer className="page-links">
+      <nav className="page-links" aria-label="Related diagnostics">
         <a href="/entitlement-matrix">-&gt; tier x status gating matrix</a>
         <a href="/chat">-&gt; chat capability verification</a>
         <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
-      </footer>
-    </main>
+      </nav>
+    </ProductContent>
   );
 }

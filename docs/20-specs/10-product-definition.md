@@ -5,9 +5,9 @@
 vxtpl is a Vxture product with a real business domain: **Emberstorm**, a
 bullet-dodging reaction game (its mode: the 20-Second Challenge) whose three
 subscription tiers exercise the platform's quota / subscription / entitlement
-machinery with real users (ADR-006, spec in `20-challenge-game.md`). `vxtpl`
-is the product code - platform plumbing; Emberstorm is the brand
-(`BRAND.displayName`). Its second subject matter is the
+machinery with real users (ADR-006, spec in `20-challenge-game.md`). The
+product code is `vxtpl` and the product shell displays `Vxtpl`. Emberstorm
+is the game module. Its second subject matter is the
 platform integration surface itself, made visible and exercised in production.
 
 Both roles are deliberate and reinforce each other. vxtpl is the reference
@@ -20,23 +20,24 @@ stay verified by execution rather than by review.
 
 ## Surfaces
 
-The app is ONE screen (owner decision 2026-08-31): the fullscreen command
-deck at `/`. Everything a player touches - the game, the daily quota, the
-personal record with its trend, the global board, identity and conversion -
-lives on that deck, with the record and board as collapsible side-rail
-modules. There is no landing page and no separate records/leaderboard pages
-(`/challenge` survives only as a redirect for old links).
+Vxtpl has a public entry and a workspace home. Emberstorm keeps its fullscreen
+command deck at `/play`, including daily quota, records and trends, the global
+board, identity, and conversion. Records and the board stay in collapsible rails.
 
 | Route | What it is |
 |-------|-----------|
-| `/` | THE app: the deck - seeded runs, daily quota (free), score recording, record + trend module, global-board module, avatar/identity strip |
-| `/chat` | Debug/reference: a tier-gated chat turn against Atlas, optionally through a Runos capability. Hard-limited as a debug surface (owner 2026-09-01): 500 chars/message, 20-message history, 6 turns/minute per (workspace, sub), enforced server-side before any token is minted |
+| `/` | Public product entry in overview mode. Direct mode opens the configured module through the existing access controls. |
+| `/gate` | Checks the session and workspace entitlement before opening the requested destination. |
+| `/home` | Workspace home with the day's greeting, chat and Emberstorm entry points, and recent challenge records when history is available. |
+| `/home/work`, `/home/work/:id` | Personal challenge history for the active workspace and current season, with the same history limits as the deck. Record details check access again. |
+| `/play` | Emberstorm fullscreen deck. Old `/challenge` links redirect here and retain their query parameters. |
+| `/chat` | Tier-gated integration chat and assistant. Session recovery retains the draft in this tab after the same workspace and account are confirmed. Limits: 500 chars/message, 20-message history, and 6 turns/minute per (workspace, sub). |
 | `/status` | Debug/reference: live configuration state of every integration channel, presence booleans only |
 | `/platform-check` | Debug/reference: read-only connectivity probes against Atlas and Runos |
 | `/entitlement-matrix` | Debug/reference: every tier x status combination and its gate/CTA outcome, fully offline |
 
-The debug surfaces are the template's service hatches: routable behind the
-deck's avatar menu, never player destinations. Two surfaces are load-bearing.
+The integration checks remain available from the deck's avatar menu. Two surfaces
+exercise full integration flows.
 `/chat` exercises the whole S2S chain in a single user action: session ->
 workspace -> entitlement -> capability gate -> S2S token mint -> Atlas call ->
 optional Runos capability -> usage record. The deck exercises the whole
@@ -49,9 +50,9 @@ is visible without a debugger.
 
 | Channel | Contract | vxtpl's use |
 |---------|----------|-------------|
-| C1 | OIDC relying party against `accounts.vxture.com` | Sign-in with PKCE (S256), single-use state, nonce verification, Redis-backed opaque session cookie, back-channel logout. Tokens never reach the browser. |
+| C1 | OIDC relying party against `accounts.vxture.com` | PKCE sign-in, browser-bound single-use state, nonce verification, an opaque session cookie, and back-channel logout. The browser receives revocation through a same-origin event stream. |
 | C2 | `GET /platform/entitlements` | Resolves the caller's subscription tier and quota pools for the active workspace; 45s cache, invalidated by C3, stale-on-error, fail-closed to no-coverage. |
-| C3 | Inbound provisioning webhook + `POST /usage/consume` | HMAC-verified (`t=`,`v1=` over raw bytes, +/-300s, rotation slot), idempotent and sequence-ordered; every entitlement-changing delivery evicts the C2 cache. Usage is buffered locally and flushed on the always-200 consume contract (`gated` is information and evicts C2, `replayed`/`event_id` reconcile, non-200 retries), with `end_user_id` attribution and `x-request-id` on every call. |
+| C3 | Inbound provisioning webhook + `POST /usage/consume` | Webhooks are HMAC-verified over raw bytes, idempotent and sequence-ordered. Entitlement-changing events evict the shared C2 cache. The worker reports buffered usage with a workspace-bound product service ticket, optional `end_user_id` and the original key as `x-request-id`. A valid 200 receipt with `event_id` and completed cache eviction confirm the row. Unconfirmed rows are replayed under the same key. |
 | Atlas | Chat inference and model listing | Every chat turn. Atlas meters model token consumption itself; vxtpl records only its own product-level counter. |
 | Runos | Capability discovery and invocation | Skill execution on a chat turn, plus a read-only well-known probe on `/platform-check`. |
 

@@ -1,20 +1,12 @@
-import { cookies } from "next/headers";
-import { getOidcConfig } from "../auth/lib/config";
-import { getAuthUser } from "../auth/lib/session";
-import { isDeployedStage } from "../lib/deploy-stage";
-
-// Caller resolution for the game APIs. Same posture as /api/chat's: the
-// workspace comes from the verified session (it scopes entitlement, quota and
-// every run row), never from the request - and the sub comes with it, because
-// runs are personal records. The local-dev stand-ins are unreachable once
-// DEPLOY_STAGE is set, exactly like the chat route's.
-
-const DEV_WORKSPACE_ID = "ws_local_dev";
-const DEV_SUB = "usr_local_dev";
+import { readWorkspaceSession } from "../auth/lib/workspace-session";
+import { readWorkspaceEntitlement, type ActiveWorkspace } from "../entitlement/resolver";
+import type { Entitlement } from "../entitlement/types";
+import { hasWorkspaceSeat } from "../entitlement/workspace-authority";
 
 export interface GameCaller {
   workspaceId: string;
   sub: string;
+  session: ActiveWorkspace;
 }
 
 export type CallerResult = GameCaller | { error: string; status: number };
@@ -24,22 +16,32 @@ export function isCallerError(v: CallerResult): v is { error: string; status: nu
 }
 
 export async function resolveGameCaller(): Promise<CallerResult> {
-  const cfg = getOidcConfig();
-  if (!cfg.enabled) {
-    if (isDeployedStage()) {
-      return { error: "sign-in is not configured on this deployment (OIDC_RP_ENABLED is off)", status: 503 };
-    }
-    return { workspaceId: DEV_WORKSPACE_ID, sub: DEV_SUB };
+  const session = await readWorkspaceSession();
+  switch (session.status) {
+    case "anonymous": return { error: "not signed in", status: 401 };
+    case "inactive-account": return { error: "account is not active", status: 403 };
+    case "no-workspace": return { error: "this session has no active workspace", status: 403 };
+    case "unconfigured":
+    case "unavailable": return { error: "workspace session is unavailable", status: 503 };
   }
-  const jar = await cookies();
-  const rpsid = jar.get(cfg.cookieName)?.value;
-  const user = rpsid ? await getAuthUser(cfg, rpsid).catch(() => null) : null;
-  if (!user) return { error: "not signed in", status: 401 };
-  if (user.accountStatus && user.accountStatus !== "active") {
-    return { error: "account is not active", status: 403 };
+  try {
+    if (!await hasWorkspaceSeat(session)) return { error: "product access is not assigned", status: 403 };
+    return { workspaceId: session.workspaceId, sub: session.sub, session };
+  } catch {
+    return { error: "product access is unavailable", status: 503 };
   }
-  if (!user.activeWorkspace) {
-    return { error: "this session has no active workspace", status: 403 };
+}
+
+/**
+ * Resolves the caller for game operations governed by a C2 feature policy.
+ * @returns A current seat and entitlement, or the HTTP status to return.
+ */
+export async function resolveGameEntitledCaller(): Promise<(GameCaller & { entitlement: Entitlement }) | Extract<CallerResult, { error: string }>> {
+  const caller = await resolveGameCaller();
+  if (isCallerError(caller)) return caller;
+  try {
+    return { ...caller, entitlement: await readWorkspaceEntitlement(caller.session) };
+  } catch {
+    return { error: "product entitlement is unavailable", status: 503 };
   }
-  return { workspaceId: user.activeWorkspace, sub: user.sub };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ThemeProvider, themeBootstrapScript } from "@vxture/design-system";
+import { FullscreenProvider, ThemeProvider, themeBootstrapScript } from "@vxture/design-system";
 
 // The single client boundary through which server components reach the design
 // system.
@@ -22,7 +22,22 @@ import { ThemeProvider, themeBootstrapScript } from "@vxture/design-system";
 // Client components (`product-gate.tsx`) may import the DS directly - the rule
 // only bites when the server graph reaches it.
 
-export { ShellBrand, ShellBootScreen } from "@vxture/design-system";
+export {
+  ShellBrand,
+  ShellBootScreen,
+  ShellFullscreenToggle,
+  ShellIconButton,
+  ShellIconGroup,
+  ShellLegalFooter,
+  ShellLocaleSwitcher,
+  ShellPanelContent,
+  ShellScopeButton,
+  ShellSidebarNav,
+  ShellThemeToggle,
+  ShellUserMenu,
+  type ShellNavSection,
+  useTheme,
+} from "@vxture/design-system";
 
 // The layout and surface components, re-exported for the same reason with a
 // different cause.
@@ -64,7 +79,19 @@ export {
  * into a server page is a 500 with a stack trace that names React, not the DS.
  * Routing everything through here means the trap cannot be copied.
  */
-export { Button, Input, NativeSelect } from "@vxture/design-system";
+export {
+  Button,
+  Checkbox,
+  DataTable,
+  Icon,
+  Input,
+  NativeSelect,
+  Popover,
+  PopoverTrigger,
+  SectionHeader,
+  ShellSidebarFrame,
+  ViewHeader,
+} from "@vxture/design-system";
 
 /**
  * Theme wiring: the pre-paint class-setter plus the provider.
@@ -81,7 +108,9 @@ export function AppTheme({ children }: { children: ReactNode }) {
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
-      <ThemeProvider defaultMode="system">{children}</ThemeProvider>
+      <ThemeProvider defaultMode="system">
+        <FullscreenProvider>{children}</FullscreenProvider>
+      </ThemeProvider>
     </>
   );
 }

@@ -5,12 +5,9 @@ product is copied from. Those are deliberately the same thing: a template nobody
 runs drifts from reality, so vxtpl proves the platform integration surface by
 consuming it in production at `https://vxtpl.vxture.com`.
 
-Its product is **Emberstorm** (game mode: The 20-Second Challenge) - a
-bullet-dodging reaction game whose three subscription tiers (daily quota,
-personal record, global leaderboard + trend) run the platform's real quota /
-entitlement machinery with real users (ADR-006,
-`docs/20-specs/20-challenge-game.md`). `vxtpl` is the product code;
-Emberstorm is the brand (`BRAND.displayName`).
+The workspace shows **Vxtpl** as its product brand. **Emberstorm** is its
+optional challenge module, with daily quota, personal records, leaderboard
+and trends backed by the same entitlement and usage paths.
 
 It signs users in against the central accounts service (C1), gates them by
 subscription tier (C2), receives provisioning webhooks (C3), calls **Atlas** for
@@ -26,11 +23,13 @@ reintroduce npm workspaces.
 
 | Surface | What it demonstrates |
 |---------|----------------------|
-| `/` | THE app - a fullscreen command deck: seeded runs (daily quota spent server-side at start, scores recorded within server bounds), the tier-windowed record with pro's 30-day trend, and the anonymous global board, all as collapsible side-rail modules around the arena |
+| `/` and `/home` | Public entry and working home, with branded navigation and recent work |
+| `/play` | Emberstorm fullscreen challenge, with start-time quota and server-side record checks |
 | `/gate` | The product front door: verifies access on entry, redirects a signed-in visitor straight through, and otherwise shows the one action that helps |
 | `/chat` | Debug/reference: a tier-gated chat turn that mints a short-lived S2S token, calls Atlas, optionally invokes a Runos capability, and meters its own usage |
 | `/status` | Debug/reference: every integration channel's live configuration state, with no secret ever leaving the server |
-| `/platform-check` | Debug/reference: read-only connectivity probes against Atlas and Runos |
+| `/platform-check` | Integration status and designated-workspace receipt checks for usage, Atlas and Runos |
+| `/system/frameworks` | Development gallery for the five shared page structures |
 | `/entitlement-matrix` | Debug/reference: every tier x status combination and the gate/CTA outcome it produces, fully offline |
 
 Under those surfaces sit the parts a product repo is actually judged on: the OIDC
@@ -89,16 +88,16 @@ pnpm lint:data-design
 ## Creating a new product from vxtpl
 
 ```bash
-git clone https://github.com/vxture/vxture-vxtpl.git vxture-<code>
-cd vxture-<code>
-node scripts/init/rename-product.mjs <code>        # --dry-run to preview
+node scripts/init/create-product.mjs my-prod
+cd ../vx-agent-my-prod
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-The rename script rewrites the whole name cascade - OIDC clients, compose project
-and containers, image name, database and service role, workspace package scope,
-secret names, the public vhost - in file contents *and* in file and directory
-names, then reports what a human still has to do. It is pure Node with zero
-dependencies. See `docs/40-implementation/20-creating-a-product-from-vxtpl.md`
+The generator creates an independent repository from managed files with the
+new name cascade. Pass `--with-emberstorm` to include the game. Use
+`pnpm doctor` to inspect platform readiness. See
+`docs/40-implementation/20-creating-a-product-from-vxtpl.md`
 for the full procedure, and the two checklists in `docs/50-deployment/`:
 
 1. Platform-side registration (owner / platform-line actions)

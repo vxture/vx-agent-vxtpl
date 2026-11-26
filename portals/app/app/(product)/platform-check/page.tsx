@@ -1,172 +1,168 @@
+/**
+ * Product workspace display for live platform acceptance evidence.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Page
+ * @author AI-Generated
+ * @date 2026-11-26
+ */
+
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Section, Stack, StatusBadge } from "../../ds";
+import { useRef, useState } from "react";
+import { Button, StatusBadge } from "../../ds";
+import { ProductContent } from "../../framework/product-content";
+import { productGateHref } from "../../framework/product-experience";
+import type { Check, PlatformReport, Probe, ProbeReceipt } from "../../platform-demo/types";
+import "./platform-check.css";
 
-// Full-channel verification surface, per the integration general rules'
-// go-live checklist: C1 (identity), C2 (entitlement), C3 up (usage consume)
-// and down (webhook), plus the two L1 planes (Atlas, Runos). Every check on
-// load is read-only; the one spending probe - the C3 replay check, checklist
-// item 5 - runs only on an explicit click and consumes at most one unit per
-// workspace per day (its idempotency key is date-stable).
-
-interface ProbeResult {
-  configured: boolean;
-  ok: boolean;
-  detail: string;
-}
-
-interface CheckResponse {
-  c1: ProbeResult;
-  c2: ProbeResult;
-  c3Up: ProbeResult;
-  c3Down: ProbeResult;
-  tokenMint: ProbeResult;
-  atlas: ProbeResult;
-  catalog: ProbeResult;
-  runos: ProbeResult;
-}
-
-interface ReplayResult {
-  ok: boolean;
-  detail: string;
-  first?: Record<string, unknown>;
-  second?: Record<string, unknown>;
-  error?: string;
-}
-
-const CHANNELS: { key: keyof CheckResponse; title: string; body: string }[] = [
-  { key: "c1", title: "C1 - identity (OIDC)", body: "Discovery + JWKS against the accounts issuer; issuer match, key count, client and scopes." },
-  { key: "c2", title: "C2 - entitlement", body: "Live envelope resolve for your workspace: status / tier / limits / pools, and the Cache-Control the client honors." },
-  { key: "c3Up", title: "C3 up - usage consume", body: "Consume target state and the local buffer depth. The replay probe below is the live idempotency check." },
-  { key: "c3Down", title: "C3 down - provisioning webhook", body: "Signature verifier self-test (sign + verify + tamper rejection) and the last recorded deliveries." },
-  { key: "tokenMint", title: "S2S token mint", body: "Per-call on-behalf-of minting on your session (ADR-003) - the identity every Atlas/Runos call carries." },
-  { key: "atlas", title: "Atlas - model plane", body: "GET /v1/models from a consumer's perspective." },
-  { key: "catalog", title: "Atlas - catalog reconciliation", body: "Shipped model catalog vs actually granted endpoints; names anything that would 404." },
-  { key: "runos", title: "Runos - capability plane", body: "GET /.well-known/vxture-tools discovery." },
+const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[] = [
+  { id: "issuer", name: "Accounts 签发服务", group: "C1" },
+  { id: "session", name: "当前会话与工作空间", group: "C1" },
+  { id: "exchange", name: "用户身份换票", group: "C1" },
+  { id: "access", name: "当前主体准入", group: "C2" },
+  { id: "roster", name: "授权成员名单", group: "C2" },
+  { id: "entitlements", name: "订阅权益", group: "C2" },
+  { id: "provisioning", name: "开通事件落库", group: "C3" },
+  { id: "atlas", name: "Atlas 模型授权", group: "Atlas" },
+  { id: "runos", name: "Runos 能力目录", group: "Runos" },
 ];
 
-function badgeFor(p: ProbeResult) {
-  const tone = !p.configured ? "neutral" : p.ok ? "success" : "danger";
-  const label = !p.configured ? "not configured" : p.ok ? "ok" : "failed";
-  return (
-    <StatusBadge tone={tone} dot>
-      {label}
-    </StatusBadge>
-  );
+const actions: { probe: Probe; name: string; detail: string }[] = [
+  { probe: "c3-replay", name: "计量入账与回放", detail: "同一 UTC 日最多计入 1 个单位，重复请求返回原回执。" },
+  { probe: "atlas-inference", name: "Atlas 实际推理", detail: "用固定示例发起一次标准模型调用。" },
+  { probe: "runos-invoke", name: "Runos 实际调用", detail: "对已登记的只读能力提交固定示例。" },
+];
+
+const stages = { dev: "开发", beta: "验收", production: "生产" };
+const states = {
+  verified: { tone: "success", label: "已核验" },
+  waiting: { tone: "neutral", label: "待验证" },
+  blocked: { tone: "warning", label: "未准入" },
+  unavailable: { tone: "danger", label: "暂不可用" },
+} as const;
+
+function CheckBadge({ state }: { state: Check["state"] }) {
+  return <StatusBadge tone={states[state].tone} dot>{states[state].label}</StatusBadge>;
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
+  const body = await response.json();
+  if (!response.ok) throw new Error(body?.detail ?? "当前无法完成核验");
+  return body as T;
 }
 
 export default function PlatformCheckPage() {
-  const [data, setData] = useState<CheckResponse | null>(null);
+  const [report, setReport] = useState<PlatformReport | null>(null);
+  const [busy, setBusy] = useState<"report" | Probe | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [replay, setReplay] = useState<ReplayResult | null>(null);
-  const [replayBusy, setReplayBusy] = useState(false);
+  const [receipts, setReceipts] = useState<Partial<Record<Probe, ProbeReceipt>>>({});
+  const pending = useRef(false);
+  const count = rows.filter(({ id }) => report?.checks[id].state === "verified").length;
 
-  useEffect(() => {
-    fetch("/api/platform-check", { cache: "no-store" })
-      .then(async (r) => setData((await r.json()) as CheckResponse))
-      .catch(() => setError("platform-check unavailable"));
-  }, []);
-
-  async function runReplayProbe() {
-    setReplayBusy(true);
-    setReplay(null);
+  async function refresh() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy("report");
+    setReport(null);
+    setReceipts({});
+    setError(null);
     try {
-      const r = await fetch("/api/platform-check", {
+      const response = await fetch("/api/platform-check", { cache: "no-store", signal: AbortSignal.timeout(40_000) });
+      setReport(await readResponse<PlatformReport>(response));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "当前无法完成核验");
+    } finally {
+      pending.current = false;
+      setBusy(null);
+    }
+  }
+
+  async function run(probe: Probe) {
+    if (pending.current || !report?.actions[probe] || !report.scopeKey) return;
+    pending.current = true;
+    setBusy(probe);
+    try {
+      const response = await fetch("/api/platform-check", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ probe: "c3-replay" }),
+        body: JSON.stringify({ probe, scopeKey: report.scopeKey }),
       });
-      const body = (await r.json()) as ReplayResult;
-      setReplay(r.ok ? body : { ok: false, detail: body.error ?? `HTTP ${r.status}` });
+      const body = await response.json() as ProbeReceipt;
+      setReceipts((previous) => ({ ...previous, [probe]: { ...body, ok: response.ok && body.ok === true } }));
+      if (response.status === 401 || response.status === 409) setReport(null);
     } catch {
-      setReplay({ ok: false, detail: "probe request failed" });
+      setReceipts((previous) => ({ ...previous, [probe]: { ok: false, detail: "未收到可确认的回执" } }));
     } finally {
-      setReplayBusy(false);
+      pending.current = false;
+      setBusy(null);
     }
   }
 
   return (
-    <main className="page">
-      <Stack gap="xs">
-        <div className="eyebrow">Verification surface</div>
-        <Section
-          level={1}
-          title="Platform capability check"
-          description={
-            <span className="block max-w-[62ch]">
-              Every channel vxtpl consumes, verified from the consumer&apos;s side per the integration
-              general rules&apos; go-live checklist. Checks on load are read-only; only the explicit replay
-              probe spends (at most one unit per day).
-            </span>
-          }
-        >
-          {error && <p style={{ color: "var(--vxtpl-danger)" }}>{error}</p>}
-          {data && (
-            <Stack gap="md">
-              {CHANNELS.map((c) => (
-                <Card key={c.key}>
-                  <CardHeader>
-                    <CardTitle className="flex flex-wrap items-center gap-sm">
-                      {badgeFor(data[c.key])}
-                      {c.title}
-                    </CardTitle>
-                    <CardDescription>
-                      {c.body}
-                      <span className="mono block" style={{ marginTop: 6 }}>
-                        {data[c.key].detail}
-                      </span>
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              ))}
+    <ProductContent>
+      <div className="platform-demo">
+        <header className="platform-demo__heading">
+          <div>
+            <h1>平台接入演示</h1>
+            <p>用当前工作空间验证身份、准入、开通、计量和能力调用。</p>
+          </div>
+          <Button onClick={refresh} disabled={busy !== null}>{busy === "report" ? "正在核验…" : "核验接入状态"}</Button>
+        </header>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex flex-wrap items-center gap-sm">
-                    {replay ? (
-                      <StatusBadge tone={replay.ok ? "success" : "danger"} dot>
-                        {replay.ok ? "verified" : "failed"}
-                      </StatusBadge>
-                    ) : (
-                      <StatusBadge tone="neutral" dot>
-                        not run
-                      </StatusBadge>
-                    )}
-                    C3 replay probe (checklist #5)
-                  </CardTitle>
-                  <CardDescription>
-                    Sends the same consume twice with one idempotency key. The second answer must say{" "}
-                    <code>replayed: true</code> and carry the first event&apos;s id. Spends at most one unit of{" "}
-                    <code>vxtpl.chat.messages</code> per workspace per day.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Stack gap="sm">
-                    <div>
-                      <Button onClick={runReplayProbe} disabled={replayBusy}>
-                        {replayBusy ? "running..." : "Run the replay probe"}
-                      </Button>
-                    </div>
-                    {replay && (
-                      <div className="mono" style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)" }}>
-                        <div>{replay.detail}</div>
-                        {replay.first && <div>first: {JSON.stringify(replay.first)}</div>}
-                        {replay.second && <div>second: {JSON.stringify(replay.second)}</div>}
-                      </div>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Stack>
-          )}
-        </Section>
-      </Stack>
+        <section className="platform-demo__section" aria-labelledby="platform-checks">
+          <div className="platform-demo__section-title">
+            <h2 id="platform-checks">接入状态</h2>
+            <div aria-live="polite" className="platform-demo__meta">
+              {report ? `${stages[report.stage]}环境 · ${count}/${rows.length} 项已核验 · ${new Date(report.checkedAt).toLocaleTimeString()}`
+                : "运行后显示当前会话对应的实测结果"}
+            </div>
+          </div>
+          {error && <p role="alert">{error}</p>}
+          {report && !report.scopeKey && <p><a href={productGateHref("/platform-check")}>登录以核验工作空间</a></p>}
+          <ul className="platform-demo__rows">
+            {rows.map(({ id, name, group }) => (
+              <li className="platform-demo__row" key={id}>
+                <div className="platform-demo__item">
+                  <span className="platform-demo__group">{group}</span>
+                  <strong>{name}</strong>
+                </div>
+                <span className="platform-demo__detail">{report?.checks[id].detail ?? "等待核验"}</span>
+                <CheckBadge state={report?.checks[id].state ?? "waiting"} />
+              </li>
+            ))}
+          </ul>
+        </section>
 
-      <footer className="page-links">
-        <a href="/chat">-&gt; chat capability verification</a>
-        <a href="/status">-&gt; integration status</a>
-      </footer>
-    </main>
+        <section className="platform-demo__section" aria-labelledby="platform-actions">
+          <div className="platform-demo__section-title">
+            <h2 id="platform-actions">真实调用</h2>
+            <span className="platform-demo__meta">使用登记的验收工作空间，调用可能产生用量。</span>
+          </div>
+          <ul className="platform-demo__rows">
+            {actions.map(({ probe, name, detail }) => {
+              const receipt = receipts[probe];
+              return (
+                <li className="platform-demo__row platform-demo__row--action" key={probe}>
+                  <div>
+                    <strong>{name}</strong>
+                    <p className="platform-demo__detail">{detail}</p>
+                    {receipt && <p role="status">{receipt.detail}{receipt.receipt && <> · <code>{receipt.receipt}</code></>}</p>}
+                  </div>
+                  <Button variant="outline" onClick={() => run(probe)} disabled={busy !== null || !report?.actions[probe]}>
+                    {busy === probe ? "正在调用…" : "执行验证"}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="platform-demo__section" aria-labelledby="platform-logout">
+          <h2 id="platform-logout">跨产品退出</h2>
+          <p className="platform-demo__detail">保持本页打开，在同一 Accounts 会话的另一产品退出。收到退出事件后，本页应返回门禁。</p>
+        </section>
+      </div>
+    </ProductContent>
   );
 }

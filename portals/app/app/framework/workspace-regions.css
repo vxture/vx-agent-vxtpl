@@ -1,0 +1,124 @@
+/**
+ * Workspace sizing, independent scroll areas and modal side regions.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Styles
+ * @author AI-Generated
+ * @date 2026-11-25
+ */
+
+/* Docked layout */
+
+.product-framework:has(> .workspace-regions) {
+  block-size: 100dvh;
+  overflow: hidden;
+}
+
+.workspace-regions {
+  --vxtpl-region-left: var(--spacing-sidebar-expanded, 256px);
+  --vxtpl-region-rail: var(--spacing-sidebar-collapsed, 64px);
+  --vxtpl-region-right: 420px;
+  --vxtpl-region-wide-reserved: 540px;
+  container-type: inline-size;
+  display: flex;
+  flex: 1 1 0;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+.workspace-regions[data-docked-left] {
+  --vxtpl-region-wide-reserved: calc(540px + var(--vxtpl-region-left));
+}
+
+.workspace-center-pane {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  overflow: auto;
+}
+
+.workspace-center-pane > main {
+  min-block-size: 100%;
+}
+
+.workspace-region {
+  flex: none;
+  overflow: auto;
+  background: var(--card);
+}
+
+.workspace-region-left {
+  inline-size: var(--vxtpl-region-left);
+  border-inline-end: 1px solid var(--border);
+}
+
+.workspace-region-left[data-collapsed] { inline-size: var(--vxtpl-region-rail); }
+
+.workspace-region-right {
+  inline-size: var(--vxtpl-region-right);
+  border-inline-start: 1px solid var(--border);
+}
+.workspace-region-right[data-wide] {
+  inline-size: clamp(var(--vxtpl-region-right), calc(100cqw - var(--vxtpl-region-wide-reserved)), 560px);
+}
+
+.workspace-region-content { padding: var(--space-lg, 16px); }
+.workspace-region-content h2 { font-size: 14px; font-weight: 600; margin-block-end: 8px; }
+.workspace-region-content a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-region-content p { color: var(--muted-foreground); }
+.management-sidebar { block-size: 100%; max-inline-size: 100%; }
+.workspace-page-heading { inline-size: 100%; display: grid; gap: 12px; padding-block-end: 16px; border-block-end: 1px solid var(--border); }
+.workspace-page-heading > a { font-size: 13px; color: var(--muted-foreground); }
+.workspace-width-control { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.workspace-width-control select, .workspace-draft textarea { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); padding: 8px; }
+.workspace-draft { margin-block-start: 24px; display: grid; inline-size: 100%; gap: 8px; }
+.workspace-draft h2 { font-size: 16px; font-weight: 600; }
+.workspace-draft-byline { font-size: 14px; line-height: 20px; color: var(--muted-foreground); }
+.workspace-draft textarea { inline-size: 100%; min-block-size: 240px; resize: vertical; }
+.framework-resource-list { display: grid; gap: 8px; }
+.framework-resource-list [aria-current="page"] { color: var(--primary); }
+
+/* Drawers */
+
+.workspace-region-drawer {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  max-inline-size: none;
+  max-block-size: none;
+  background: transparent;
+  color: var(--foreground);
+}
+
+.workspace-region-drawer::backdrop { background: var(--overlay-backdrop, rgb(0 0 0 / 35%)); }
+
+.workspace-region-drawer-body {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  inline-size: min(calc(100% - 32px), var(--vxtpl-region-left));
+  block-size: 100%;
+  border-inline-end: 1px solid var(--border);
+}
+
+.workspace-center-pane + .workspace-region-drawer .workspace-region-drawer-body {
+  inline-size: min(calc(100% - 32px), var(--vxtpl-region-right));
+  margin-inline-start: auto;
+  border-inline-start: 1px solid var(--border);
+  border-inline-end: 0;
+}
+.workspace-center-pane + .workspace-region-drawer[data-wide] .workspace-region-drawer-body {
+  inline-size: min(calc(100% - 12px), 560px);
+}
+
+.workspace-region-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-block-end: 1px solid var(--border);
+}
+
+.workspace-region-drawer-header h2 { font-weight: 600; font-size: 14px; }
+.workspace-region-drawer-content { flex: 1; min-block-size: 0; overflow: auto; }

@@ -3,7 +3,19 @@ import assert from "node:assert/strict";
 import { freshSession, type SessionDeps } from "./session";
 import type { RpSession } from "./session-store";
 import type { OidcConfig } from "./config";
-import type { TokenSet } from "./oidc";
+import { TokenEndpointError, type TokenSet } from "./oidc";
+import { workspaceScopeKey } from "./workspace-scope";
+
+test("workspace scope is stable across sessions and isolated by client, account, organization and workspace", () => {
+  const client = { issuer: "https://accounts.internal", clientId: "product-rp", clientSecret: "fixture-only" };
+  const current = workspaceScopeKey(client, "usr_a", "org_a", "ws_a");
+  assert.equal(workspaceScopeKey({ ...client }, "usr_a", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_b", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_a", "org_b", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_a", "org_a", "ws_b"), current);
+  assert.notEqual(workspaceScopeKey({ ...client, clientId: "another-rp" }, "usr_a", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey({ ...client, clientSecret: "rotated-fixture" }, "usr_a", "org_a", "ws_a"), current);
+});
 
 // The refresh half of getAuthContext, against an IdP that ROTATES refresh
 // tokens the way the platform does: every refresh token works exactly once, and
@@ -29,7 +41,7 @@ function rotatingIdp(opts: { latencyMs?: number } = {}) {
   const refresh = async (_cfg: OidcConfig, rt: string): Promise<TokenSet> => {
     calls.push(rt);
     await new Promise((r) => setTimeout(r, opts.latencyMs ?? 20));
-    if (rt !== live) throw new Error("token endpoint 400: invalid_grant");
+    if (rt !== live) throw new TokenEndpointError(400, "invalid_grant");
     issued += 1;
     live = `rt-${issued}`;
     return { access_token: `at-${issued}`, refresh_token: live, token_type: "Bearer", expires_in: 300 };
@@ -44,6 +56,13 @@ function memoryStore(initial: RpSession) {
     putSession: async (cid: string, rpsid: string, data: RpSession) => {
       map.set(`${cid}:${rpsid}`, data);
     },
+    rotateSession: async (cid: string, rpsid: string, previous: RpSession, next: RpSession) => {
+      const key = `${cid}:${rpsid}`;
+      if (map.get(key)?.refreshToken !== previous.refreshToken) return false;
+      map.set(key, next);
+      return true;
+    },
+    deleteSession: async (cid: string, rpsid: string) => { map.delete(`${cid}:${rpsid}`); },
     peek: () => map.get("vxtpl:rpsid-1")!,
   };
 }
@@ -53,7 +72,14 @@ function expired(): RpSession {
 }
 
 function deps(store: ReturnType<typeof memoryStore>, idp: ReturnType<typeof rotatingIdp>): SessionDeps {
-  return { getSession: store.getSession, putSession: store.putSession, refreshTokens: idp.refresh };
+  return {
+    getSession: store.getSession,
+    rotateSession: store.rotateSession,
+    deleteSession: store.deleteSession,
+    acquireRefresh: async () => true,
+    releaseRefresh: async () => {},
+    refreshTokens: idp.refresh,
+  };
 }
 
 test("concurrent resolutions of an expired session refresh ONCE and all succeed", async () => {
@@ -99,6 +125,29 @@ test("a refresh the IdP genuinely rejects still ends the session", async () => {
   const idp = rotatingIdp();
   const r = await freshSession(cfg, "rpsid-1", deps(store, idp));
   assert.equal(r, null);
+});
+
+test("temporary refresh outages remain distinct from a rejected session", async () => {
+  const store = memoryStore(expired());
+  const outage = new TokenEndpointError(503);
+  await assert.rejects(freshSession(cfg, "rpsid-1", {
+    ...deps(store, rotatingIdp()),
+    refreshTokens: async () => { throw outage; },
+  }), (error) => error === outage);
+});
+
+test("an in-flight refresh cannot restore a locally revoked session", async () => {
+  const store = memoryStore(expired());
+  const idp = rotatingIdp();
+  const result = await freshSession(cfg, "rpsid-1", {
+    ...deps(store, idp),
+    refreshTokens: async (config, token) => {
+      await store.deleteSession("vxtpl", "rpsid-1");
+      return idp.refresh(config, token);
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(await store.getSession("vxtpl", "rpsid-1"), null);
 });
 
 test("a session that is not near expiry is returned without a refresh", async () => {

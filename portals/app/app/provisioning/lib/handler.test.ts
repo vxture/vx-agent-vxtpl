@@ -46,9 +46,25 @@ test("subscription_changed evicts the C2 cache", async () => {
   let evicted: string | null = null;
   await handleProvisioning(
     ev({ id: "s1", type: "subscription_changed", seq: 2, workspace_id: "ws_9" }),
-    deps({ onSubscriptionChanged: (ws) => (evicted = ws) }),
+    deps({ onSubscriptionChanged: (ws) => { evicted = ws; } }),
   );
   assert.equal(evicted, "ws_9");
+});
+
+test("a redelivered notification retries eviction after the delivery was committed", async () => {
+  const event = ev({ id: "invalidate-on-retry", type: "subscription_changed" });
+  let fail = true;
+  let evictions = 0;
+  const d = deps({
+    onSubscriptionChanged: async () => {
+      if (fail) throw new Error("Redis unavailable");
+      evictions++;
+    },
+  });
+  await assert.rejects(handleProvisioning(event, d), /Redis unavailable/);
+  fail = false;
+  assert.equal((await handleProvisioning(event, d)).reason, "duplicate");
+  assert.equal(evictions, 1);
 });
 
 test("provisioned runs the re-entrant init hook", async () => {
@@ -59,4 +75,21 @@ test("provisioned runs the re-entrant init hook", async () => {
   );
   assert.equal(res.handled, true);
   assert.equal(inited, "ws_1");
+});
+
+test("an unversioned invalidation and a failed transaction cannot consume the lifecycle sequence", async () => {
+  const d = deps();
+  await handleProvisioning(ev({ type: "subscription_changed", id: "notice", seq: 9 }), d);
+  await assert.rejects(handleProvisioning(ev({ seq: 2 }), {
+    ...d,
+    onProvisioned: () => { throw new Error("initialization failed"); },
+  }), /initialization failed/);
+  const [started, stopped] = await Promise.all([
+    handleProvisioning(ev({ seq: 2 }), d),
+    handleProvisioning(ev({ id: "revoke", seq: 3, type: "tenant.deprovisioned" }), d),
+  ]);
+  assert.equal(started.handled, true);
+  assert.equal(stopped.handled, true);
+  assert.equal(await d.store.instanceStatus("ws_1", PRODUCT), "deprovisioned");
+  assert.equal(await d.store.isCurrentProvisioned(started.change!), false);
 });

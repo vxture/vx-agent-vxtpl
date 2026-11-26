@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { oidcClientAuthorization } from "../auth/lib/client-auth";
 import { assertInternalTarget } from "./internal-target";
 
 // S2S token minting - RFC 8693 token exchange against the platform IdP.
@@ -180,6 +181,24 @@ export async function mintS2SToken(audience: string, opts: MintOptions = {}): Pr
 
 /** As `mintS2SToken`, but also returns the minted claims (for `tenant_id`). */
 export async function mintS2S(audience: string, opts: MintOptions = {}): Promise<S2SToken> {
+  if (!opts.subjectToken && !opts.workspaceId) {
+    throw new S2STokenError(0, "invalid_request", "A subject token or workspace is required");
+  }
+  const form = new URLSearchParams({ audience });
+  if (opts.subjectToken) {
+    form.set("subject_token", opts.subjectToken);
+  } else if (opts.workspaceId) {
+    form.set("workspace_id", opts.workspaceId);
+    if (opts.orgId) form.set("org_id", opts.orgId);
+  }
+  return exchange(cacheKey(audience, opts), form);
+}
+
+export function mintProvisioningRead(): Promise<S2SToken> {
+  return exchange("provisioning:read", new URLSearchParams({ audience: PLATFORM_AUDIENCE, scope: "provisioning:read" }));
+}
+
+async function exchange(key: string, form: URLSearchParams): Promise<S2SToken> {
   const cfg = getS2SConfig();
   if (!cfg) {
     throw new S2STokenError(
@@ -188,37 +207,22 @@ export async function mintS2S(audience: string, opts: MintOptions = {}): Promise
       "OIDC_ISSUER, OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must all be set to mint an S2S token",
     );
   }
-  if (!opts.subjectToken && !opts.workspaceId) {
-    throw new S2STokenError(
-      0,
-      "invalid_request",
-      `minting for audience '${audience}' needs either a subjectToken (OBO) or a workspaceId (service mode)`,
-    );
-  }
-
-  const key = cacheKey(audience, opts);
   const hit = cache.get(key);
   if (hit && Date.now() < hit.expiresAtMs - EXPIRY_MARGIN_MS) return { token: hit.token, claims: hit.claims };
 
-  const form = new URLSearchParams({
-    grant_type: GRANT_TYPE,
-    client_id: cfg.clientId,
-    client_secret: cfg.clientSecret,
-    audience,
-  });
-  if (opts.subjectToken) {
-    form.set("subject_token", opts.subjectToken);
-  } else {
-    form.set("workspace_id", opts.workspaceId as string);
-    if (opts.orgId) form.set("org_id", opts.orgId);
-  }
+  form.set("grant_type", GRANT_TYPE);
 
   const url = assertInternalTarget(`${cfg.issuer.replace(/\/$/, "")}${TOKEN_PATH}`);
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    headers: {
+      authorization: oidcClientAuthorization(cfg),
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+    },
     body: form.toString(),
     cache: "no-store",
+    redirect: "error",
     signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
   });
 

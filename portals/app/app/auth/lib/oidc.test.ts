@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { fetchUserInfo, verifyToken } from "./oidc";
+import { exchangeCode, fetchUserInfo, refreshTokens, verifyToken } from "./oidc";
 import type { OidcConfig } from "./config";
 
 const ISSUER = "https://accounts.vxture.com";
@@ -129,6 +129,28 @@ test("fetchUserInfo presents the access token and returns the claims", async () 
   );
   assert.equal(seen, "Bearer at_123");
   assert.equal(info?.name, "Ada L");
+});
+
+test("code and refresh exchanges share encoded client_secret_basic credentials and reject redirects", async () => {
+  const cfg = { ...testConfig(), clientSecret: "secret:+%" };
+  const grants: string[] = [];
+  await withStubbedFetch(
+    (url, init) => {
+      assert.equal(url, cfg.tokenUrl);
+      assert.equal(init?.redirect, "error");
+      const auth = new Headers(init?.headers).get("authorization");
+      assert.equal(auth, "Basic " + Buffer.from("testclient:secret%3A%2B%25").toString("base64"));
+      const form = new URLSearchParams(String(init?.body));
+      assert.equal(form.has("client_secret"), false);
+      grants.push(form.get("grant_type") ?? "");
+      return Response.json({ access_token: "fixture", token_type: "Bearer" });
+    },
+    async () => {
+      await exchangeCode(cfg, "code", "verifier");
+      await refreshTokens(cfg, "fixture-refresh");
+    },
+  );
+  assert.deepEqual(grants, ["authorization_code", "refresh_token"]);
 });
 
 // A body for someone else is not this person's profile. Rendering it would put

@@ -1,0 +1,92 @@
+/*
+ * Layout for the platform integration demo.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Styles
+ * @author AI-Generated
+ * @date 2026-11-26
+ */
+
+.platform-demo {
+  display: grid;
+  gap: 2rem;
+  width: 100%;
+}
+
+.platform-demo__heading,
+.platform-demo__section-title,
+.platform-demo__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 1rem;
+}
+
+.platform-demo__heading,
+.platform-demo__section-title {
+  justify-content: space-between;
+}
+
+.platform-demo h1 {
+  font-size: clamp(1.625rem, 3vw, 2.125rem);
+  font-weight: 650;
+}
+
+.platform-demo h2 {
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.platform-demo__heading p,
+.platform-demo__detail,
+.platform-demo__meta {
+  color: var(--muted-foreground);
+}
+
+.platform-demo__rows {
+  margin: 0.625rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--border);
+}
+
+.platform-demo__row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) minmax(0, 1.7fr) auto;
+  align-items: center;
+  gap: 0.375rem 1.25rem;
+  min-height: 3rem;
+  padding-block: 0.625rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.platform-demo__row--action {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.platform-demo__group {
+  width: 3.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.platform-demo__row p,
+.platform-demo__row span {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .platform-demo__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .platform-demo__row:not(.platform-demo__row--action) .platform-demo__detail {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .platform-demo__row:not(.platform-demo__row--action) > :last-child {
+    grid-row: 1;
+    grid-column: 2;
+  }
+}

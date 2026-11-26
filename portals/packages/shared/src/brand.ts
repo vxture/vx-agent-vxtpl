@@ -8,13 +8,13 @@
 //
 // productCode is PLUMBING (the platform key, owner-registered, rigid);
 // displayName is BRAND (what a human sees, exemplar content). They diverge on
-// purpose: the code stays `vxtpl`, the product is named Emberstorm - the
-// arena is literally a storm of amber embers converging on you. The rename
+// purpose: the registration code stays `vxtpl` while the shell shows Vxtpl.
+// Emberstorm is the challenge module within the product. The rename
 // script reads the current displayName from this file, so a copy starts as
 // its Title-Cased code and takes its own brand from here on.
 export const BRAND = {
   productCode: "vxtpl",
-  displayName: "Emberstorm",
+  displayName: "Vxtpl",
   defaultLocale: "en",
 } as const;
 

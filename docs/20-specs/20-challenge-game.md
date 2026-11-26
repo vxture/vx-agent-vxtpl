@@ -1,9 +1,8 @@
 # Emberstorm (The 20-Second Challenge) - game and subscription specification
 
-The product is named **Emberstorm** (`BRAND.displayName`) - the arena is a
-storm of amber embers converging on the player; "The 20-Second Challenge" is
-the game mode it ships. `vxtpl` stays the product CODE (platform key, name
-cascade) - plumbing, not brand.
+**Emberstorm** is Vxtpl's game module. The arena is a storm of amber embers
+converging on the player. "The 20-Second Challenge" is the game mode.
+The platform product code remains `vxtpl`.
 
 vxtpl's business domain (ADR-006): a 20-second bullet-dodging challenge whose
 three subscription tiers exercise the platform's quota / subscription /
@@ -26,7 +25,7 @@ however long you survive, and no ceiling exists but the server's sanity cap.
 | Skill model | dodging craft, not reflexes (owner-tuned twice, 2026-08-31): everything SLOW, AIMED, and DENSE - surviving through the slits. Bullets fire exactly at the player's position and fly straight (no jitter, no homing), so standing still is lethal and any deliberate move invalidates every shot in the air. The ramp raises density (spawn cadence 240ms -> 55ms at the bar, creeping to a 42ms floor over the next lap), barely speed (45 -> 85 logical px/s at the bar, then flat). Four converging ring bursts at 6.0 / 11.0 / 15.5 / 18.2s; past the bar an encore ring every 6s |
 | Player | fixed 110 px/s - still faster than any bullet, so every death is a positioning mistake, never a speed check. Small marks throughout (player r4, bullets r2-3.2): the read is lanes, not blobs |
 | Controls | the four arrow keys, nothing else (owner decision 2026-08-31; desktop-first, no pointer follow, no touch) |
-| Presentation | ONE screen: a fullscreen command deck at `/` in the owner's reference style (amber-on-charcoal data-viz dashboard). The topbar NEVER folds: live numbers (runs today, personal best) left, the quiet identity strip (avatar+name in a hairline frame / exit / fullscreen, deliberately dim) right. Side rails carry only the secondary modules (record, board), each toggled by the reference design's bracket-arc ornament at the stage edge - arcs embrace the stage when open and mirror outward when folded; the deck folds itself on run start and unfolds on the result. Debug surfaces sit behind the avatar menu |
+| Presentation | One fullscreen command deck at `/play` in the owner's amber-on-charcoal reference style. The topbar keeps the live numbers (runs today, personal best), identity strip, and fullscreen control visible. Side rails hold the record and board and use the bracket-arc toggles at the stage edge. The deck folds the rails on run start and unfolds them on the result. The avatar menu links to the workspace home and integration checks. |
 | Determinism | every run is seeded server-side; the engine (`game/engine.ts`) is pure and replayable from the seed |
 | Cross-device | one logical 800x520 arena, letterboxed into the viewport - a smaller screen shrinks the picture, not the game |
 
@@ -118,6 +117,6 @@ this repo's own: no client anti-cheat arms race (see integrity posture).
 | Persistence port | `portals/app/app/game/store.ts` (+ `prisma-store.ts`) |
 | Schema | `deploy/database/ddl/incr/0001_vxtpl_game.sql` (`vxtpl_game.run`) |
 | APIs | `portals/app/app/api/game/{,run,run/finish,records,leaderboard}/route.ts` |
-| Surface | the deck at `/` - `portals/app/app/(product)/page.tsx` + `(product)/deck/` (renderer, side modules, trend chart); `/challenge` redirects |
+| Surface | `portals/app/app/play/page.tsx` and `play/deck/` render the deck at `/play`. `/challenge` redirects to `/play`. |
 | Tier keys | `portals/app/app/entitlement/capability.ts` (`game:*`) |
 | Usage metric | `vxtpl.game.runs`, buffered like `vxtpl.chat.messages` (liaison letter 130) |

@@ -13,7 +13,7 @@ register rather than inheriting them.
 |----|-------|--------|--------|
 | TD-001 | Wire the published `@vxture/shared` value-domain dependency + alignment guardrail | 2026-07-21 | closed 2026-07-21 |
 | TD-002 | Vendored health-identity implementation deviated from 025's shared-helper clause (undeclared) | 2026-07-21 | closed 2026-07-21 |
-| TD-003 | C2 entitlement + usage flush still use the deprecated `x-vxture-internal-auth` shared header | 2026-08-16 | open |
+| TD-003 | Migrate C2 entitlement and C3 usage flush to product tickets | 2026-08-16 | resolved locally 2026-11-26 |
 | TD-004 | `local_authz` is schema-only - no code reads or writes the membership and role tables | 2026-08-16 | open |
 | TD-005 | No request-level tests for the auth, webhook and chat routes | 2026-08-16 | open |
 | TD-006 | Port cutover to 4000 is not executed on the deploy host | 2026-08-17 | open |
@@ -97,28 +97,13 @@ line - silent deviation fails self-rectify acceptance.
   reply liaison letter (`docs/80-liaison/`) are the closure record `vxtpl_301`
   §3.4 asked for.
 
-### TD-003 - C2 and usage flush still use the deprecated shared-secret header
+### TD-003 - Product Bearer tickets for C2 and C3
 
-`entitlement/platform-client.ts` and `usage/lib/flush.ts` authenticate to the
-platform with `x-vxture-internal-auth`, a long-lived shared secret carried in
-`PLATFORM_INTERNAL_AUTH_TOKEN`.
-
-The platform now dual-accepts that header OR a Bearer S2S token with
-`audience=vxture` (the `PLATFORM_S2S_AUDIENCE` sentinel), and intends to retire
-the shared-secret path once callers migrate. vxtpl already mints S2S tokens for
-Atlas and Runos (ADR-003), so the migration is a change of header on two call
-sites, not new machinery - and it would remove the last long-lived shared secret
-from the runtime environment.
-
-- **Why deferred**: batch F was one decision - "S2S tokens are minted, not
-  configured". Folding a C2 auth migration into it would have coupled a
-  behaviour change on the entitlement path (which gates paid access) to a
-  repositioning change, with one test run to catch both.
-- **Cost of waiting**: vxtpl is the reference build, so every product copied
-  from it inherits the deprecated convention and will need the same migration.
-- **Recovery condition**: platform confirms the Bearer path is preferred for
-  `/platform/entitlements` and `/usage/consume`; then switch both call sites to
-  `mintS2SToken(PLATFORM_AUDIENCE, ...)` with the header as configured fallback.
+`entitlement/resolver.ts` uses the current session's OBO ticket for
+`GET /platform/entitlements`. `usage/lib/flush.ts` uses a workspace-bound
+product service ticket for `POST /usage/consume`. Both reuse the registered
+confidential OIDC client. Deployment and validation with platform receipts
+are tracked in [the integration batches](../70-workplan/10-template-foundation-batches.md).
 
 ### TD-004 - `local_authz` is schema-only
 

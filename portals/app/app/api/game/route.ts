@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { getEntitlementResolver } from "../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../entitlement/capability";
 import { ctaFor } from "../../entitlement/types";
-import { isCallerError, resolveGameCaller } from "../../game/api-caller";
+import { isCallerError, resolveGameEntitledCaller } from "../../game/api-caller";
 import { getGameStore } from "../../game/store";
 import {
   QUALIFY_MS,
@@ -21,10 +20,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const caller = await resolveGameCaller();
+  const caller = await resolveGameEntitledCaller();
   if (isCallerError(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
+  const { entitlement } = caller;
   const store = getGameStore();
   const now = new Date();
   const season = seasonOf(now);

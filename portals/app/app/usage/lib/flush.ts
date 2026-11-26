@@ -1,27 +1,26 @@
-import { getUsageStore, type UsageRow, type UsageStore } from "./store";
-import { getPlatformClientConfig, type PlatformClientConfig } from "../../entitlement/platform-client";
-import { getEntitlementResolver } from "../../entitlement/resolver";
-import { assertInternalTarget } from "../../lib/internal-target";
+/**
+ * Delivers buffered product counter usage with a workspace-bound service ticket.
+ * @package @vxtpl/app
+ * @layer Application
+ * @category Usage
+ * @author AI-Generated
+ * @date 2026-11-26
+ */
 
-// Async flush job: drain buffered counter usage and report to the platform
-// consume service (the single writer).
-//
-// Contract per the integration general rules (C3 usage - the
-// authoritative interface spec, 2026-08-28): consume is ALWAYS 200, including
-// when the quota did not cover the call. `gated: true` in the BODY is
-// information, not an instruction - the platform records, it does not
-// adjudicate. An idempotent replay answers `replayed: true` with the ORIGINAL
-// `event_id`, which is what makes reconciliation possible. The old 409-gated
-// shape this file used to handle is retired; any non-200 now means "not
-// recorded yet" and the row stays buffered for retry.
+import { BRAND } from "@vxtpl/shared/brand";
+import { getUsageStore, type UsageRow, type UsageStore } from "./store";
+import { invalidateWorkspaceEntitlement } from "../../entitlement/platform-resolver";
+import { assertInternalTarget } from "../../lib/internal-target";
+import { invalidateS2SToken, mintS2S, PLATFORM_AUDIENCE } from "../../lib/s2s-token";
+
+// ============================================================================
+// Receipts and batch results
+// ============================================================================
 
 export interface ConsumeBody {
-  gated?: boolean;
-  reason?: string;
-  consumed?: number;
-  remaining_total?: number;
+  gated: boolean;
   replayed?: boolean;
-  event_id?: string;
+  event_id: string;
 }
 
 export interface ConsumeResult {
@@ -33,7 +32,7 @@ export type ConsumeFn = (row: UsageRow) => Promise<ConsumeResult>;
 export interface FlushOptions {
   store?: UsageStore;
   consume?: ConsumeFn;
-  onGated?: (workspaceId: string) => void;
+  invalidate?: (workspaceId: string) => Promise<void>;
   batchSize?: number;
 }
 
@@ -46,9 +45,19 @@ export interface FlushSummary {
   skipped?: boolean;
 }
 
+// ============================================================================
+// Buffered delivery
+// ============================================================================
+
+/**
+ * Reports buffered usage in order and clears rows with a verified receipt.
+ * @param opts - Store, transport and cache options for this batch.
+ * @returns Delivery counts; unconfirmed rows remain available for replay.
+ */
 export async function flushUsage(opts: FlushOptions = {}): Promise<FlushSummary> {
   const store = opts.store ?? getUsageStore();
-  const consume = opts.consume ?? defaultConsume();
+  const baseUrl = process.env.PLATFORM_API_URL;
+  const consume = opts.consume ?? (baseUrl ? makePlatformConsume(baseUrl) : null);
   if (!consume) return { scanned: 0, flushed: 0, gated: 0, replayed: 0, retried: 0, skipped: true };
 
   const rows = await store.unflushed(opts.batchSize ?? 50);
@@ -59,51 +68,62 @@ export async function flushUsage(opts: FlushOptions = {}): Promise<FlushSummary>
   let retried = 0;
 
   for (const row of rows) {
-    let res: ConsumeResult;
     try {
-      res = await consume(row);
-    } catch {
-      retried++;
-      continue; // stays buffered
-    }
-    if (res.status === 200) {
+      const res = await consume(row);
+      if (res.status !== 200 || !isConsumeReceipt(res.body)) {
+        retried++;
+        continue;
+      }
+      // A replay may report different coverage flags. Every confirmed receipt
+      // clears the snapshot so an interrupted gated delivery can still evict it.
+      await (opts.invalidate ?? invalidateWorkspaceEntitlement)(row.workspaceId);
       done.push(row.idempotencyKey);
       flushed++;
-      if (res.body?.replayed === true) replayed++;
-      if (res.body?.gated === true) {
-        // Recorded but not covered: refresh entitlement so the UI's quota view
-        // catches up within a click instead of a TTL.
-        gated++;
-        (opts.onGated ?? ((ws: string) => getEntitlementResolver().invalidate(ws)))(row.workspaceId);
-      }
-    } else {
-      retried++; // 4xx/5xx -> not recorded, stays buffered
+      if (res.body.replayed === true) replayed++;
+      if (res.body.gated) gated++;
+    } catch {
+      retried++;
     }
   }
   await store.markFlushed(done);
   return { scanned: rows.length, flushed, gated, replayed, retried };
 }
 
+function isConsumeReceipt(body: unknown): body is ConsumeBody {
+  if (!body || typeof body !== "object") return false;
+  const receipt = body as Partial<ConsumeBody>;
+  return typeof receipt.event_id === "string" && receipt.event_id.trim().length > 0 &&
+    typeof receipt.gated === "boolean" &&
+    (receipt.replayed === undefined || typeof receipt.replayed === "boolean");
+}
+
 /**
- * The platform consume caller. Exported so the platform-check C3 replay probe
- * can exercise the REAL wire path (same body, same headers) rather than a
- * lookalike. `x-request-id` carries the idempotency key - the spec lands it
- * next to the event for two-sided reconciliation, and the idempotency key is
- * the one id both sides already share.
+ * Builds the product's C3 client used by the worker and replay probe.
+ * @param baseUrl - Internal platform API base URL.
+ * @returns A caller that uses a workspace-bound service ticket for each row.
  */
-export function makePlatformConsume(cfg: PlatformClientConfig): ConsumeFn {
+export function makePlatformConsume(baseUrl: string): ConsumeFn {
   return async (row) => {
-    const url = assertInternalTarget(`${cfg.baseUrl.replace(/\/$/, "")}/usage/consume`);
+    const url = assertInternalTarget(`${baseUrl.replace(/\/$/, "")}/usage/consume`);
+    const scope = { workspaceId: row.workspaceId };
+    const { claims, token } = await mintS2S(PLATFORM_AUDIENCE, scope);
+    if (claims.aud !== PLATFORM_AUDIENCE || claims.act?.sub !== BRAND.productCode ||
+        claims.mode !== "service" || claims.scope !== "tool:vxture" ||
+        claims.workspace_id !== row.workspaceId || claims.sub !== undefined) {
+      throw new Error("Invalid product usage ticket scope");
+    }
     const res = await fetch(url, {
       method: "POST",
       headers: {
+        authorization: "Bearer " + token,
         "content-type": "application/json",
-        "x-vxture-internal-auth": cfg.authToken,
         "x-request-id": row.idempotencyKey,
       },
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         workspace_id: row.workspaceId,
-        product: cfg.product,
+        product: BRAND.productCode,
         metric: row.metric,
         amount: row.amount,
         idempotency_key: row.idempotencyKey,
@@ -111,14 +131,9 @@ export function makePlatformConsume(cfg: PlatformClientConfig): ConsumeFn {
       }),
       cache: "no-store",
     });
-    const body = (await res.json().catch(() => undefined)) as ConsumeBody | undefined;
-    return { status: res.status, body };
+    if (res.status === 401) invalidateS2SToken(PLATFORM_AUDIENCE, scope);
+    if (res.status !== 200) return { status: res.status };
+    const body: unknown = await res.json().catch(() => undefined);
+    return isConsumeReceipt(body) ? { status: 200, body } : { status: 200 };
   };
-}
-
-/** Consume caller from env config, or null when the platform is not configured (offline). */
-function defaultConsume(): ConsumeFn | null {
-  const cfg = getPlatformClientConfig();
-  if (!cfg) return null;
-  return makePlatformConsume(cfg);
 }

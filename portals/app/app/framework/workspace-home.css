@@ -1,0 +1,75 @@
+/**
+ * Workspace overview and recent-work card layout.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Styles
+ * @author AI-Generated
+ * @date 2026-11-25
+ */
+
+/* Workspace overview */
+.workspace-overview {
+  display: grid;
+  align-content: start;
+  gap: 28px;
+}
+.workspace-overview-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  gap: 12px;
+  padding: clamp(24px, 5vw, 56px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 92% -10%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 54%),
+    var(--card);
+}
+.workspace-overview-hero h1 { font-size: clamp(26px, 4vw, 42px); font-weight: 650; line-height: 1.18; }
+.workspace-overview-hero p, .workspace-work-state { color: var(--muted-foreground); }
+.workspace-overview-hero .product-workspace-actions { margin-block-start: 4px; }
+
+/* Recent work and pagination */
+.workspace-work-section { container-type: inline-size; min-inline-size: 0; }
+.workspace-work-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.workspace-work-grid[data-overview] > :nth-child(n+3) { display: none; }
+.workspace-work-card {
+  --vxtpl-work-tone: var(--primary);
+  position: relative;
+  display: grid;
+  align-content: start;
+  min-inline-size: 0;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--vxtpl-work-tone) 22%, var(--border));
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--vxtpl-work-tone) 11%, var(--card)), var(--card) 74%);
+}
+.workspace-work-card[data-tone="success"] { --vxtpl-work-tone: var(--success); }
+.workspace-work-card::before { content: ""; position: absolute; inset: -1px auto auto 18px; inline-size: 32px; block-size: 2px; border-radius: 2px; background: var(--vxtpl-work-tone); }
+.workspace-work-card h3 { font-weight: 650; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.workspace-work-card p { margin-block-start: 4px; color: var(--muted-foreground); font-size: 13px; }
+.workspace-work-card-top, .workspace-work-card-footer, .workspace-work-progress-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-inline-size: 0; font-size: 12px; }
+.workspace-work-card-top > span:first-child, .workspace-work-progress-label > span:first-child { display: inline-flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.workspace-work-card-top svg { color: var(--muted-foreground); flex: none; }
+.workspace-work-card-footer { color: var(--muted-foreground); white-space: nowrap; }
+.workspace-work-card-footer > span { overflow: hidden; text-overflow: ellipsis; }
+.workspace-work-card-footer a { flex: none; color: var(--primary); font-weight: 600; }
+.workspace-work-progress ol { display: flex; gap: 2px; margin-block-start: 7px; }
+.workspace-work-progress li { flex: 1; min-inline-size: 0; block-size: 5px; border-radius: 999px; background: color-mix(in srgb, var(--muted-foreground) 32%, var(--card)); }
+.workspace-work-progress li[data-progress="complete"] { background: color-mix(in srgb, var(--primary) 54%, var(--card)); }
+.workspace-work-progress li[data-progress="current"] { flex: 2; background: var(--primary); }
+.workspace-work-state { padding: 18px 0; }
+.workspace-work-detail { max-inline-size: 520px; }
+.workspace-work-paging { display: flex; gap: 12px; margin-block-start: 20px; }
+
+@container (min-width: 440px) {
+  .workspace-work-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-work-grid[data-overview] > :nth-child(-n+4) { display: grid; }
+  .workspace-work-grid[data-overview] > :nth-child(n+5) { display: none; }
+}
+@container (min-width: 640px) {
+  .workspace-work-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workspace-work-grid[data-overview] > :nth-child(-n+6) { display: grid; }
+}

@@ -1,3 +1,12 @@
+/**
+ * Full workspace chat and its optional assistant panel.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Page
+ * @author AI-Generated
+ * @date 2026-11-25
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -5,15 +14,20 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Input,
   Stack,
   StatusBadge,
-} from "../../ds";
-import type { ChatMessage, ChatReply, SkillOutcome } from "../../chat/types";
-import type { GatedOption } from "../../chat/catalog";
+} from "../ds";
+import type { ChatMessage, SkillOutcome } from "./types";
+import type { GatedOption } from "./catalog";
+import { requestChatTurn, type ChatContext } from "./client";
+import { AssistantPanel } from "./assistant-panel";
+import { useAssistantConversations } from "./assistant-conversations";
+import { ChatWorkspaceAccess } from "./workspace-access";
+import { ProductHeader } from "../framework/product-chrome";
+import { WorkspaceRegions } from "../framework/workspace-regions";
 
 // Chat surface. Talks to /api/chat, which requires a signed-in session: the
 // workspace it resolves entitlement for is also what the S2S token is minted
@@ -22,13 +36,6 @@ import type { GatedOption } from "../../chat/catalog";
 // a selected skill is executed as a real Runos capability.
 
 const NO_SKILL = "";
-
-interface ChatContext {
-  tier: string | null;
-  productAccess: boolean;
-  models: GatedOption[];
-  skills: GatedOption[];
-}
 
 interface TurnMeta {
   mode: "atlas" | "mock";
@@ -105,36 +112,39 @@ function SkillReport({ skill }: { skill: SkillOutcome }) {
   );
 }
 
+/* Context and submission */
+
 export default function ChatPage() {
-  const [ctx, setCtx] = useState<ChatContext | null>(null);
-  const [modelCode, setModelCode] = useState("");
-  const [skillCode, setSkillCode] = useState("");
+  return (
+    <ChatWorkspaceAccess>
+      {({ context, blocked, revision, scopeVersion, onAccessFailure }) => (
+        <ChatWorkspace key={scopeVersion} ctx={context} blocked={blocked} revision={revision} onAccessFailure={onAccessFailure} />
+      )}
+    </ChatWorkspaceAccess>
+  );
+}
+
+function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
+  ctx: ChatContext | null;
+  blocked: boolean;
+  revision: number;
+  onAccessFailure: (error: unknown, scopeKey: string) => boolean;
+}) {
+  const [preferredModel, setModelCode] = useState("");
+  const [preferredSkill, setSkillCode] = useState(NO_SKILL);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [turn, setTurn] = useState<TurnMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [signedOut, setSignedOut] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantWide, setAssistantWide] = useState(false);
+  const assistantModel = ctx?.productAccess ? ctx.models.find((model) => model.allowed)?.code : undefined;
+  const modelCode = ctx?.models.find((model) => model.code === preferredModel && model.allowed)?.code ?? assistantModel ?? ctx?.models[0]?.code ?? "";
+  const skillCode = ctx?.skills.find((skill) => skill.code === preferredSkill && skill.allowed)?.code ?? NO_SKILL;
+  const assistant = useAssistantConversations(blocked ? undefined : assistantModel, ctx?.scopeKey, onAccessFailure);
   const logRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch("/api/chat", { cache: "no-store" })
-      .then(async (r) => {
-        if (r.status === 401 || r.status === 503) {
-          const body = (await r.json().catch(() => ({}))) as { error?: string };
-          setSignedOut(true);
-          setError(body.error ?? "sign in to use chat");
-          return;
-        }
-        const data = (await r.json()) as ChatContext;
-        setCtx(data);
-        setModelCode(data.models.find((m) => m.allowed)?.code ?? data.models[0]?.code ?? "");
-        // Default to no skill: skills invoke a real, billed capability, so
-        // opting in should be the user's choice rather than a preselected value.
-        setSkillCode(NO_SKILL);
-      })
-      .catch(() => setError("failed to load model/skill catalog"));
-  }, []);
+  const sending = useRef(false);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -142,21 +152,18 @@ export default function ChatPage() {
 
   async function send() {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text || sending.current || blocked || !ctx) return;
+    sending.current = true;
     setError(null);
     const next = [...messages, { role: "user" as const, content: text }];
-    setMessages(next);
-    setInput("");
     setBusy(true);
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ history: next, modelCode: modelCode || undefined, skillCode: skillCode || undefined }),
+      const body = await requestChatTurn(next, ctx.scopeKey, {
+        modelCode: modelCode || undefined,
+        skillCode: skillCode || undefined,
       });
-      const body = (await res.json()) as ChatReply & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setMessages([...next, body.message]);
+      setInput("");
       setTurn({
         mode: body.mode,
         modelCode: body.modelCode,
@@ -165,14 +172,30 @@ export default function ChatPage() {
         latencyMs: body.latencyMs,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "chat request failed");
+      if (!onAccessFailure(err, ctx.scopeKey)) setError(err instanceof Error ? err.message : "chat request failed");
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
 
+  /* Conversation and diagnostics */
+
   return (
-    <main className="page">
+    <WorkspaceRegions
+      width="1920"
+      renderHeader={(actions, control) => <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />}
+      right={assistantModel ? {
+        title: "AI assistant",
+        assistant: true,
+        open: assistantOpen,
+        onOpenChange: setAssistantOpen,
+        wide: assistantWide,
+        content: (_, close) => (
+          <AssistantPanel chat={assistant} wide={assistantWide} onWidthChange={() => setAssistantWide((wide) => !wide)} onClose={close} />
+        ),
+      } : undefined}
+    >
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
         <StatusBadge tone="warning" dot>
@@ -182,28 +205,11 @@ export default function ChatPage() {
           {ctx ? tierLabel(ctx.tier) : "..."}
         </StatusBadge>
       </div>
-      <p className="lede">
+      <p className="lede chat-intro">
         A tier-gated turn against the platform&apos;s model gateway; a selected skill runs as a real Runos
         capability. This is a DEBUG surface for verifying the S2S chain, not a product feature - turns are
         capped at 500 characters and 6 per minute.
       </p>
-
-      {signedOut && (
-        <Card style={{ marginTop: "1rem" }}>
-          <CardHeader>
-            <CardTitle>Sign in to continue</CardTitle>
-            <CardDescription>
-              Chat resolves entitlement for your active workspace and mints its platform token on your session, so it
-              needs you signed in.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <a href="/auth/login?returnTo=/chat">Sign in</a>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* One conversation column; model and skill sit UNDER the composer, which
           is where every major assistant put them and not by coincidence. They
@@ -217,8 +223,8 @@ export default function ChatPage() {
           sits flush against its bottom rule, so the card contributes the frame
           only - its padding and inter-child gap are zeroed rather than worked
           around. */}
-      <div style={{ marginTop: "1.4rem" }}>
-        <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden" }}>
+      <div className="chat-surface">
+        <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden", width: "100%" }}>
           <div
             ref={logRef}
             style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
@@ -238,6 +244,7 @@ export default function ChatPage() {
                   padding: "0.55rem 0.85rem",
                   maxWidth: "min(78%, 640px)",
                   whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
                   fontSize: "0.92rem",
                   lineHeight: 1.5,
                 }}
@@ -250,15 +257,15 @@ export default function ChatPage() {
           <div className="chat-composer">
             <div className="chat-composer__row">
               <Input
-                style={{ flex: 1 }}
+                style={{ flex: 1, minWidth: 0 }}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
                 placeholder="Type a short verification message (max 500 chars)"
                 maxLength={500}
-                disabled={busy}
+                disabled={busy || blocked}
               />
-              <Button onClick={send} disabled={busy || !input.trim()}>
+              <Button onClick={send} disabled={busy || blocked || !input.trim()}>
                 {busy ? "..." : "Send"}
               </Button>
             </div>
@@ -329,10 +336,10 @@ export default function ChatPage() {
 
       {error && <p style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem", marginTop: "0.7rem" }}>{error}</p>}
 
-      <footer className="page-links">
+      <nav className="page-links" aria-label="Chat diagnostics">
         <a href="/status">-&gt; integration status</a>
         <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
-      </footer>
-    </main>
+      </nav>
+    </WorkspaceRegions>
   );
 }

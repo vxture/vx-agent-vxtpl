@@ -167,6 +167,18 @@ test("the callee's own retryable answer wins over any status-based guess", async
   );
 });
 
+test("an upstream account refusal is non-retryable with or without the retry field", async () => {
+  for (const retryable of [false, undefined]) {
+    resetS2STokenCache();
+    const calls = stub({ code: "UPSTREAM_ACCOUNT_REFUSED", message: "provider account rejected", retryable }, 503);
+    await assert.rejects(
+      () => fetchChatCompletion(getAtlasClientConfig()!, IDENTITY, MESSAGES, { taskId: TASK_ID }),
+      (err: unknown) => err instanceof AtlasError && err.envelope.code === "UPSTREAM_ACCOUNT_REFUSED" && !err.retryable,
+    );
+    assert.equal(calls.length, 1);
+  }
+});
+
 test("a 501 is never retryable, even though the status range says 5xx", async () => {
   // The capability simply does not exist upstream; retrying re-pays the timeout
   // forever. A status-range test cannot express this, which is why there is a

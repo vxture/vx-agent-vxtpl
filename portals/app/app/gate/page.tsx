@@ -1,6 +1,6 @@
 import { BRAND } from "@vxtpl/shared/brand";
-import { safeReturnTo } from "../auth/lib/return-to";
-import { ProductGate } from "../access/product-gate";
+import { gateDestination, gateFailure } from "../access/destination";
+import { EntryShell } from "../access/entry-shell";
 
 // /gate - the product front door.
 //
@@ -22,13 +22,9 @@ export default async function GatePage({
   // Where the visitor was actually going before the middleware intercepted
   // them. Validated with the same whitelist the login round trip uses, so a
   // crafted `?from=` cannot turn the gate into an open redirect.
-  const destination = safeReturnTo(typeof raw === "string" ? raw : null);
+  const destination = gateDestination(typeof raw === "string" ? raw : undefined);
 
   return (
-    <ProductGate
-      productName={BRAND.displayName}
-      destination={destination}
-      tagline="验证通过后将自动进入产品"
-    />
+    <EntryShell destination={destination} failure={gateFailure(params.result)} />
   );
 }

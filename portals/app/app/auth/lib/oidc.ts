@@ -6,6 +6,7 @@ import {
   type JWTVerifyGetKey,
 } from "jose";
 import type { OidcConfig } from "./config";
+import { oidcClientAuthorization } from "./client-auth";
 
 // Token verification and code/refresh exchange (080-rp section 2.5). All checks
 // are mandatory: RS256 only (reject none/HS* downgrade), iss, aud, exp with 60s
@@ -14,6 +15,7 @@ import type { OidcConfig } from "./config";
 // caller, since it is per-request state).
 
 const CLOCK_TOLERANCE_SECONDS = 60;
+const TOKEN_TIMEOUT_MS = 5000;
 
 let jwksCache: {
   url: string;
@@ -61,8 +63,10 @@ export interface TokenSet {
   scope?: string;
 }
 
-function basicAuth(cfg: OidcConfig): string {
-  return "Basic " + Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64");
+export class TokenEndpointError extends Error {
+  constructor(readonly status: number, readonly oauthError?: string) {
+    super(`Token endpoint returned HTTP ${status}`);
+  }
 }
 
 export async function exchangeCode(
@@ -125,15 +129,17 @@ async function postToken(cfg: OidcConfig, body: URLSearchParams): Promise<TokenS
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
-      authorization: basicAuth(cfg),
+      authorization: oidcClientAuthorization(cfg),
       accept: "application/json",
     },
     body,
     cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`token endpoint ${res.status}: ${text.slice(0, 200)}`);
+    const body = await res.json().catch(() => null) as { error?: unknown } | null;
+    throw new TokenEndpointError(res.status, typeof body?.error === "string" ? body.error : undefined);
   }
   return (await res.json()) as TokenSet;
 }

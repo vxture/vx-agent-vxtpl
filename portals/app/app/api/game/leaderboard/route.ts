@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getEntitlementResolver } from "../../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../../entitlement/capability";
-import { isCallerError, resolveGameCaller } from "../../../game/api-caller";
+import { isCallerError, resolveGameEntitledCaller } from "../../../game/api-caller";
 import { getGameStore, type LeaderboardRow } from "../../../game/store";
 import { LEADERBOARD_SIZE, QUALIFY_MS, callSign, seasonOf } from "../../../game/rules";
 
@@ -30,10 +29,10 @@ function entries(rows: LeaderboardRow[], callerSub: string) {
 }
 
 export async function GET(): Promise<Response> {
-  const caller = await resolveGameCaller();
+  const caller = await resolveGameEntitledCaller();
   if (isCallerError(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
+  const { entitlement } = caller;
   if (!canUseFeature(entitlement, "game:leaderboard")) {
     return NextResponse.json({
       allowed: false,
