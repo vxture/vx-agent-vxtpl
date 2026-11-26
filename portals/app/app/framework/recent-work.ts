@@ -13,6 +13,7 @@ export interface RecentWorkItem {
   title: string;
   kind: string;
   description?: string;
+  owner?: { name: string; picture?: string | null };
   status: { label: string; tone: "success" | "neutral" };
   progress?: {
     label: string;

@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { BRAND } from "@vxtpl/shared/brand";
 import { Icon, ShellBrand, ShellFullscreenToggle, ShellIconGroup, ShellLegalFooter } from "../ds";
 import { ProductSession, SessionControl, SessionScope } from "../session-control";
+import { ProductHeaderSearch } from "./product-header-search";
 import { ProductNavigation } from "./product-navigation";
 import { ThemeControl } from "./theme-control";
 import { productRoutes } from "./product-experience";
@@ -55,6 +56,7 @@ export function ProductHeader({ workspace = false, actions, assistant, entryLoca
       navigation={workspace && <ProductNavigation />}
       tools={
         <>
+          {workspace && <ProductHeaderSearch />}
           {assistant && <ShellIconGroup label="Assistant">{assistant}</ShellIconGroup>}
           <ShellIconGroup label="Display controls" className="product-display-controls">
             {actions}

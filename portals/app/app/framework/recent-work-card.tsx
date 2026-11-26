@@ -8,6 +8,7 @@
  */
 
 import { Icon, StatusBadge } from "../ds";
+import { InlinePerson } from "./inline-person";
 import { productRoutes } from "./product-experience";
 import type { RecentWorkItem } from "./recent-work";
 import { WorkTime } from "./work-time";
@@ -24,6 +25,11 @@ export function RecentWorkCard({ item, showLink = true }: { item: RecentWorkItem
       <div>
         <h3>{item.title}</h3>
         {item.description && <p>{item.description}</p>}
+        {item.owner && (
+          <p className="workspace-work-owner">
+            <InlinePerson name={item.owner.name} picture={item.owner.picture} />
+          </p>
+        )}
       </div>
       {progress && (
         <div className="workspace-work-progress">

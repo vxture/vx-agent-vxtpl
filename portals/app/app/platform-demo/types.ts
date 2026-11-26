@@ -15,6 +15,7 @@ export type PlatformReport = {
   stage: "dev" | "beta" | "production";
   scopeKey: string | null;
   actions: Record<Probe, boolean>;
+  actionDetails: Record<Probe, string>;
   checks: {
     issuer: Check;
     session: Check;
@@ -28,4 +29,11 @@ export type PlatformReport = {
   };
 };
 
-export type ProbeReceipt = { ok: boolean; detail: string; receipt?: string };
+export type ProbeReceipt = {
+  ok: boolean;
+  detail: string;
+  receipt?: string;
+  evidence?:
+    | { provider: "atlas"; taskId: string; endpointCode: string; modelCode: string }
+    | { provider: "runos"; taskId: string; capabilityId: string; outcomeAcknowledged: true };
+};

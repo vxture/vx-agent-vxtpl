@@ -30,21 +30,32 @@ const OPTS = { taskId: "vxtpl-task-1", identity: { subjectToken: "user-access-to
 const HISTORY = [{ role: "user" as const, content: "summarize this" }];
 
 /** Answers the four MCP tools in sequence; `payload` is what invoke returns. */
-function stub(payload: Record<string, unknown>) {
+function stub(
+  payload: Record<string, unknown>,
+  options: { riskLevel?: string; acknowledged?: boolean } = {},
+) {
+  const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).endsWith("/oidc/token")) {
       return new Response(JSON.stringify({ access_token: "tok", expires_in: 300 }), { status: 200 });
     }
     const body = JSON.parse(String(init?.body ?? "{}")) as { params?: { name?: string } };
-    const structured = answer(body.params?.name, payload);
+    const tool = body.params?.name;
+    if (tool) calls.push(tool);
+    const structured = answer(tool, payload, options);
     return new Response(JSON.stringify({ result: { isError: false, structuredContent: structured } }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   }) as typeof globalThis.fetch;
+  return calls;
 }
 
-function answer(tool: string | undefined, payload: Record<string, unknown>): Record<string, unknown> {
+function answer(
+  tool: string | undefined,
+  payload: Record<string, unknown>,
+  options: { riskLevel?: string; acknowledged?: boolean },
+): Record<string, unknown> {
   if (tool === "runos_discover") {
     return { capabilities: [{ capability_id: "markitdown/convert", name: "convert", description: "summarize document text" }] };
   }
@@ -52,12 +63,12 @@ function answer(tool: string | undefined, payload: Record<string, unknown>): Rec
     return {
       capability_id: "markitdown/convert",
       contract: {
-        operations: [{ operation: "convert_to_markdown", inputSchema: { properties: { uri: { type: "string" } }, required: ["uri"] } }],
+        operations: [{ operation: "convert_to_markdown", riskLevel: options.riskLevel, inputSchema: { properties: { uri: { type: "string" } }, required: ["uri"] } }],
       },
     };
   }
   if (tool === "runos_invoke") return payload;
-  return { ok: true };
+  return { acknowledged: options.acknowledged ?? false };
 }
 
 beforeEach(() => {
@@ -122,4 +133,24 @@ test("a non-object _meta is left alone rather than destructured", async () => {
 
   assert.equal(outcome.status, "ran");
   assert.match(outcome.detail, /unexpected/);
+});
+
+test("a designated read-only capability must return a call ID and an acknowledged outcome", async () => {
+  const calls = stub({ markdown: "# Sample", _meta: { vxture: { call_id: "call-1" } } },
+    { riskLevel: "read", acknowledged: true });
+  const outcome = await runSkill("summarize", HISTORY, { ...OPTS, readOnlyCapabilityId: "markitdown/convert" });
+  assert.equal(outcome.status, "ran");
+  assert.equal(outcome.callId, "call-1");
+  assert.deepEqual(calls, ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
+});
+
+test("a write operation or missing outcome acknowledgement does not pass acceptance", async () => {
+  const opts = { ...OPTS, readOnlyCapabilityId: "markitdown/convert" };
+  const denied = stub({}, { riskLevel: "write", acknowledged: true });
+  assert.equal((await runSkill("summarize", HISTORY, opts)).status, "unavailable");
+  assert.deepEqual(denied, ["runos_discover", "runos_resolve"]);
+
+  const unconfirmed = stub({ _meta: { vxture: { call_id: "call-2" } } }, { riskLevel: "read" });
+  assert.equal((await runSkill("summarize", HISTORY, opts)).status, "failed");
+  assert.deepEqual(unconfirmed, ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
 });

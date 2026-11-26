@@ -32,6 +32,7 @@ export {
   ShellLocaleSwitcher,
   ShellPanelContent,
   ShellScopeButton,
+  ShellSearchBox,
   ShellSidebarNav,
   ShellThemeToggle,
   ShellUserMenu,
