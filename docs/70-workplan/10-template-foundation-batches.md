@@ -243,5 +243,6 @@
 - [x] 授权码、刷新和 S2S 换票共用 `client_secret_basic` 编码。定向通过登录与刷新、服务票、产品准入、计量重投及游戏存储共 39 项检查。
 - [x] 选装生成用带连字符的产品码验证了游戏存储标识、OIDC 客户端名和公有域名的派生。候选文件通过 Git 差异、占位符和密钥扫描。
 - [x] 只读复核生产为 `v0.4.1`（`a00ea75f`），PostgreSQL、Redis、Accounts 与平台 URL 已就绪。线上状态显示 Atlas、Runos 未配置。与当前生产提交相比，候选批次没有 DDL 或 Prisma schema 差异。
-- [ ] 拟将 `codex/vxtpl-template-foundation` 提交并开 PR 到 `main`。通过 GitHub 五个必需检查及主干 CI 后，拟用 `v0.4.2` 发布到 production，由现有审核人批准。回滚基线为已部署的 `a00ea75f02b2cdd263078c19b4bc2d4946dfb323`。保留该版本所需现有配置至验收结束。
+- [x] `codex/vxtpl-template-foundation` 已推送，[PR #99](https://github.com/vxture/vx-agent-vxtpl/pull/99) 目标为 `main`。首轮 CI 的 218 项测试和五项必需检查通过。工作空间范围标识使用服务端 HMAC，按已验证的账号、组织和工作空间保持草稿隔离，等待 PR 重验。
+- [ ] 通过 PR 与主干 CI 后，拟用 `v0.4.2` 发布到 production，由现有审核人批准。回滚基线为已部署的 `a00ea75f02b2cdd263078c19b4bc2d4946dfb323`。保留该版本所需现有配置至验收结束。
 - [ ] 原件发布、指定工作空间的真实回执和第二个产品接入是冻结条件。验收项见[平台登记清单](../50-deployment/10-platform-registration-checklist.md#candidate-acceptance)。

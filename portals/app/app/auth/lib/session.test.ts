@@ -4,6 +4,18 @@ import { freshSession, type SessionDeps } from "./session";
 import type { RpSession } from "./session-store";
 import type { OidcConfig } from "./config";
 import { TokenEndpointError, type TokenSet } from "./oidc";
+import { workspaceScopeKey } from "./workspace-scope";
+
+test("workspace scope is stable across sessions and isolated by client, account, organization and workspace", () => {
+  const client = { issuer: "https://accounts.internal", clientId: "product-rp", clientSecret: "fixture-only" };
+  const current = workspaceScopeKey(client, "usr_a", "org_a", "ws_a");
+  assert.equal(workspaceScopeKey({ ...client }, "usr_a", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_b", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_a", "org_b", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey(client, "usr_a", "org_a", "ws_b"), current);
+  assert.notEqual(workspaceScopeKey({ ...client, clientId: "another-rp" }, "usr_a", "org_a", "ws_a"), current);
+  assert.notEqual(workspaceScopeKey({ ...client, clientSecret: "rotated-fixture" }, "usr_a", "org_a", "ws_a"), current);
+});
 
 // The refresh half of getAuthContext, against an IdP that ROTATES refresh
 // tokens the way the platform does: every refresh token works exactly once, and

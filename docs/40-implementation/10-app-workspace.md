@@ -149,8 +149,9 @@ the local row. Unconfirmed rows keep their original keys for replay.
 
 ## How a chat turn flows
 
-The catalogue response carries a workspace scope fingerprint derived from the
-verified account and workspace. Both chat surfaces send it with each turn. The
+The catalogue response carries a workspace scope label derived from the
+verified account, organization and workspace with the product's confidential
+client key. Both chat surfaces send it with each turn. The
 API verifies the live session and compares the expected scope before inference
 or usage recording. A recovery check for the same scope restores the mounted
 conversation. A different scope starts clean. Recovery only reads the catalogue,

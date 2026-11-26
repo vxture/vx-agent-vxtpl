@@ -7,11 +7,11 @@
  * @date 2026-11-25
  */
 
-import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import type { AuthUser } from "./claims";
 import { getOidcConfig } from "./config";
 import { getAuthContext } from "./session";
+import { workspaceScopeKey } from "./workspace-scope";
 import { isDeployedStage } from "../../lib/deploy-stage";
 
 type WorkspaceIdentity = {
@@ -44,9 +44,7 @@ export async function readWorkspaceSession(): Promise<WorkspaceSession> {
     const { user, accessToken } = context;
     if (user.accountStatus && user.accountStatus !== "active") return { status: "inactive-account" };
     if (!user.activeWorkspace) return { status: "no-workspace", user };
-    const scopeKey = createHash("sha256")
-      .update(JSON.stringify([cfg.issuer, cfg.clientId, user.sub, user.activeOrg, user.activeWorkspace]))
-      .digest("base64url");
+    const scopeKey = workspaceScopeKey(cfg, user.sub, user.activeOrg, user.activeWorkspace);
     return { status: "ready", user, accessToken, sessionId, workspaceId: user.activeWorkspace, sub: user.sub, scopeKey };
   } catch {
     return { status: "unavailable" };
