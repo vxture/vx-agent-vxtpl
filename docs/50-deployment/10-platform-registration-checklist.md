@@ -63,20 +63,18 @@ no hint about which of these steps is missing.
 
 ## Provider grants
 
-- [ ] **Atlas**: a product-grant per endpoint the product calls -
-      `(product_code, endpointCode)`, created by an Atlas operator in opera.
-      Without one, every call is `403 GRANT_DENIED` regardless of how valid the
-      token is. vxtpl's catalog is `chat/cheap`, `chat/default`, `chat/pro`.
-      There is no runtime way to discover or verify this from the product side
-      (`GET /v1/models` is not grant-filtered and the endpoint registry is
-      operator-only), so it is liaison-maintained: adding a model to
-      `chat/catalog.ts` means asking for the endpoint to exist AND be granted.
-- [x] **Runos**: not required today. Grants live at
-      `POST /commerce/capability-grants` (`subjectType: "product"`, `subjectRef` =
-      the product code, the same vocabulary as the token's `act.sub`) and are
-      consulted only when the deployment sets `RUNOS_ENTITLEMENT_ENFORCED`, which
-      production does not (vxture-runos#116). A product cannot self-grant in any
-      case; it is an operator action. Revisit if enforcement is turned on.
+- [ ] **Atlas inference.** Set \`ATLAS_API_URL\` and register the product grant for
+  the demo endpoint \`chat/default\`. The product reads the granted endpoints
+  with the workspace OBO token. Run the sample in \`/platform-check\` and record
+  the endpoint, model, request ID and task ID. Atlas owns inference metering.
+- [ ] **Runos capability.** Set \`RUNOS_API_URL\` and register an approved capability
+  with a read operation that accepts the fixed text sample for the designated
+  operator and workspace in
+  \`PLATFORM_DEMO_RUNOS_CAPABILITY_ID\`. Confirm the capability appears in the
+  caller's entitled discovery results for the summarize sample. Runos resolves
+  the operation, invokes it, then acknowledges the outcome. Record the
+  capability, call ID, task ID and acknowledgement. Platform operators handle
+  any grant required by the target Runos environment.
 
 ## Secrets transport
 
@@ -98,3 +96,14 @@ read, provisioning ACK and missed-delivery recovery, then retain the C3 event
 ID, Atlas request ID, and Runos call ID and outcome acknowledgement. Finish
 with logout from another product in the same central session and check the
 Vxtpl gate transition.
+
+
+| Evidence | Validation in Vxtpl | Complete when |
+| --- | --- | --- |
+| C1 provider, session and OBO | \`/platform-check\` preflight and a live login | Discovery, selected workspace, proper audience and successful return to the requested product route |
+| C1 central logout | Sign out in a second product in the same central session | Vxtpl returns to the gate and the session read shows the session is gone |
+| C2 admission and entitlement | Check an assigned member, an unassigned member and test subscription states | Admission and denial are distinct from expired subscriptions and unavailable responses |
+| C3 delivery and reconciliation | Verify provisioning state, platform delivery ACK, duplicate event and missed-delivery recovery | Compare platform acknowledgement with local state at the same event sequence |
+| C3 usage and replay | Run the explicit usage probe and read the platform receipt and quota | The original event ID is returned on replay and workspace quota reflects the real event |
+| Atlas | Granted endpoint check and explicit inference probe | Nonempty response, model and correlated request ID. Confirm metering with Atlas evidence when in scope |
+| Runos | Entitled discovery and explicit read probe | Matching capability and call ID plus acknowledged outcome |

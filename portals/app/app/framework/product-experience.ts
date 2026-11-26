@@ -8,16 +8,18 @@
  */
 
 import profile from "../../product.config.json";
+import { parseHeadlineSettings, type HeadlineSettings } from "./headline-rotation";
 
 type HomeMode = "overview" | "direct";
 
 interface ProductExperience {
   readonly homeMode: HomeMode;
+  readonly homeHeadline: HeadlineSettings;
   readonly directDestination: string;
   readonly example: { label: string; href: string } | null;
 }
 
-const config: Omit<ProductExperience, "homeMode"> & { homeMode: string } = profile;
+const config: Omit<ProductExperience, "homeMode" | "homeHeadline"> & { homeMode: string; homeHeadline?: unknown } = profile;
 
 export const productRoutes = {
   landing: "/",
@@ -26,10 +28,12 @@ export const productRoutes = {
   play: "/play",
   chat: "/chat",
   gate: "/gate",
+  platformCheck: "/platform-check",
   frameworks: "/system/frameworks",
 } as const;
 
 export const productExperience: ProductExperience = {
+  homeHeadline: parseHeadlineSettings(config.homeHeadline),
   homeMode: config.homeMode === "direct" ? "direct" : "overview",
   directDestination: [productRoutes.home, productRoutes.chat, config.example?.href].includes(config.directDestination)
     ? config.directDestination

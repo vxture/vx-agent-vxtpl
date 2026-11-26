@@ -34,12 +34,18 @@ function designatedOperator(session: SignedWorkspace): boolean {
     && session.sub === process.env.PLATFORM_DEMO_SUBJECT;
 }
 
-function probeAvailability(session: SignedWorkspace | null): PlatformReport["actions"] {
-  const authorized = session !== null && designatedOperator(session);
+function probePrerequisites(session: SignedWorkspace | null): Record<Probe, Check> {
+  const operator = session && designatedOperator(session);
+  const designated = waiting(session
+    ? "此操作需要已登记的验收账号和工作空间"
+    : "请使用登记的验收账号登录");
+  const ready = verified("可执行一次真实调用");
   return {
-    "c3-replay": authorized && Boolean(process.env.PLATFORM_API_URL),
-    "atlas-inference": authorized && Boolean(getAtlasClientConfig()),
-    "runos-invoke": authorized && Boolean(getRunosClientConfig() && process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID),
+    "c3-replay": !process.env.PLATFORM_API_URL ? waiting("等待平台内网接口配置") : operator ? ready : designated,
+    "atlas-inference": !getAtlasClientConfig() ? waiting("等待配置 ATLAS_API_URL") : operator ? ready : designated,
+    "runos-invoke": !getRunosClientConfig() ? waiting("等待配置 RUNOS_API_URL")
+      : !process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID ? waiting("等待登记 Runos 只读验收能力")
+      : operator ? ready : designated,
   };
 }
 
@@ -79,7 +85,7 @@ async function checkProvisioning(session: SignedWorkspace): Promise<Check> {
 
 async function checkAtlas(session: SignedWorkspace): Promise<Check> {
   const cfg = getAtlasClientConfig();
-  if (!cfg) return waiting("等待 Atlas 端点配置");
+  if (!cfg) return waiting("等待配置 ATLAS_API_URL");
   const rows = await listGrantedEndpoints(cfg, { subjectToken: session.accessToken });
   return rows.some((entry) => entry.endpointCode === DEFAULT_ENDPOINT_CODE && entry.state === "active")
     ? verified(`${DEFAULT_ENDPOINT_CODE} 已授权`)
@@ -88,7 +94,7 @@ async function checkAtlas(session: SignedWorkspace): Promise<Check> {
 
 async function checkRunos(session: SignedWorkspace): Promise<Check> {
   const cfg = getRunosClientConfig();
-  if (!cfg) return waiting("等待 Runos 端点配置");
+  if (!cfg) return waiting("等待配置 RUNOS_API_URL");
   const result = await runosDiscover(cfg, "summarize document text", {
     identity: { subjectToken: session.accessToken }, taskId: randomUUID(), limit: 10,
   });
@@ -96,8 +102,9 @@ async function checkRunos(session: SignedWorkspace): Promise<Check> {
   const expected = process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID;
   const eligible = result.data.capabilities.some((entry) => entry.capability_id === expected &&
     entry.operations?.some((op) => op.risk_level === "read"));
-  return eligible ? verified("已找到登记的只读验收能力")
-    : waiting(`目录已读取，当前可见 ${result.data.capabilities.length} 项。等待登记只读验收能力`);
+  if (eligible) return verified("当前主体可发现已登记的只读验收能力");
+  if (!expected) return waiting("目录已读取，等待登记只读验收能力");
+  return { state: "blocked", detail: "当前目录未返回已登记能力的只读操作" };
 }
 
 export async function readPlatformReport(session: SignedWorkspace | null): Promise<PlatformReport> {
@@ -105,9 +112,11 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
   const issuerRequest = checkIssuer().catch(() => unavailable("Accounts 发现或公钥读取失败"));
   const checks: PlatformReport["checks"] = {
     issuer: missing, session: missing, exchange: missing, access: missing, roster: missing,
-    entitlements: missing, provisioning: missing, atlas: missing, runos: missing,
+    entitlements: missing, provisioning: missing,
+    atlas: getAtlasClientConfig() ? missing : waiting("等待配置 ATLAS_API_URL"),
+    runos: getRunosClientConfig() ? missing : waiting("等待配置 RUNOS_API_URL"),
   };
-  const report: PlatformReport = { stage: deployStage(), checkedAt: "", scopeKey: session?.scopeKey ?? null, actions: probeAvailability(null), checks };
+  const prerequisites = probePrerequisites(session);
   if (session) {
     checks.session = session.user.activeOrg ? verified("已校验当前 Accounts 会话和组织／工作空间") : unavailable("会话缺少活动组织");
     const baseUrl = process.env.PLATFORM_API_URL;
@@ -116,8 +125,8 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
       : baseUrl ? unavailable("当前会话未取得范围匹配的 OBO 票") : waiting("等待平台内网接口配置");
     checks.access = checks.exchange;
     checks.roster = waiting("等待当前主体准入");
-    checks.atlas = checks.roster;
-    checks.runos = checks.roster;
+    if (getAtlasClientConfig()) checks.atlas = checks.roster;
+    if (getRunosClientConfig()) checks.runos = checks.roster;
     const allowedRequest = authority ? authority.allowed().catch(() => null) : Promise.resolve(null);
     const [allowed, entitlements, provisioning] = await Promise.all([
       allowedRequest,
@@ -130,7 +139,6 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
     if (allowed === false) checks.access = { state: "blocked", detail: "当前主体没有该产品使用权" };
     if (authority && allowed === true) {
       checks.access = verified("平台实时准入通过");
-      report.actions = probeAvailability(session);
       [checks.roster, checks.atlas, checks.runos] = await Promise.all([
         authority.rosterSummary()
           .then(({ count, hasMore }) => verified(`首屏 ${count} 位已授权成员${hasMore ? "，还有后续分页" : ""}`))
@@ -138,20 +146,33 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
         checkAtlas(session).catch(() => unavailable("Atlas 授权端点读取失败")),
         checkRunos(session).catch(() => unavailable("Runos 能力目录读取失败")),
       ]);
-      report.actions["atlas-inference"] &&= checks.atlas.state === "verified";
-      report.actions["runos-invoke"] &&= checks.runos.state === "verified";
     }
   }
+  const probeChecks = { "c3-replay": checks.access, "atlas-inference": checks.atlas, "runos-invoke": checks.runos };
+  const actions = { "c3-replay": false, "atlas-inference": false, "runos-invoke": false };
+  const actionDetails = { "c3-replay": "", "atlas-inference": "", "runos-invoke": "" };
+  for (const probe of ["c3-replay", "atlas-inference", "runos-invoke"] as const) {
+    const required = prerequisites[probe];
+    const check = checks.access.state === "verified" ? probeChecks[probe] : checks.access;
+    actions[probe] = required.state === "verified" && check.state === "verified";
+    actionDetails[probe] = required.state !== "verified" || actions[probe] ? required.detail : check.detail;
+  }
   checks.issuer = await issuerRequest;
-  report.checkedAt = new Date().toISOString();
-  return report;
+  return {
+    stage: deployStage(), checkedAt: new Date().toISOString(),
+    scopeKey: session?.scopeKey ?? null, actions, actionDetails, checks,
+  };
 }
 
 // Explicit metered probes
 
 export async function runPlatformProbe(session: SignedWorkspace, probe: Probe): Promise<{ status: number; result: ProbeReceipt }> {
-  if (!probeAvailability(session)[probe]) {
+  if (!designatedOperator(session)) {
     return { status: 403, result: { ok: false, detail: "此操作需要已登记的验收账号和工作空间" } };
+  }
+  const prerequisite = probePrerequisites(session)[probe];
+  if (prerequisite.state !== "verified") {
+    return { status: 503, result: { ok: false, detail: prerequisite.detail } };
   }
   const baseUrl = process.env.PLATFORM_API_URL;
   try {
@@ -204,12 +225,22 @@ async function runMeteredSample(session: SignedWorkspace, probe: Exclude<Probe, 
     const cfg = getAtlasClientConfig();
     if (!cfg) return { ok: false, detail: "Atlas 尚未配置" };
     const sample = await fetchChatCompletion(cfg, identity, history, { taskId, endpointCode: DEFAULT_ENDPOINT_CODE });
-    const ok = Boolean(sample.message?.content?.trim() && sample.modelCode);
-    return { ok, detail: ok ? `Atlas 返回示例结果 · ${sample.modelCode}` : "Atlas 未返回有效示例结果", receipt: sample.requestId };
+    if (!sample.message?.content?.trim() || !sample.modelCode || !sample.requestId) {
+      return { ok: false, detail: "Atlas 未返回完整推理结果" };
+    }
+    return {
+      ok: true, detail: "Atlas 已返回模型推理结果", receipt: sample.requestId,
+      evidence: { provider: "atlas", taskId, endpointCode: DEFAULT_ENDPOINT_CODE, modelCode: sample.modelCode },
+    };
   }
   const readOnlyCapabilityId = process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID;
   if (!readOnlyCapabilityId) return { ok: false, detail: "Runos 验收能力尚未登记" };
   const run = await runSkill("summarize", history, { identity, taskId, readOnlyCapabilityId });
-  const ok = run.status === "ran" && Boolean(run.callId);
-  return { ok, detail: ok ? "Runos 已确认只读能力调用和结果回报" : "Runos 未返回有效调用回执", receipt: run.callId };
+  if (run.status !== "ran" || !run.callId || run.capabilityId !== readOnlyCapabilityId) {
+    return { ok: false, detail: "Runos 未确认只读调用与结果回报", receipt: run.callId };
+  }
+  return {
+    ok: true, detail: "Runos 已确认只读能力调用和结果回报", receipt: run.callId,
+    evidence: { provider: "runos", taskId, capabilityId: readOnlyCapabilityId, outcomeAcknowledged: true },
+  };
 }

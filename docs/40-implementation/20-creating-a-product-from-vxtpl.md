@@ -43,6 +43,9 @@ pages use `portals/app/product.config.json` for the entry mode, direct target an
 sample navigation. Development opens all five framework previews at
 `/system/frameworks`. The recent-work card and lists consume a domain work
 source through `framework/recent-work.server.ts`.
+Set optional `homeHeadline.intervalMinutes` and `homeHeadline.pool` in the same
+product config to use a product-specific schedule. The default has 12 titles
+and changes at local midnight. A custom pool needs at least 10 distinct entries.
 
 Concretely, `my-prod` derives:
 

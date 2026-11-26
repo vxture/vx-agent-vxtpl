@@ -29,6 +29,9 @@
 .workspace-overview-hero h1 { font-size: clamp(26px, 4vw, 42px); font-weight: 650; line-height: 1.18; }
 .workspace-overview-hero p, .workspace-work-state { color: var(--muted-foreground); }
 .workspace-overview-hero .product-workspace-actions { margin-block-start: 4px; }
+.workspace-overview-hero .product-workspace-actions > :is(a, button) {
+  font-size: var(--vx-text-sm, 0.875rem);
+}
 
 /* Recent work and pagination */
 .workspace-work-section { container-type: inline-size; min-inline-size: 0; }
@@ -50,6 +53,7 @@
 .workspace-work-card::before { content: ""; position: absolute; inset: -1px auto auto 18px; inline-size: 32px; block-size: 2px; border-radius: 2px; background: var(--vxtpl-work-tone); }
 .workspace-work-card h3 { font-weight: 650; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
 .workspace-work-card p { margin-block-start: 4px; color: var(--muted-foreground); font-size: 13px; }
+.workspace-work-card .workspace-work-owner { font-size: 12px; }
 .workspace-work-card-top, .workspace-work-card-footer, .workspace-work-progress-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-inline-size: 0; font-size: 12px; }
 .workspace-work-card-top > span:first-child, .workspace-work-progress-label > span:first-child { display: inline-flex; align-items: center; gap: 6px; min-inline-size: 0; }
 .workspace-work-card-top svg { color: var(--muted-foreground); flex: none; }

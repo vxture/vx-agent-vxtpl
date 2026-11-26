@@ -24,14 +24,14 @@ const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[
   { id: "roster", name: "授权成员名单", group: "C2" },
   { id: "entitlements", name: "订阅权益", group: "C2" },
   { id: "provisioning", name: "开通事件落库", group: "C3" },
-  { id: "atlas", name: "Atlas 模型授权", group: "Atlas" },
-  { id: "runos", name: "Runos 能力目录", group: "Runos" },
+  { id: "atlas", name: "Atlas 模型端点授权", group: "Atlas" },
+  { id: "runos", name: "Runos 只读能力可见性", group: "Runos" },
 ];
 
 const actions: { probe: Probe; name: string; detail: string }[] = [
   { probe: "c3-replay", name: "计量入账与回放", detail: "同一 UTC 日最多计入 1 个单位，重复请求返回原回执。" },
-  { probe: "atlas-inference", name: "Atlas 实际推理", detail: "用固定示例发起一次标准模型调用。" },
-  { probe: "runos-invoke", name: "Runos 实际调用", detail: "对已登记的只读能力提交固定示例。" },
+  { probe: "atlas-inference", name: "Atlas 实际推理", detail: "向 chat/default 提交固定推理样本。成功后显示模型和请求回执，推理用量由 Atlas 上报。" },
+  { probe: "runos-invoke", name: "Runos 实际调用", detail: "发现并解析已登记的能力，执行一次只读操作，收到结果回报确认后显示调用回执。" },
 ];
 
 const stages = { dev: "开发", beta: "验收", production: "生产" };
@@ -65,12 +65,15 @@ export default function PlatformCheckPage() {
     pending.current = true;
     setBusy("report");
     setReport(null);
-    setReceipts({});
+    const previousScope = report?.scopeKey;
     setError(null);
     try {
       const response = await fetch("/api/platform-check", { cache: "no-store", signal: AbortSignal.timeout(40_000) });
-      setReport(await readResponse<PlatformReport>(response));
+      const current = await readResponse<PlatformReport>(response);
+      if (!current.scopeKey || current.scopeKey !== previousScope) setReceipts({});
+      setReport(current);
     } catch (failure) {
+      setReceipts({});
       setError(failure instanceof Error ? failure.message : "当前无法完成核验");
     } finally {
       pending.current = false;
@@ -112,7 +115,7 @@ export default function PlatformCheckPage() {
 
         <section className="platform-demo__section" aria-labelledby="platform-checks">
           <div className="platform-demo__section-title">
-            <h2 id="platform-checks">接入状态</h2>
+            <h2 id="platform-checks">接入预检</h2>
             <div aria-live="polite" className="platform-demo__meta">
               {report ? `${stages[report.stage]}环境 · ${count}/${rows.length} 项已核验 · ${new Date(report.checkedAt).toLocaleTimeString()}`
                 : "运行后显示当前会话对应的实测结果"}
@@ -137,7 +140,7 @@ export default function PlatformCheckPage() {
         <section className="platform-demo__section" aria-labelledby="platform-actions">
           <div className="platform-demo__section-title">
             <h2 id="platform-actions">真实调用</h2>
-            <span className="platform-demo__meta">使用登记的验收工作空间，调用可能产生用量。</span>
+            <span className="platform-demo__meta">使用登记的验收账号与工作空间。执行后记录回执，预检通过仍需实际调用。</span>
           </div>
           <ul className="platform-demo__rows">
             {actions.map(({ probe, name, detail }) => {
@@ -147,7 +150,23 @@ export default function PlatformCheckPage() {
                   <div>
                     <strong>{name}</strong>
                     <p className="platform-demo__detail">{detail}</p>
-                    {receipt && <p role="status">{receipt.detail}{receipt.receipt && <> · <code>{receipt.receipt}</code></>}</p>}
+                    <p className="platform-demo__detail">
+                      {report?.actionDetails?.[probe] ?? "先运行接入预检"}
+                    </p>
+                    <div role="status">
+                      <CheckBadge state={receipt ? receipt.ok ? "verified" : "unavailable" : "waiting"} />
+                      {receipt && (
+                        <>
+                          <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
+                          {receipt.evidence?.provider === "atlas" && (
+                            <p>端点 {receipt.evidence.endpointCode} · 模型 {receipt.evidence.modelCode} · 任务 <code>{receipt.evidence.taskId}</code></p>
+                          )}
+                          {receipt.evidence?.provider === "runos" && (
+                            <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                   <Button variant="outline" onClick={() => run(probe)} disabled={busy !== null || !report?.actions[probe]}>
                     {busy === probe ? "正在调用…" : "执行验证"}
@@ -159,8 +178,13 @@ export default function PlatformCheckPage() {
         </section>
 
         <section className="platform-demo__section" aria-labelledby="platform-logout">
-          <h2 id="platform-logout">跨产品退出</h2>
-          <p className="platform-demo__detail">保持本页打开，在同一 Accounts 会话的另一产品退出。收到退出事件后，本页应返回门禁。</p>
+          <h2 id="platform-logout">人工联调</h2>
+          <ul>
+            <li>C1 跨产品退出。保持本页打开，从同一 Accounts 会话的另一产品退出，确认本页收到事件并返回门禁。</li>
+            <li>C2 准入与权益。用有席位和无席位的账号检查允许与拒绝；用相应订阅状态核对开通、续订和权益读取失败。</li>
+            <li>C3 开通与对账。核对平台投递及 ACK，验证一次重复投递和一次漏投后的对账补齐。</li>
+            <li>C3 计量与权益。核对真实入账、回放与额度更新，并保留平台事件 ID。</li>
+          </ul>
         </section>
       </div>
     </ProductContent>
