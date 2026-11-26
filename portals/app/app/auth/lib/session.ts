@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { verifyToken, refreshTokens, TokenEndpointError } from "./oidc";
 import { acquireRefresh, deleteSession, getSession, releaseRefresh, rotateSession, type RpSession } from "./session-store";
 import { randomToken } from "./pkce";
+import { workspaceScopeKey } from "./workspace-scope";
 
 /** The store and IdP calls freshSession needs; injectable so the race is testable without Redis. */
 export interface SessionDeps {
@@ -51,7 +52,7 @@ export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthU
 export async function getAuthContext(
   cfg: OidcConfig,
   rpsid: string,
-): Promise<{ user: AuthUser; accessToken: string; idToken: string; profile: IdProfile } | null> {
+): Promise<{ user: AuthUser; accessToken: string; idToken: string; profile: IdProfile; scopeKey: string | null } | null> {
   const session = await freshSession(cfg, rpsid);
   if (!session) return null;
 
@@ -63,7 +64,19 @@ export async function getAuthContext(
     throw error;
   }
   if (typeof verified.sub !== "string" || verified.sub !== session.sub) return null;
-  return { user: toAuthUser(verified as AccessClaims), accessToken: session.accessToken, idToken: session.idToken, profile: profileFromClaims(verified) };
+  // Bind the browser scope to the verified ID claims at the token boundary.
+  const workspace = verified.active_workspace;
+  const organization = typeof verified.active_org === "string" ? verified.active_org : null;
+  const scopeKey = typeof workspace === "string" && workspace
+    ? workspaceScopeKey(cfg, verified.sub, organization, workspace)
+    : null;
+  return {
+    user: toAuthUser(verified as AccessClaims),
+    accessToken: session.accessToken,
+    idToken: session.idToken,
+    profile: profileFromClaims(verified),
+    scopeKey,
+  };
 }
 
 /** The stored session, refreshed first if its access token is near expiry. */
