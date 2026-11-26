@@ -1,5 +1,6 @@
 import { canUseFeature, minTierFor, type FeatureKey } from "../entitlement/capability";
 import type { Entitlement, Tier } from "../entitlement/types";
+import { DOCUMENT_CONVERSION_SKILL } from "./types";
 
 // vxtpl's model and skill catalog. Which tier unlocks which entry lives in
 // entitlement/capability.ts CAPABILITY_MATRIX; this file is only the inventory.
@@ -16,9 +17,8 @@ import type { Entitlement, Tier } from "../entitlement/types";
 // still needs the platform line to create the endpoint AND grant it - the
 // difference is that forgetting is now visible before a user finds it.
 //
-// The skill codes are vxtpl's own labels. skill-runner.ts maps each to a Runos
-// catalog search rather than a hard-coded capability id, because the entitled
-// catalog is per-caller and changes without vxtpl redeploying.
+// Skill codes are product UI choices. The runner uses the entitled Runos
+// catalogue for both general skill search and the document connector.
 
 export interface ModelOption {
   code: string;
@@ -39,6 +39,7 @@ export const MODEL_CATALOG: ModelOption[] = [
 ];
 
 export const SKILL_CATALOG: SkillOption[] = [
+  { code: DOCUMENT_CONVERSION_SKILL, label: "Convert and summarize HTML", featureKey: "skill:document-conversion" },
   { code: "summarize", label: "Summarize", featureKey: "skill:summarize" },
   { code: "web-search", label: "Web search", featureKey: "skill:web-search" },
   { code: "code-exec", label: "Code execution", featureKey: "skill:code-exec" },

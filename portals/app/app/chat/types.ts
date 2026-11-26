@@ -11,6 +11,7 @@ export interface ChatMessage {
 }
 
 export const CHAT_SCOPE_HEADER = "x-vxtpl-workspace-context";
+export const DOCUMENT_CONVERSION_SKILL = "document-conversion";
 
 export interface ChatOptions {
   modelCode?: string;
@@ -25,6 +26,7 @@ export interface SkillOutcome {
   status: "ran" | "unavailable" | "failed" | "not-invoked";
   detail: string;
   callId?: string;
+  outcomeAcknowledged?: boolean;
 }
 
 export interface ChatReply {
@@ -34,6 +36,8 @@ export interface ChatReply {
   modelCode: string;
   skillCode: string | null;
   skill?: SkillOutcome;
+  taskId?: string;
+  requestId?: string;
   /**
    * Absent when the upstream reported no usage. Atlas returns zeros in that case
    * while recording nothing, so a zero here would be a claim about consumption

@@ -20,7 +20,7 @@ import {
   Stack,
   StatusBadge,
 } from "../ds";
-import type { ChatMessage, SkillOutcome } from "./types";
+import { DOCUMENT_CONVERSION_SKILL, MAX_MESSAGE_LENGTH, type ChatMessage, type ChatReply, type SkillOutcome } from "./types";
 import type { GatedOption } from "./catalog";
 import { requestChatTurn, type ChatContext } from "./client";
 import { AssistantPanel } from "./assistant-panel";
@@ -37,13 +37,7 @@ import { WorkspaceRegions } from "../framework/workspace-regions";
 
 const NO_SKILL = "";
 
-interface TurnMeta {
-  mode: "atlas" | "mock";
-  modelCode: string;
-  skill?: SkillOutcome;
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-  latencyMs?: number;
-}
+type TurnMeta = Omit<ChatReply, "message">;
 
 function tierLabel(tier: string | null): string {
   return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "No subscription";
@@ -104,6 +98,10 @@ function SkillReport({ skill }: { skill: SkillOutcome }) {
         <div style={{ marginTop: 4 }}>
           via <code>{skill.capabilityId}</code>
         </div>
+      )}
+      {skill.callId && <div>Runos call <code>{skill.callId}</code></div>}
+      {typeof skill.outcomeAcknowledged === "boolean" && (
+        <div>{skill.outcomeAcknowledged ? "Outcome acknowledged" : "Outcome unconfirmed"}</div>
       )}
       {skill.detail && (
         <div style={{ marginTop: 4, wordBreak: "break-word" }}>{skill.detail.slice(0, 240)}</div>
@@ -168,6 +166,9 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
         mode: body.mode,
         modelCode: body.modelCode,
         skill: body.skill,
+        skillCode: body.skillCode,
+        taskId: body.taskId,
+        requestId: body.requestId,
         usage: body.usage,
         latencyMs: body.latencyMs,
       });
@@ -261,8 +262,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
-                placeholder="Type a short verification message (max 500 chars)"
-                maxLength={500}
+                placeholder={skillCode === DOCUMENT_CONVERSION_SKILL ? "Paste a short HTML document" : "Type a short message"}
+                maxLength={MAX_MESSAGE_LENGTH}
                 disabled={busy || blocked}
               />
               <Button onClick={send} disabled={busy || blocked || !input.trim()}>
@@ -299,7 +300,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
             beside it: it is a result, so it belongs downstream of the thing that
             produced it and it should not occupy width while there is nothing to
             report. */}
-        {(turn?.skill || turn?.usage) && (
+        {(turn?.skill || turn?.usage || turn?.taskId) && (
           <Stack gap="md" style={{ marginTop: "1rem" }}>
             {turn.skill && (
               <Card>
@@ -311,7 +312,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                 </CardContent>
               </Card>
             )}
-            {turn.usage && (
+            {(turn.usage || turn.taskId) && (
               <Card>
                 <CardHeader>
                   <CardTitle>Last turn</CardTitle>
@@ -321,10 +322,14 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
                     <div>
                       served by <code>{turn.modelCode}</code>
                     </div>
-                    <div>
-                      {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
-                      {turn.usage.totalTokens} tokens
-                    </div>
+                    {turn.taskId && <div>Task <code>{turn.taskId}</code></div>}
+                    {turn.requestId && <div>Atlas request <code>{turn.requestId}</code></div>}
+                    {turn.usage && (
+                      <div>
+                        {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
+                        {turn.usage.totalTokens} tokens
+                      </div>
+                    )}
                     {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
                   </div>
                 </CardContent>

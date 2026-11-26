@@ -10,18 +10,17 @@ import {
   type RunosFailure,
 } from "../runos/client";
 import { isEntitlementRejection } from "../lib/platform-error";
+import { convertHtmlToMarkdown, DOCUMENT_CONVERTER } from "../runos/document-conversion";
 import { findSkill } from "./catalog";
-import type { ChatMessage, SkillOutcome } from "./types";
+import { DOCUMENT_CONVERSION_SKILL, type ChatMessage, type SkillOutcome } from "./types";
 
 // Skill execution: turn a selected skill into a real Runos capability call.
 //
 // The loop is discover -> resolve -> invoke -> report_outcome, and each step is
 // there for a reason:
 //
-//   discover  vxtpl does not hard-code capability ids. The catalog is per-caller
-//             (a capability outside your entitled set is invisible, not
-//             forbidden) and it changes without vxtpl redeploying, so the only
-//             correct way to find one is to ask.
+//   discover  The catalogue is scoped to the caller. General skills use ranked
+//             search. The document workflow checks for its configured connector.
 //   resolve   the operation name and its input schema come from the capability's
 //             own contract, not from an assumption here.
 //   invoke    the actual call. This never retries, and that is a decision, not
@@ -87,6 +86,13 @@ export async function runSkill(
   };
 
   try {
+    if (skillCode === DOCUMENT_CONVERSION_SKILL) {
+      const conversion = await convertHtmlToMarkdown(cfg, userText, call);
+      const receipt = { ...base, capabilityId: DOCUMENT_CONVERTER, callId: conversion.callId };
+      return conversion.status === "converted"
+        ? { ...receipt, status: "ran", detail: conversion.markdown, outcomeAcknowledged: conversion.outcomeAcknowledged }
+        : { ...receipt, status: conversion.status, detail: "HTML conversion is unavailable." };
+    }
     const found = await runosDiscover(cfg, spec.query, { ...call, limit: 10, category: spec.category });
     if (!found.ok) {
       return { ...base, status: "unavailable", detail: describeFailure(found.failure) };

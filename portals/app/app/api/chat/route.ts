@@ -6,7 +6,7 @@ import { readWorkspaceEntitlement } from "../../entitlement/resolver";
 import { canUseFeature } from "../../entitlement/capability";
 import { AtlasError } from "../../chat/atlas-client";
 import { findModel, findSkill, gatedModels, gatedSkills } from "../../chat/catalog";
-import { getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
+import { ChatConversionError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
 import { CHAT_SCOPE_HEADER } from "../../chat/types";
 import { hasProductAccess } from "../../entitlement/types";
@@ -186,6 +186,11 @@ export async function POST(req: Request): Promise<Response> {
     reply = await getChatResolver().reply(messages, caller.identity, { modelCode, skillCode });
   } catch (err) {
     if (err instanceof AtlasError) return atlasChatError(err);
+    if (err instanceof ChatConversionError) {
+      return NextResponse.json({ code: "DOCUMENT_CONVERSION_UNAVAILABLE", error: err.message, callId: err.callId }, {
+        status: 502, headers: { "cache-control": "no-store" },
+      });
+    }
     return NextResponse.json({ error: err instanceof Error ? err.message : "chat resolver failed" }, { status: 502 });
   }
 
@@ -199,7 +204,7 @@ export async function POST(req: Request): Promise<Response> {
       workspaceId: caller.workspaceId,
       metric: USAGE_METRIC,
       amount: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: reply.taskId ?? randomUUID(),
       endUserId: caller.sub,
     });
   } catch (err) {

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { runSkill } from "./skill-runner";
 import { resetS2STokenCache } from "../lib/s2s-token";
 import { runRunosSample } from "../platform-demo/runos-sample";
+import { AtlasChatResolver, ChatConversionError } from "./resolver";
+import { DOCUMENT_CONVERSION_SKILL } from "./types";
 
 // What a capability answers is not all for the model.
 //
@@ -36,16 +38,26 @@ function stub(
   payload: Record<string, unknown>,
   options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean } = {},
 ) {
-  const calls: { name: string; arguments: Record<string, unknown> }[] = [];
+  const calls: { name: string; arguments: Record<string, unknown>; taskId?: string }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).endsWith("/oidc/token")) {
-      return new Response(JSON.stringify({ access_token: "tok", expires_in: 300 }), { status: 200 });
+      const claims = { workspace_id: "ws-1", tenant_id: "7f1d1a1e-0000-4000-8000-00000000abcd" };
+      const token = "fixture." + Buffer.from(JSON.stringify(claims)).toString("base64url") + ".signature";
+      return Response.json({ access_token: token, expires_in: 300 });
     }
-    const body = JSON.parse(String(init?.body ?? "{}")) as {
-      params?: { name?: string; arguments: Record<string, unknown> };
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    if (String(input).endsWith("/v1/chat")) {
+      calls.push({ name: "atlas", arguments: body, taskId: body.taskId });
+      return Response.json({
+        id: "atlas-request-1", modelCode: "served-model",
+        message: { role: "assistant", content: "The report is weekly." },
+      });
+    }
+    const { params } = body as {
+      params?: { name?: string; arguments: Record<string, unknown>; _meta?: { vxture?: { task_id?: string } } };
     };
-    const tool = body.params?.name;
-    if (body.params && tool) calls.push({ name: tool, arguments: body.params.arguments });
+    const tool = params?.name;
+    if (params && tool) calls.push({ name: tool, arguments: params.arguments, taskId: params._meta?.vxture?.task_id });
     const structured = answer(tool, payload, options);
     return new Response(JSON.stringify({ result: { isError: false, structuredContent: structured } }), {
       status: 200,
@@ -180,4 +192,29 @@ test("the acceptance sample requires a read operation, converted content and out
   assert.equal(result.ok, false);
   assert.equal(result.receipt, "call-2");
   assert.equal(unconfirmed[3].arguments.outcome, "success");
+});
+
+test("the chat workflow sends the converted document to Atlas under the Runos task ID", async () => {
+  const calls = stub({ ...convertedSample, _meta: { vxture: { call_id: "runos-call-1" } } },
+    { sample: true, riskLevel: "read", acknowledged: true });
+  const resolver = new AtlasChatResolver({ baseUrl: "https://atlas.test" });
+  const history = [{ role: "user" as const, content: "<h1>Weekly report</h1>" }];
+  const reply = await resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, {
+    modelCode: "chat/default", skillCode: DOCUMENT_CONVERSION_SKILL,
+  });
+  assert.deepEqual(calls.map(({ name }) => name), ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome", "atlas"]);
+  assert.ok(reply.taskId && calls.every(({ taskId }) => taskId === reply.taskId));
+  assert.equal(reply.skill?.callId, "runos-call-1");
+  assert.equal(reply.skill?.outcomeAcknowledged, true);
+  assert.equal(reply.requestId, "atlas-request-1");
+  const messages = calls[4].arguments.messages as { content: string }[];
+  assert.match(messages[0].content, /Weekly progress report\./);
+  assert.doesNotMatch(messages[0].content, /<h1>|runos-call-1/);
+
+  const rejected = stub({}, { sample: true, riskLevel: "write" });
+  await assert.rejects(
+    resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, { skillCode: DOCUMENT_CONVERSION_SKILL }),
+    ChatConversionError,
+  );
+  assert.deepEqual(rejected.map(({ name }) => name), ["runos_discover", "runos_resolve"]);
 });
