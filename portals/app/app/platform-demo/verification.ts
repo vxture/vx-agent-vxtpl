@@ -20,8 +20,8 @@ import { webhookSecrets } from "../provisioning/lib/verify";
 import { makePlatformConsume } from "../usage/lib/flush";
 import { invalidateWorkspaceEntitlement } from "../entitlement/platform-resolver";
 import { fetchChatCompletion, getAtlasClientConfig, listGrantedEndpoints, DEFAULT_ENDPOINT_CODE } from "../chat/atlas-client";
-import { getRunosClientConfig, runosDiscover } from "../runos/client";
-import { runSkill } from "../chat/skill-runner";
+import { getRunosClientConfig } from "../runos/client";
+import { checkRunosSample, runRunosSample } from "./runos-sample";
 import type { Check, PlatformReport, Probe, ProbeReceipt } from "./types";
 
 const verified = (detail: string): Check => ({ state: "verified", detail });
@@ -92,21 +92,6 @@ async function checkAtlas(session: SignedWorkspace): Promise<Check> {
     : { state: "blocked", detail: "当前产品未授权演示模型端点" };
 }
 
-async function checkRunos(session: SignedWorkspace): Promise<Check> {
-  const cfg = getRunosClientConfig();
-  if (!cfg) return waiting("等待配置 RUNOS_API_URL");
-  const result = await runosDiscover(cfg, "summarize document text", {
-    identity: { subjectToken: session.accessToken }, taskId: randomUUID(), limit: 10,
-  });
-  if (!result.ok || !Array.isArray(result.data?.capabilities)) return unavailable("能力目录未返回有效响应");
-  const expected = process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID;
-  const eligible = result.data.capabilities.some((entry) => entry.capability_id === expected &&
-    entry.operations?.some((op) => op.risk_level === "read"));
-  if (eligible) return verified("当前主体可发现已登记的只读验收能力");
-  if (!expected) return waiting("目录已读取，等待登记只读验收能力");
-  return { state: "blocked", detail: "当前目录未返回已登记能力的只读操作" };
-}
-
 export async function readPlatformReport(session: SignedWorkspace | null): Promise<PlatformReport> {
   const missing = workspaceRequired();
   const issuerRequest = checkIssuer().catch(() => unavailable("Accounts 发现或公钥读取失败"));
@@ -144,7 +129,8 @@ export async function readPlatformReport(session: SignedWorkspace | null): Promi
           .then(({ count, hasMore }) => verified(`首屏 ${count} 位已授权成员${hasMore ? "，还有后续分页" : ""}`))
           .catch(() => unavailable("授权名单读取失败")),
         checkAtlas(session).catch(() => unavailable("Atlas 授权端点读取失败")),
-        checkRunos(session).catch(() => unavailable("Runos 能力目录读取失败")),
+        checkRunosSample({ identity: { subjectToken: session.accessToken }, taskId: randomUUID() })
+          .catch(() => unavailable("Runos 能力目录读取失败")),
       ]);
     }
   }
@@ -233,14 +219,5 @@ async function runMeteredSample(session: SignedWorkspace, probe: Exclude<Probe, 
       evidence: { provider: "atlas", taskId, endpointCode: DEFAULT_ENDPOINT_CODE, modelCode: sample.modelCode },
     };
   }
-  const readOnlyCapabilityId = process.env.PLATFORM_DEMO_RUNOS_CAPABILITY_ID;
-  if (!readOnlyCapabilityId) return { ok: false, detail: "Runos 验收能力尚未登记" };
-  const run = await runSkill("summarize", history, { identity, taskId, readOnlyCapabilityId });
-  if (run.status !== "ran" || !run.callId || run.capabilityId !== readOnlyCapabilityId) {
-    return { ok: false, detail: "Runos 未确认只读调用与结果回报", receipt: run.callId };
-  }
-  return {
-    ok: true, detail: "Runos 已确认只读能力调用和结果回报", receipt: run.callId,
-    evidence: { provider: "runos", taskId, capabilityId: readOnlyCapabilityId, outcomeAcknowledged: true },
-  };
+  return runRunosSample({ identity, taskId, delegate: true });
 }

@@ -84,6 +84,38 @@ routes, styles, metrics, capabilities, Prisma model and domain DDL.
    upstream from the port registry before deploying. The generated local
    default allows an offline run.
 
+## Apply the Atlas and Runos patterns
+
+The generated product includes `/chat` and the separate `/platform-check`.
+In a registered workspace, send a short question using **Standard** for the
+Atlas-only flow. Select **Convert and summarize HTML** and send
+`<h1>Weekly report</h1><p>The team shipped the workspace update.</p>`
+for the combined flow. The app runs the authorized Runos converter, feeds
+its Markdown into Atlas, and shows the result and call references.
+
+| Application decision | Template entry point | What the next product supplies |
+| --- | --- | --- |
+| Model-only operation | `chat/atlas-client.ts`, `chat/resolver.ts` | Model endpoint code granted to the product, prompt and result presentation |
+| Connector-only operation | `runos/document-conversion.ts` | An entitled capability, operation, risk level, input mapping and expected result |
+| Connector followed by inference | `chat/resolver.ts` | Domain sequencing and whether an unavailable capability stops the operation |
+| Feature admission and cost | `api/chat/route.ts`, `entitlement/capability.ts`, `usage/lib/flush.ts` | Feature tier, allowed action, registered product metric and unit |
+| Acceptance data and receipts | `platform-demo/runos-sample.ts`, `/platform-check` | Dedicated account and workspace, safe sample input and the successful result to check |
+
+Application paths are relative to `portals/app/app/`. Keep the server's
+verified Accounts identity, seat check and OBO token exchange in front of
+interactive calls. A completed chat turn has one task ID across both
+providers and uses that ID as its product metering key. The providers return
+their own request or call IDs and account for their own usage. A product
+reports its own business unit once, such as a served chat turn.
+
+Set provider URLs and acceptance settings in the deployment environment.
+Register those capabilities and the product metric in the platform before
+live testing. Build another workflow by copying its input and output
+adapter and keeping the existing transport, authorization and metering
+modules. The [app workspace guide](10-app-workspace.md) details the request
+flow and the [platform checklist](../50-deployment/10-platform-registration-checklist.md)
+covers the environment configuration.
+
 Run `pnpm doctor --stage production --env <file> --url <origin>` to check
 configuration and the public runtime. Add `--expect-version <version>` when
 checking a release candidate. Signed-in workspace operations and their real

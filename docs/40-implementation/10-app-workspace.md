@@ -107,7 +107,9 @@ from its own source.
 
 Configure a dedicated workspace and operator using
 `PLATFORM_DEMO_WORKSPACE_ID` and `PLATFORM_DEMO_SUBJECT`. For Runos, set
-`PLATFORM_DEMO_RUNOS_CAPABILITY_ID` to the approved read operation's capability.
+`PLATFORM_DEMO_RUNOS_CAPABILITY_ID=markitdown.document-to-markdown` for the
+included HTML conversion sample. The acceptance check calls the same adapter
+as the workspace's **Convert and summarize HTML** chat workflow.
 The operator signs in using the registered confidential client and an active
 product seat. The server confirms the current seat before each action.
 
@@ -176,15 +178,22 @@ whole integration chain:
 5. **Skill** (optional) - `chat/skill-runner.ts` runs the Runos loop:
    discover -> resolve -> invoke -> report_outcome. It searches the catalog
    rather than hard-coding capability ids, because the entitled catalog is
-   per-caller and changes without vxtpl redeploying. A skill that cannot run
-   degrades the turn instead of failing it.
+   per-caller and changes without vxtpl redeploying. The HTML conversion
+   workflow selects the specific connector and read operation via
+   `runos/document-conversion.ts`, encodes inline HTML as the operation's
+   `uri` argument and stops if conversion fails. Other skills can degrade
+   the turn when their capability is unavailable.
 6. **Inference** - `chat/atlas-client.ts` posts to Atlas `/v1/chat`, threading
-   any skill result into the prompt. Chat and the assistant share the same
+   any skill result into the prompt. The completed turn shows the shared
+   task ID, actual Atlas request and model, and Runos call and outcome when
+   applicable. Chat and the assistant share the same
    error response. Atlas capacity limits return 429 with the retry delay when
    provided. Upstream account refusal returns 503 with a temporary-unavailability
    message and no provider account details. A failed turn leaves the draft in
    place. A new request requires an explicit send.
-7. **Metering** - `usage/lib/buffer.ts` records one `vxtpl.chat.messages` event.
+7. **Metering** - `usage/lib/buffer.ts` records one `vxtpl.chat.messages` event
+   keyed by the real turn's task ID. The flush boundary converts an Accounts
+   customer subject into the account UUID for optional end-user attribution.
    Deliberately not token counts: Atlas meters model tokens itself under
    `atlas.chat`, so reporting them here would double-count. A metering failure
    is logged and swallowed - it must not fail a turn the user already waited for.

@@ -91,6 +91,7 @@ function deriveFiles(paths, includeExample) {
     "Run `pnpm install --frozen-lockfile` and `pnpm dev` to start the workspace locally. " +
     "The product exposes the public entry, gate, work home, chat and platform demonstration. " +
     "Open `/system/frameworks` in development to inspect the five shared page structures.\n\n" +
+    "Start with the [Atlas and Runos application patterns](docs/40-implementation/20-creating-a-product-from-vxtpl.md#apply-the-atlas-and-runos-patterns). " +
     "Use `pnpm doctor` to check configuration and the " +
     "[platform registration checklist](docs/50-deployment/10-platform-registration-checklist.md) for live setup.\n");
   write("docs/20-specs/10-product-definition.md",

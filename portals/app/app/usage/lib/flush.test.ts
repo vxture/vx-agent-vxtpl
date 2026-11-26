@@ -90,7 +90,8 @@ test("service-ticket refusal or an ambiguous receipt preserves the exact usage f
   });
 
   const store = new InMemoryUsageStore();
-  const record = { workspaceId: "ws", metric: "vxtpl.chat.messages", amount: 2, idempotencyKey: "original-key", endUserId: "usr_original" };
+  const accountId = "7f1d1a1e-0000-4000-8000-00000000abcd";
+  const record = { workspaceId: "ws", metric: "vxtpl.chat.messages", amount: 2, idempotencyKey: "original-key", endUserId: `usr_${accountId}` };
   await store.record(record);
   let mode: "refused" | "wrong-workspace" | "ambiguous" | "valid" = "refused";
   let sent = 0;
@@ -116,7 +117,7 @@ test("service-ticket refusal or an ambiguous receipt preserves the exact usage f
     assert.equal(headers.get("x-request-id"), record.idempotencyKey);
     assert.deepEqual(JSON.parse(String(init?.body)), {
       workspace_id: record.workspaceId, product: "vxtpl", metric: record.metric,
-      amount: record.amount, idempotency_key: record.idempotencyKey, end_user_id: record.endUserId,
+      amount: record.amount, idempotency_key: record.idempotencyKey, end_user_id: accountId,
     });
     return Response.json(mode === "ambiguous" ? { gated: false } : { gated: false, event_id: "fixed-receipt", replayed: true });
   };

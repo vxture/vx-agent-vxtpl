@@ -67,14 +67,13 @@ no hint about which of these steps is missing.
   the demo endpoint \`chat/default\`. The product reads the granted endpoints
   with the workspace OBO token. Run the sample in \`/platform-check\` and record
   the endpoint, model, request ID and task ID. Atlas owns inference metering.
-- [ ] **Runos capability.** Set \`RUNOS_API_URL\` and register an approved capability
-  with a read operation that accepts the fixed text sample for the designated
-  operator and workspace in
-  \`PLATFORM_DEMO_RUNOS_CAPABILITY_ID\`. Confirm the capability appears in the
-  caller's entitled discovery results for the summarize sample. Runos resolves
-  the operation, invokes it, then acknowledges the outcome. Record the
-  capability, call ID, task ID and acknowledgement. Platform operators handle
-  any grant required by the target Runos environment.
+- [ ] **Runos capability.** Set `RUNOS_API_URL` and set
+  `PLATFORM_DEMO_RUNOS_CAPABILITY_ID=markitdown.document-to-markdown` for the
+  designated operator and workspace. Confirm the caller can discover the
+  connector and resolve its `convert_to_markdown` read operation. The sample
+  sends a fixed inline HTML document and verifies Markdown output and the
+  outcome acknowledgement. Record the capability, call ID, task ID and
+  acknowledgement. Platform operators manage the grant in the target environment.
 
 ## Secrets transport
 
@@ -85,7 +84,7 @@ no hint about which of these steps is missing.
 ## Candidate acceptance
 
 Check the deployed version using `pnpm doctor --stage production --url
-https://vxtpl.vxture.com --expect-version <version>`. Verify Atlas and Runos URL
+https://vxtpl.ruyin.work --expect-version <version>`. Verify Atlas and Runos URL
 presence, the active Atlas demo endpoint, and the approved read-only Runos
 capability in the designated workspace. The product needs
 `PLATFORM_DEMO_WORKSPACE_ID`, `PLATFORM_DEMO_SUBJECT`, and

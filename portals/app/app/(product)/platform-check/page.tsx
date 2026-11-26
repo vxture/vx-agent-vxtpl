@@ -31,7 +31,7 @@ const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[
 const actions: { probe: Probe; name: string; detail: string }[] = [
   { probe: "c3-replay", name: "计量入账与回放", detail: "同一 UTC 日最多计入 1 个单位，重复请求返回原回执。" },
   { probe: "atlas-inference", name: "Atlas 实际推理", detail: "向 chat/default 提交固定推理样本。成功后显示模型和请求回执，推理用量由 Atlas 上报。" },
-  { probe: "runos-invoke", name: "Runos 实际调用", detail: "发现并解析已登记的能力，执行一次只读操作，收到结果回报确认后显示调用回执。" },
+  { probe: "runos-invoke", name: "Runos 实际调用", detail: "将固定 HTML 样本转换为 Markdown，校验转换内容和结果回报后显示调用回执。" },
 ];
 
 const stages = { dev: "开发", beta: "验收", production: "生产" };

@@ -13,6 +13,9 @@ import { invalidateWorkspaceEntitlement } from "../../entitlement/platform-resol
 import { assertInternalTarget } from "../../lib/internal-target";
 import { invalidateS2SToken, mintS2S, PLATFORM_AUDIENCE } from "../../lib/s2s-token";
 
+// Accounts subjects carry a realm prefix. The optional C3 attribution field takes a UUID.
+const CUSTOMER_ACCOUNT_ID = /^(?:usr_)?([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
+
 // ============================================================================
 // Receipts and batch results
 // ============================================================================
@@ -112,6 +115,7 @@ export function makePlatformConsume(baseUrl: string): ConsumeFn {
         claims.workspace_id !== row.workspaceId || claims.sub !== undefined) {
       throw new Error("Invalid product usage ticket scope");
     }
+    const endUserId = row.endUserId?.match(CUSTOMER_ACCOUNT_ID)?.[1];
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -127,7 +131,7 @@ export function makePlatformConsume(baseUrl: string): ConsumeFn {
         metric: row.metric,
         amount: row.amount,
         idempotency_key: row.idempotencyKey,
-        ...(row.endUserId ? { end_user_id: row.endUserId } : {}),
+        ...(endUserId ? { end_user_id: endUserId } : {}),
       }),
       cache: "no-store",
     });
