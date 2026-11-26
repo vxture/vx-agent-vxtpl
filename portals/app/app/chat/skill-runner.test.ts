@@ -2,6 +2,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { runSkill } from "./skill-runner";
 import { resetS2STokenCache } from "../lib/s2s-token";
+import { runRunosSample } from "../platform-demo/runos-sample";
 
 // What a capability answers is not all for the model.
 //
@@ -22,6 +23,7 @@ const ENV = {
   OIDC_CLIENT_ID: "vxtpl",
   OIDC_CLIENT_SECRET: "s3cret",
   RUNOS_API_URL: "http://worker-02:3120",
+  PLATFORM_DEMO_RUNOS_CAPABILITY_ID: "markitdown.document-to-markdown",
 };
 const saved: Record<string, string | undefined> = {};
 const realFetch = globalThis.fetch;
@@ -32,16 +34,18 @@ const HISTORY = [{ role: "user" as const, content: "summarize this" }];
 /** Answers the four MCP tools in sequence; `payload` is what invoke returns. */
 function stub(
   payload: Record<string, unknown>,
-  options: { riskLevel?: string; acknowledged?: boolean } = {},
+  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean } = {},
 ) {
-  const calls: string[] = [];
+  const calls: { name: string; arguments: Record<string, unknown> }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).endsWith("/oidc/token")) {
       return new Response(JSON.stringify({ access_token: "tok", expires_in: 300 }), { status: 200 });
     }
-    const body = JSON.parse(String(init?.body ?? "{}")) as { params?: { name?: string } };
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      params?: { name?: string; arguments: Record<string, unknown> };
+    };
     const tool = body.params?.name;
-    if (tool) calls.push(tool);
+    if (body.params && tool) calls.push({ name: tool, arguments: body.params.arguments });
     const structured = answer(tool, payload, options);
     return new Response(JSON.stringify({ result: { isError: false, structuredContent: structured } }), {
       status: 200,
@@ -54,14 +58,21 @@ function stub(
 function answer(
   tool: string | undefined,
   payload: Record<string, unknown>,
-  options: { riskLevel?: string; acknowledged?: boolean },
+  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean },
 ): Record<string, unknown> {
+  const capabilityId = options.sample ? ENV.PLATFORM_DEMO_RUNOS_CAPABILITY_ID : "markitdown/convert";
   if (tool === "runos_discover") {
-    return { capabilities: [{ capability_id: "markitdown/convert", name: "convert", description: "summarize document text" }] };
+    return { capabilities: [{
+      capability_id: capabilityId,
+      primitive_type: "connector",
+      operations: [{ operation: "convert_to_markdown", risk_level: "read" }],
+    }] };
   }
   if (tool === "runos_resolve") {
     return {
-      capability_id: "markitdown/convert",
+      capability_id: capabilityId,
+      primitive_type: "connector",
+      version: "1.0.0",
       contract: {
         operations: [{ operation: "convert_to_markdown", riskLevel: options.riskLevel, inputSchema: { properties: { uri: { type: "string" } }, required: ["uri"] } }],
       },
@@ -135,22 +146,38 @@ test("a non-object _meta is left alone rather than destructured", async () => {
   assert.match(outcome.detail, /unexpected/);
 });
 
-test("a designated read-only capability must return a call ID and an acknowledged outcome", async () => {
-  const calls = stub({ markdown: "# Sample", _meta: { vxture: { call_id: "call-1" } } },
-    { riskLevel: "read", acknowledged: true });
-  const outcome = await runSkill("summarize", HISTORY, { ...OPTS, readOnlyCapabilityId: "markitdown/convert" });
-  assert.equal(outcome.status, "ran");
-  assert.equal(outcome.callId, "call-1");
-  assert.deepEqual(calls, ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
+const convertedSample = { markdown: "# Vxture acceptance sample\n\nWeekly progress report." };
+
+test("the acceptance sample converts an inline HTML document and records an acknowledged invocation", async () => {
+  const calls = stub({ ...convertedSample, _meta: { vxture: { call_id: "call-1" } } },
+    { sample: true, riskLevel: "read", acknowledged: true });
+  const outcome = await runRunosSample(OPTS);
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.receipt, "call-1");
+  assert.deepEqual(calls.map(({ name }) => name), ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
+  const invocation = calls[2].arguments;
+  assert.equal(invocation.operation, "convert_to_markdown");
+  assert.equal(invocation.capability_id, ENV.PLATFORM_DEMO_RUNOS_CAPABILITY_ID);
+  assert.equal(invocation.version, "1.0.0");
+  const uri = (invocation.arguments as { uri: string }).uri;
+  const [mediaType, document] = uri.split(",");
+  assert.equal(mediaType, "data:text/html;base64");
+  assert.match(Buffer.from(document, "base64").toString(), /<h1>Vxture acceptance sample<\/h1>/);
 });
 
-test("a write operation or missing outcome acknowledgement does not pass acceptance", async () => {
-  const opts = { ...OPTS, readOnlyCapabilityId: "markitdown/convert" };
-  const denied = stub({}, { riskLevel: "write", acknowledged: true });
-  assert.equal((await runSkill("summarize", HISTORY, opts)).status, "unavailable");
-  assert.deepEqual(denied, ["runos_discover", "runos_resolve"]);
+test("the acceptance sample requires a read operation, converted content and outcome acknowledgement", async () => {
+  const denied = stub({}, { sample: true, riskLevel: "write", acknowledged: true });
+  assert.equal((await runRunosSample(OPTS)).ok, false);
+  assert.deepEqual(denied.map(({ name }) => name), ["runos_discover", "runos_resolve"]);
 
-  const unconfirmed = stub({ _meta: { vxture: { call_id: "call-2" } } }, { riskLevel: "read" });
-  assert.equal((await runSkill("summarize", HISTORY, opts)).status, "failed");
-  assert.deepEqual(unconfirmed, ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
+  const meta = { _meta: { vxture: { call_id: "call-2" } } };
+  const empty = stub(meta, { sample: true, riskLevel: "read", acknowledged: true });
+  assert.equal((await runRunosSample(OPTS)).ok, false);
+  assert.equal(empty[3].arguments.outcome, "failure");
+
+  const unconfirmed = stub({ ...convertedSample, ...meta }, { sample: true, riskLevel: "read" });
+  const result = await runRunosSample(OPTS);
+  assert.equal(result.ok, false);
+  assert.equal(result.receipt, "call-2");
+  assert.equal(unconfirmed[3].arguments.outcome, "success");
 });
