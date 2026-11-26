@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { flushUsage, makePlatformConsume } from "./flush";
 import { InMemoryUsageStore } from "./store";
 import { resetS2STokenCache } from "../../lib/s2s-token";
+import { usageJobConfig } from "./job";
 
 async function seeded(): Promise<InMemoryUsageStore> {
   const s = new InMemoryUsageStore();
@@ -20,6 +21,44 @@ test("200 marks rows flushed", async () => {
   });
   assert.equal(summary.flushed, 2);
   assert.equal((await store.unflushed(10)).length, 0);
+});
+
+test("demo flush requires a complete scope and delivers only the approved row", async () => {
+  const scope = {
+    workspaceId: "11111111-1111-4111-8111-111111111111",
+    endUserId: "usr_22222222-2222-4222-8222-222222222222",
+    idempotencyKey: "approved-task",
+  };
+  const env = {
+    USAGE_FLUSH_MODE: "demo",
+    PLATFORM_DEMO_WORKSPACE_ID: scope.workspaceId,
+    PLATFORM_DEMO_SUBJECT: scope.endUserId,
+  };
+  assert.throws(() => usageJobConfig(env), /original usage key/);
+  assert.throws(() => usageJobConfig({ USAGE_FLUSH_MODE: "all" }), /Invalid USAGE_FLUSH_MODE/);
+  assert.deepEqual(usageJobConfig({}), { mode: "manual" });
+  assert.deepEqual(usageJobConfig({ USAGE_FLUSH_MODE: "on" }), { mode: "on" });
+  const config = usageJobConfig({ ...env, USAGE_FLUSH_DEMO_KEY: scope.idempotencyKey });
+  assert.equal(config.mode, "demo");
+  assert.deepEqual(config.scope, scope);
+
+  const store = new InMemoryUsageStore();
+  const record = { ...scope, metric: "vxtpl.chat.messages", amount: 1 };
+  await store.record(record);
+  await store.record({ ...record, idempotencyKey: "other-task" });
+  await store.record({ ...record, idempotencyKey: "other-user", endUserId: "usr_33333333-3333-4333-8333-333333333333" });
+  const sent: string[] = [];
+  const consume = async ({ idempotencyKey }: { idempotencyKey: string }) => {
+    sent.push(idempotencyKey);
+    return { status: 200, body: { gated: true, event_id: "original-platform-event", replayed: true } };
+  };
+  const options = { store, consume, invalidate: async () => {}, scope: config.scope };
+  assert.equal((await flushUsage({ ...options, scope: { ...scope, workspaceId: "another-workspace" } })).scanned, 0);
+  assert.equal((await flushUsage({ ...options, scope: { ...scope, endUserId: "another-user" } })).scanned, 0);
+  assert.equal((await flushUsage(options)).replayed, 1);
+  assert.equal((await flushUsage(options)).scanned, 0);
+  assert.deepEqual(sent, [scope.idempotencyKey]);
+  assert.deepEqual((await store.unflushed(10)).map((row) => row.idempotencyKey), ["other-task", "other-user"]);
 });
 
 test("200 + gated:true is recorded (flushed), counted, and evicts C2", async () => {

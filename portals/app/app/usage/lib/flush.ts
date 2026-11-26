@@ -8,7 +8,7 @@
  */
 
 import { BRAND } from "@vxtpl/shared/brand";
-import { getUsageStore, type UsageRow, type UsageStore } from "./store";
+import { getUsageStore, type UsageRow, type UsageScope, type UsageStore } from "./store";
 import { invalidateWorkspaceEntitlement } from "../../entitlement/platform-resolver";
 import { assertInternalTarget } from "../../lib/internal-target";
 import { invalidateS2SToken, mintS2S, PLATFORM_AUDIENCE } from "../../lib/s2s-token";
@@ -37,6 +37,7 @@ export interface FlushOptions {
   consume?: ConsumeFn;
   invalidate?: (workspaceId: string) => Promise<void>;
   batchSize?: number;
+  scope?: UsageScope;
 }
 
 export interface FlushSummary {
@@ -63,7 +64,7 @@ export async function flushUsage(opts: FlushOptions = {}): Promise<FlushSummary>
   const consume = opts.consume ?? (baseUrl ? makePlatformConsume(baseUrl) : null);
   if (!consume) return { scanned: 0, flushed: 0, gated: 0, replayed: 0, retried: 0, skipped: true };
 
-  const rows = await store.unflushed(opts.batchSize ?? 50);
+  const rows = await store.unflushed(opts.batchSize ?? 50, opts.scope);
   const done: string[] = [];
   let flushed = 0;
   let gated = 0;

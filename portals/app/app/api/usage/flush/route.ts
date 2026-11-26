@@ -1,16 +1,18 @@
-import { NextResponse } from "next/server";
 import { checkInternalJob } from "../../../lib/internal-job";
-import { flushUsage } from "../../../usage/lib/flush";
+import { runUsageJob } from "../../../usage/lib/job";
 
-// POST /api/usage/flush: trigger the usage flush job. Gated by INTERNAL_JOB_TOKEN
-// (an internal job/cron caller), never a user session. Fail-closed: if the token
-// is unset or mismatched, refuse.
+// The on-demand trigger uses the same lease and reporting scope as the scheduler.
+// Only a caller with the internal job token can request a pass.
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
   if (!checkInternalJob(req)) {
-    return new NextResponse("forbidden", { status: 403 });
+    return new Response("forbidden", { status: 403 });
   }
-  const summary = await flushUsage();
-  return NextResponse.json(summary);
+  try {
+    const summary = await runUsageJob();
+    return summary ? Response.json(summary, { headers: { "cache-control": "no-store" } }) : new Response(null, { status: 204 });
+  } catch {
+    return Response.json({ error: "Usage flush unavailable" }, { status: 503, headers: { "cache-control": "no-store" } });
+  }
 }
