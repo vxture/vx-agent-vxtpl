@@ -40,13 +40,14 @@ no hint about which of these steps is missing.
       exchange answers `400 invalid_client` even with a correct secret. Verify:
       `select p.product_code from appoidc.oidc_clients c join product.products p on p.id = c.product_id where c.client_id = 'vxtpl'`
 
-## Workspace coverage (gates every S2S call)
+## Workspace coverage for service tickets
 
-- [ ] The product must be **provisioned into each workspace it will speak for**,
-      or hold an active/trialing subscription there. This is the S2S D2 gate, and
-      it checks coverage by the **calling** product - vxtpl calling Atlas for
-      workspace W requires *vxtpl* to cover W; Atlas's own coverage is irrelevant.
-      Absent, minting fails with `400 invalid_target`.
+- [ ] For a workspace-bound service ticket, confirm that the workspace has an
+      active/trialing subscription or a provisioned state for the calling
+      product. Without coverage, exchange returns `400 invalid_target`.
+- [ ] For interactive C2, verify that Accounts issues an OBO ticket bound to
+      the signed-in user, organization and workspace. An empty entitlement
+      can be returned for a workspace without subscription coverage.
 
 ## Provisioning webhook (C3)
 
@@ -54,6 +55,11 @@ no hint about which of these steps is missing.
       address (`VXTPL_WEBHOOK_BASE_URL`).
 - [x] `VXTPL_PROVISION_WEBHOOK_SECRET` live on the platform side and transported
       to the deploy host (liaison letter 90).
+- [ ] Confirm delivery to `/api/webhooks/vxture`, the current workspace's
+      acknowledgement and a reconciliation pass.
+- [ ] Confirm the registry entries for `vxtpl.chat.messages` and
+      `vxtpl.game.runs`, the scheduler for `POST /api/usage/flush`, and the
+      original platform event ID returned on replay.
 
 ## Provider grants
 
@@ -77,3 +83,18 @@ no hint about which of these steps is missing.
 - [ ] All secret values are owner-transported - never committed, never sent over
       insecure channels. Org-level shared credentials (ACR, tailscale, npm token)
       are configured once at the org and shared to the repo, not duplicated.
+
+## Candidate acceptance
+
+Check the deployed version using `pnpm doctor --stage production --url
+https://vxtpl.vxture.com --expect-version <version>`. Verify Atlas and Runos URL
+presence, the active Atlas demo endpoint, and the approved read-only Runos
+capability in the designated workspace. The product needs
+`PLATFORM_DEMO_WORKSPACE_ID`, `PLATFORM_DEMO_SUBJECT`, and
+`PLATFORM_DEMO_RUNOS_CAPABILITY_ID` for the metered demonstration.
+
+Use Accounts to sign in as the designated user. Verify the assigned seat, C2
+read, provisioning ACK and missed-delivery recovery, then retain the C3 event
+ID, Atlas request ID, and Runos call ID and outcome acknowledgement. Finish
+with logout from another product in the same central session and check the
+Vxtpl gate transition.

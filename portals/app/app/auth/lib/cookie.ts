@@ -29,3 +29,11 @@ export function sessionCookieOptions(cfg: OidcConfig): CookieOptions {
 export function clearCookieOptions(cfg: OidcConfig): CookieOptions {
   return { ...sessionCookieOptions(cfg), maxAge: 0 };
 }
+
+export function authBindingCookieName(cfg: OidcConfig, state: string): string {
+  return `${cfg.cookieName}_oidc_${state}`;
+}
+
+export function isAuthState(value: string | null): value is string {
+  return value !== null && /^[A-Za-z0-9_-]{43}$/.test(value);
+}

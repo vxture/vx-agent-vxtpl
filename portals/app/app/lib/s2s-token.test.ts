@@ -23,10 +23,10 @@ function configure(): void {
 /** Records every request so a test can assert on the exact form the platform receives. */
 function stubToken(
   response: { status?: number; body?: unknown; text?: string } = {},
-): { calls: { url: string; form: URLSearchParams }[] } {
-  const calls: { url: string; form: URLSearchParams }[] = [];
+): { calls: { url: string; form: URLSearchParams; headers: Headers }[] } {
+  const calls: { url: string; form: URLSearchParams; headers: Headers }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({ url: String(input), form: new URLSearchParams(String(init?.body ?? "")) });
+    calls.push({ url: String(input), form: new URLSearchParams(String(init?.body ?? "")), headers: new Headers(init?.headers) });
     const status = response.status ?? 200;
     const payload = response.text ?? JSON.stringify(response.body ?? { access_token: "tok", expires_in: 300 });
     return new Response(payload, { status, headers: { "content-type": "application/json" } });
@@ -57,6 +57,7 @@ test("config needs all three OIDC values", () => {
 
 test("service mode posts the RFC 8693 form the platform token endpoint expects", async () => {
   configure();
+  process.env.OIDC_CLIENT_SECRET = "s:3+cret %";
   const { calls } = stubToken();
   const token = await mintS2SToken("atlas", { workspaceId: "ws-1" });
   assert.equal(token, "tok");
@@ -64,8 +65,11 @@ test("service mode posts the RFC 8693 form the platform token endpoint expects",
   assert.equal(calls[0].url, "http://accounts.internal/oidc/token");
   const f = calls[0].form;
   assert.equal(f.get("grant_type"), "urn:ietf:params:oauth:grant-type:token-exchange");
-  assert.equal(f.get("client_id"), "vxtpl");
-  assert.equal(f.get("client_secret"), "s3cret");
+  assert.equal(f.get("client_id"), null);
+  assert.equal(f.get("client_secret"), null);
+  const basic = calls[0].headers.get("authorization");
+  assert.match(basic ?? "", /^Basic /);
+  assert.equal(Buffer.from(basic!.slice("Basic ".length), "base64").toString(), "vxtpl:s%3A3%2Bcret%20%25");
   assert.equal(f.get("audience"), "atlas");
   assert.equal(f.get("workspace_id"), "ws-1");
   assert.equal(f.get("subject_token"), null);

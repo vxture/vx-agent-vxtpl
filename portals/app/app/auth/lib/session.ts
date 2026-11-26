@@ -1,16 +1,22 @@
 import type { OidcConfig } from "./config";
-import { verifyToken, refreshTokens } from "./oidc";
-import { getSession, putSession, type RpSession } from "./session-store";
+import { errors } from "jose";
+import { setTimeout as delay } from "node:timers/promises";
+import { verifyToken, refreshTokens, TokenEndpointError } from "./oidc";
+import { acquireRefresh, deleteSession, getSession, releaseRefresh, rotateSession, type RpSession } from "./session-store";
+import { randomToken } from "./pkce";
 
 /** The store and IdP calls freshSession needs; injectable so the race is testable without Redis. */
 export interface SessionDeps {
   getSession: typeof getSession;
-  putSession: typeof putSession;
+  rotateSession: typeof rotateSession;
+  acquireRefresh: typeof acquireRefresh;
+  releaseRefresh: typeof releaseRefresh;
+  deleteSession: typeof deleteSession;
   refreshTokens: typeof refreshTokens;
 }
 
-const defaultDeps: SessionDeps = { getSession, putSession, refreshTokens };
-import { toAuthUser, type AccessClaims, type AuthUser } from "./claims";
+const defaultDeps: SessionDeps = { getSession, rotateSession, acquireRefresh, releaseRefresh, deleteSession, refreshTokens };
+import { profileFromClaims, toAuthUser, type AccessClaims, type AuthUser, type IdProfile } from "./claims";
 
 // Per-request auth (080-rp section 2.6 / 2.9): rpsid -> session -> silent refresh
 // if the access token is near expiry (token rotation: new refresh stored, old
@@ -18,6 +24,16 @@ import { toAuthUser, type AccessClaims, type AuthUser } from "./claims";
 // valid session (caller 401s XHR / 302s a page to /auth/login).
 
 const REFRESH_SKEW_SECONDS = 60;
+const REFRESH_LEASE_MS = 16_000;
+const REFRESH_WAIT_MS = 6500;
+const INVALID_ACCESS_TOKEN = new Set([
+  "ERR_JWT_EXPIRED",
+  "ERR_JWT_INVALID",
+  "ERR_JWT_CLAIM_VALIDATION_FAILED",
+  "ERR_JWS_INVALID",
+  "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+  "ERR_JOSE_ALG_NOT_ALLOWED",
+]);
 
 export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthUser | null> {
   return (await getAuthContext(cfg, rpsid))?.user ?? null;
@@ -35,17 +51,19 @@ export async function getAuthUser(cfg: OidcConfig, rpsid: string): Promise<AuthU
 export async function getAuthContext(
   cfg: OidcConfig,
   rpsid: string,
-): Promise<{ user: AuthUser; accessToken: string; idToken: string } | null> {
+): Promise<{ user: AuthUser; accessToken: string; idToken: string; profile: IdProfile } | null> {
   const session = await freshSession(cfg, rpsid);
   if (!session) return null;
 
-  let claims: AccessClaims;
+  let verified;
   try {
-    claims = (await verifyToken(session.accessToken, cfg)) as AccessClaims;
-  } catch {
-    return null;
+    verified = await verifyToken(session.accessToken, cfg);
+  } catch (error) {
+    if (error instanceof errors.JOSEError && INVALID_ACCESS_TOKEN.has(error.code)) return null;
+    throw error;
   }
-  return { user: toAuthUser(claims), accessToken: session.accessToken, idToken: session.idToken };
+  if (typeof verified.sub !== "string" || verified.sub !== session.sub) return null;
+  return { user: toAuthUser(verified as AccessClaims), accessToken: session.accessToken, idToken: session.idToken, profile: profileFromClaims(verified) };
 }
 
 /** The stored session, refreshed first if its access token is near expiry. */
@@ -57,7 +75,7 @@ export async function freshSession(
   const session = await deps.getSession(cfg.clientId, rpsid);
   if (!session) return null;
   if (!nearExpiry(session)) return session;
-  return refreshOnce(cfg, rpsid, session, deps); // null -> refresh failed, session invalid
+  return refreshOnce(cfg, rpsid, deps);
 }
 
 function nearExpiry(session: RpSession): boolean {
@@ -77,16 +95,38 @@ const inflight = new Map<string, Promise<RpSession | null>>();
 function refreshOnce(
   cfg: OidcConfig,
   rpsid: string,
-  session: RpSession,
   deps: SessionDeps,
 ): Promise<RpSession | null> {
   const key = `${cfg.clientId}:${rpsid}`;
   let pending = inflight.get(key);
   if (!pending) {
-    pending = tryRefresh(cfg, rpsid, session, deps).finally(() => inflight.delete(key));
+    pending = refreshUnderLease(cfg, rpsid, deps).finally(() => inflight.delete(key));
     inflight.set(key, pending);
   }
   return pending;
+}
+
+/* Redis arbitrates cross-process refreshes. Waiters never present the same token. */
+async function refreshUnderLease(cfg: OidcConfig, rpsid: string, deps: SessionDeps): Promise<RpSession | null> {
+  const owner = randomToken(16);
+  const deadline = Date.now() + REFRESH_WAIT_MS;
+  let wait = 70;
+  do {
+    const current = await deps.getSession(cfg.clientId, rpsid);
+    if (!current || !nearExpiry(current)) return current;
+    if (await deps.acquireRefresh(cfg.clientId, rpsid, owner, REFRESH_LEASE_MS)) {
+      try {
+        const latest = await deps.getSession(cfg.clientId, rpsid);
+        if (!latest || !nearExpiry(latest)) return latest;
+        return await tryRefresh(cfg, rpsid, latest, deps);
+      } finally {
+        await deps.releaseRefresh(cfg.clientId, rpsid, owner).catch(() => undefined);
+      }
+    }
+    await delay(wait);
+    wait = Math.min(wait * 2, 450);
+  } while (Date.now() < deadline);
+  throw new Error("Session refresh is still in progress");
 }
 
 async function tryRefresh(
@@ -105,17 +145,21 @@ async function tryRefresh(
       refreshToken: tokens.refresh_token ?? session.refreshToken,
       accessExpiresAt: Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 300),
     };
-    await deps.putSession(cfg.clientId, rpsid, next, cfg.sessionTtlSeconds);
-    return next;
-  } catch {
+    if (await deps.rotateSession(cfg.clientId, rpsid, session, next, cfg.sessionTtlSeconds)) return next;
+    return deps.getSession(cfg.clientId, rpsid);
+  } catch (error) {
     // Another process may have rotated this token between our read and our
     // refresh (single-flight is per process). If the store now holds a
     // different, fresh session, that one is valid - use it.
-    const current = await deps.getSession(cfg.clientId, rpsid).catch(() => null);
+    const current = await deps.getSession(cfg.clientId, rpsid);
+    if (!current) return null;
     if (current && current.refreshToken !== session.refreshToken && !nearExpiry(current)) {
       return current;
     }
-    // invalid_grant (expired/revoked/replayed) -> session is dead
-    return null;
+    if (error instanceof TokenEndpointError && error.status === 400 && error.oauthError === "invalid_grant") {
+      await deps.deleteSession(cfg.clientId, rpsid, session.refreshToken);
+      return null;
+    }
+    throw error;
   }
 }

@@ -10,6 +10,8 @@ export interface ChatMessage {
   content: string;
 }
 
+export const CHAT_SCOPE_HEADER = "x-vxtpl-workspace-context";
+
 export interface ChatOptions {
   modelCode?: string;
   skillCode?: string;

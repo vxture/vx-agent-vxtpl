@@ -13,6 +13,7 @@ export interface AccessGates {
   productAccess: boolean;
   dataAccess: boolean;
   cta: Cta;
+  seatRequired?: boolean;
 }
 
 export type AccessState =
@@ -41,6 +42,7 @@ export type AccessState =
    * that lands on a 503.
    */
   | { status: "unconfigured" }
+  | { status: "unavailable"; reason: "session" | "entitlement" }
   /**
    * Local development with no IdP. The gate stands aside; without this the
    * front door is a wall no developer can open. Never reachable on a deployed

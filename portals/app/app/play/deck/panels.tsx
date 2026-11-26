@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../../entitlement/deeplink";
 import { avatarInitial, contactLineFor, displayNameFor } from "../../auth/lib/display";
+import { productRoutes } from "../../framework/product-experience";
+import { useSessionRevocation } from "../../auth/session-events-client";
 import { callSign, formatScoreMs, type TrendPoint } from "../../game/rules";
-import type { Tier } from "../../entitlement/types";
 import { TrendChart } from "./trend-chart";
 
 // The deck's side modules: records and the global board, folded into the one
@@ -22,8 +23,6 @@ interface RunJson {
 
 interface RecordsData {
   allowed: boolean;
-  requiredTier?: Tier | null;
-  requiredTierForTrend?: Tier | null;
   window?: { kind: "last10"; limit: number } | { kind: "season" };
   season?: { key: string; label: string; startsAt: string; endsAt: string };
   top?: RunJson[];
@@ -43,7 +42,6 @@ interface BoardEntry {
 
 interface BoardData {
   allowed: boolean;
-  requiredTier?: Tier | null;
   season?: { key: string; label: string; endsAt: string };
   seasonEntries?: BoardEntry[];
   allTimeEntries?: BoardEntry[];
@@ -87,11 +85,11 @@ export function DeckModule({
  * idiom as the arc ornaments. The two SOLID buttons on the deck stay solid:
  * sign-in and no-subscription are the stage's own next step, not an aside in
  * a rail. */
-function LockNote({ note, tier, cta }: { note: string; tier: Tier | null | undefined; cta: string }) {
+function LockNote({ note, cta }: { note: string; cta: string }) {
   return (
     <div className="deck-lock">
       <p className="deck-lock__note">{note}</p>
-      <a className="deck-btn deck-btn-quiet" href={subscribeUrl({ intent: "upgrade", targetTier: tier ?? undefined })}>
+      <a className="deck-btn deck-btn-quiet" href={subscribeUrl()}>
         {cta}
       </a>
     </div>
@@ -129,7 +127,6 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
       {data && !data.allowed && (
         <LockNote
           note="The free tier lets you play every day but keeps nothing. Starter records your last 10 runs, with your best three pinned above them."
-          tier={data.requiredTier}
           cta="UPGRADE TO STARTER"
         />
       )}
@@ -170,7 +167,6 @@ export function RecordsModule({ open, onToggle, epoch }: { open: boolean; onTogg
           ) : (
             <LockNote
               note="Pro widens the window from your last 10 runs to the whole season, draws your daily-best curve, and opens the global board."
-              tier={data.requiredTierForTrend}
               cta="UPGRADE TO PRO"
             />
           )}
@@ -216,7 +212,6 @@ export function BoardModule({ open, onToggle, epoch }: { open: boolean; onToggle
       {data && !data.allowed && (
         <LockNote
           note="Pro puts your best run up against everyone else's. Players appear as call signs - the board is global, identities are not."
-          tier={data.requiredTier}
           cta='UPGRADE TO PRO'
         />
       )}
@@ -318,6 +313,7 @@ const SERVICE_LINKS = [
 export function AvatarBadge() {
   const [state, setState] = useState<{ authenticated: boolean; user?: SessionUser } | null>(null);
   const [openMenu, setOpenMenu] = useState(false);
+  useSessionRevocation(state?.authenticated === true, () => setState({ authenticated: false }));
 
   useEffect(() => {
     fetch("/auth/session", { cache: "no-store" })
@@ -366,6 +362,7 @@ export function AvatarBadge() {
       {openMenu && (
         <div className="deck-menu">
           {who && <div className="deck-menu__who">{who}</div>}
+          <a className="deck-menu__item" href={productRoutes.home}>WORKSPACE HOME</a>
           {/* DEBUG, and labeled so (owner review 2026-09-01): these are the
               template's service hatches for verifying the platform channels,
               not product features - a player never needs them. */}
@@ -383,7 +380,7 @@ export function AvatarBadge() {
               </button>
             </form>
           ) : (
-            <a className="deck-menu__item" href="/auth/login?returnTo=/">
+            <a className="deck-menu__item" href="/auth/login?returnTo=/play">
               SIGN IN
             </a>
           )}

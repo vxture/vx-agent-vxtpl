@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ssoAttemptCookieName, ssoAttemptCookieOptions } from "./app/auth/lib/sso";
 
 /**
  * Send an unverified visitor to the front door.
@@ -38,6 +37,8 @@ function sessionCookieName(): string {
 }
 
 export function middleware(req: NextRequest): NextResponse {
+  // The public product entry has no workspace data.
+  if (req.nextUrl.pathname === "/") return NextResponse.next();
   // Sign-in not provisioned: never gate. On a developer machine this is the
   // normal state, and on a misconfigured deployment a gate would lock everyone
   // out of a product that is otherwise serving - `/api/access` reports the
@@ -50,7 +51,7 @@ export function middleware(req: NextRequest): NextResponse {
   // Where to come back to. `safeReturnTo` re-validates this on the login route,
   // so a crafted path cannot turn the round trip into an open redirect.
   const from = `${req.nextUrl.pathname}${req.nextUrl.search}`;
-  if (from !== "/") gate.searchParams.set("from", from);
+  gate.searchParams.set("from", from);
   return NextResponse.redirect(gate);
 }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve as resolvePath } from "node:path";
 import { execSync } from "node:child_process";
@@ -28,6 +28,7 @@ import { execSync } from "node:child_process";
 
 const require_ = createRequire(import.meta.url);
 const OUR_PREFIX = "--vxtpl-";
+const repoRoot = resolvePath(import.meta.dirname, "../../..");
 
 function readCssGraph(entry: string, seen = new Set<string>()): string {
   if (seen.has(entry)) return "";
@@ -72,19 +73,18 @@ function dsTokens(): Set<string> {
   return out;
 }
 
-/**
- * vxtpl's own stylesheets - whatever they are, discovered not listed.
- *
- * The extension filter is applied here rather than as a git pathspec on
- * purpose. `git ls-files portals -- *.css` looks like a narrowing but is a
- * UNION of two pathspecs, so it returns every file under portals as well; this
- * test caught itself doing that, matching the `--x:` in its own doc comment.
- */
+function workingTreeFiles(): string[] {
+  // Include unstaged additions and skip removed paths during local route moves.
+  return execSync("git ls-files --cached --others --exclude-standard -z -- portals", {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((file) => file && existsSync(resolvePath(repoRoot, file)));
+}
+
 function ourStylesheets(): string[] {
-  const repoRoot = resolvePath(import.meta.dirname, "../../..");
-  return execSync("git ls-files portals", { cwd: repoRoot, encoding: "utf8" })
-    .trim()
-    .split("\n")
+  return workingTreeFiles()
     .filter((f) => f.endsWith(".css"))
     .map((f) => resolvePath(repoRoot, f));
 }
@@ -126,16 +126,13 @@ test("every name imported from the DS server entry exists at runtime", async () 
   const runtime = new Set(Object.keys(await import("@vxture/design-system/server")));
   assert.ok(runtime.size > 10, `expected the server entry to export components, found ${runtime.size}`);
 
-  const repoRoot = resolvePath(import.meta.dirname, "../../..");
-  const sources = execSync("git ls-files portals", { cwd: repoRoot, encoding: "utf8" })
-    .trim()
-    .split("\n")
+  const sources = workingTreeFiles()
     .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".test.ts"));
 
   const phantom: string[] = [];
   for (const file of sources) {
     const src = readFileSync(resolvePath(repoRoot, file), "utf8");
-    for (const [, names] of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@vxture\/design-system\/server["']/g)) {
+    for (const [, names] of src.matchAll(/(?:import|export)\s*\{([^}]*)\}\s*from\s*["']@vxture\/design-system\/server["']/g)) {
       for (const raw of names.split(",")) {
         // `type Foo` and `Foo as Bar` - only the imported name matters.
         const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0].trim();

@@ -1,5 +1,6 @@
 import { BRAND } from "@vxtpl/shared/brand";
 import { serviceIdentity } from "@vxture/shared";
+import { ENTITLEMENT_CACHE_TTL_MS } from "../entitlement/platform-resolver";
 
 // Integration-status surface (the /status dashboard + /api/status). Summarizes
 // ALL platform-integration config for at-a-glance inspection.
@@ -43,9 +44,9 @@ export interface IntegrationStatus {
     clientSecretConfigured: boolean;
   };
   c2: {
-    resolver: "platform" | "mock";
+    resolver: "platform" | "mock" | "unavailable";
     platformApiConfigured: boolean;
-    authTokenConfigured: boolean;
+    productTicketConfigured: boolean;
     consoleUrl: string | null;
     cacheTtlMs: number;
   };
@@ -66,8 +67,8 @@ export interface IntegrationStatus {
   capability: {
     runosApiConfigured: boolean;
   };
-  /** True when a mock resolver is standing in on a stage that should not have one. */
-  mockOnDeployedStage: boolean;
+  /** True when a deployed stage is missing integration configuration. */
+  integrationConfigIncomplete: boolean;
   data: { database: DbInfo; redis: RedisInfo };
   showInfra: boolean;
 }
@@ -99,6 +100,10 @@ function redisHost(url: string | undefined): string | undefined {
 export function buildStatus(env: Env, now: string): IntegrationStatus {
   const showInfra = (env.STATUS_SHOW_INFRA ?? "on").toLowerCase() !== "off";
   const db = parseDbUrl(env.DATABASE_URL);
+  const deployed = env.DEPLOY_STAGE === "production" || env.DEPLOY_STAGE === "beta";
+  const oidcEnabled = env.OIDC_RP_ENABLED === "on";
+  const productTicketConfigured = Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET);
+  const c2Ready = oidcEnabled && productTicketConfigured && Boolean(env.OIDC_REDIRECT_URI && env.PLATFORM_API_URL);
   return {
     identity: {
       productCode: BRAND.productCode,
@@ -107,7 +112,7 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
       time: now,
     },
     c1: {
-      enabled: env.OIDC_RP_ENABLED === "on",
+      enabled: oidcEnabled,
       issuer: env.OIDC_ISSUER ?? null,
       clientId: env.OIDC_CLIENT_ID ?? null,
       redirectUri: env.OIDC_REDIRECT_URI ?? null,
@@ -116,11 +121,11 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
       clientSecretConfigured: Boolean(env.OIDC_CLIENT_SECRET),
     },
     c2: {
-      resolver: env.PLATFORM_API_URL && env.PLATFORM_INTERNAL_AUTH_TOKEN ? "platform" : "mock",
+      resolver: c2Ready ? "platform" : !deployed && !oidcEnabled ? "mock" : "unavailable",
       platformApiConfigured: Boolean(env.PLATFORM_API_URL),
-      authTokenConfigured: Boolean(env.PLATFORM_INTERNAL_AUTH_TOKEN),
+      productTicketConfigured,
       consoleUrl: env.NEXT_PUBLIC_CONSOLE_URL ?? null,
-      cacheTtlMs: 45_000,
+      cacheTtlMs: env.REDIS_URL && c2Ready ? ENTITLEMENT_CACHE_TTL_MS : 0,
     },
     c3: {
       webhookSecretConfigured: Boolean(env.PROVISION_WEBHOOK_SECRET),
@@ -128,7 +133,7 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
       internalJobTokenConfigured: Boolean(env.INTERNAL_JOB_TOKEN),
     },
     s2s: {
-      configured: Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET),
+      configured: productTicketConfigured,
       issuer: env.OIDC_ISSUER ?? null,
     },
     chat: {
@@ -140,14 +145,7 @@ export function buildStatus(env: Env, now: string): IntegrationStatus {
     capability: {
       runosApiConfigured: Boolean(env.RUNOS_API_URL),
     },
-    // A deployed stack serving mock entitlement or chat data is a
-    // misconfiguration someone chose to keep running - surface it, loudly.
-    // Both C2 variables matter: the entitlement resolver falls back to the mock
-    // when EITHER is missing, so testing only the URL would leave the banner
-    // hidden while tiers are being fabricated.
-    mockOnDeployedStage:
-      (env.DEPLOY_STAGE === "production" || env.DEPLOY_STAGE === "beta") &&
-      (!env.PLATFORM_API_URL || !env.PLATFORM_INTERNAL_AUTH_TOKEN || !env.ATLAS_API_URL),
+    integrationConfigIncomplete: deployed && (!c2Ready || !env.ATLAS_API_URL),
     data: {
       database: {
         configured: Boolean(env.DATABASE_URL),

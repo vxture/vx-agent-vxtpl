@@ -2,6 +2,7 @@ import { Section, Stack, StatusBadge } from "../../ds";
 import { TIERS, SUBSCRIPTION_STATUSES, hasProductAccess, hasDataAccess, ctaFor } from "../../entitlement/types";
 import type { Tier, SubscriptionStatus } from "../../entitlement/types";
 import { makeEntitlement } from "../../entitlement/resolver";
+import { ProductContent } from "../../framework/product-content";
 
 // Subscription-tier verification (product_240 section 7): the five tiers x six
 // statuses (plus the null / bundled-only edge cases) with their gate + CTA
@@ -63,7 +64,7 @@ export default function EntitlementMatrixPage() {
     }),
   }));
   return (
-    <main className="page">
+    <ProductContent>
       <Stack gap="xs">
         <div className="eyebrow">Verification surface</div>
         <Section
@@ -113,10 +114,10 @@ export default function EntitlementMatrixPage() {
         </Section>
       </Stack>
 
-      <footer className="page-links">
+      <nav className="page-links" aria-label="Related diagnostics">
         <a href="/status">-&gt; integration status</a>
         <a href="/chat">-&gt; chat capability verification</a>
-      </footer>
-    </main>
+      </nav>
+    </ProductContent>
   );
 }

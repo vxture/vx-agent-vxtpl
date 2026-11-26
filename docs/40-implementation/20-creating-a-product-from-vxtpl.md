@@ -6,39 +6,43 @@ one with the name cascade rewritten, not an instantiation of a skeleton.
 ## The procedure
 
 ```bash
-git clone https://github.com/vxture/vxture-vxtpl.git vxture-<code>
-cd vxture-<code>
-rm -rf .git && git init            # start your own history
-node scripts/init/rename-product.mjs <code> --dry-run   # read the report first
-node scripts/init/rename-product.mjs <code>
-pnpm install                       # regenerates pnpm-lock.yaml under @<code>
-pnpm type-check:all && pnpm test
+git clone https://github.com/vxture/vx-agent-vxtpl.git
+cd vx-agent-vxtpl
+node scripts/init/create-product.mjs my-prod
+cd ../vx-agent-my-prod
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-The product code must match `^[a-z][a-z0-9_-]{0,31}$`.
+The product code must match `^[a-z][a-z0-9_-]{0,31}$`. The generator starts a
+new local Git repository in a sibling directory. Use `--output` for a
+different new directory, `--dry-run` to inspect the plan, or
+`--with-emberstorm` to include the optional challenge module. Candidate
+testing on a released checkout can include unstaged source with
+`--include-candidate`.
 
-## What the rename script does
+## Generated workspace
 
-It rewrites file **contents** and file/directory **names** in one pass, and it is
-site-aware, because one product code produces three lexical forms:
+The generator copies managed files and uses the site-aware rename script once.
+For `my-prod` the name cascade has these forms.
 
 | Form | Where it applies | `my-prod` becomes |
 |------|------------------|-------------------|
-| raw `<code>` | OIDC clients, compose project and containers, image name, public vhost, package scope, stack root | `my-prod` |
+| raw `<code>` | product identity, compose project and containers, image name, package scope, stack root | `my-prod` |
 | snake (`-` -> `_`) | Postgres database name and service role | `my_prod` |
 | upper (snake, uppercased) | platform-side secret names | `MY_PROD` |
+| kebab | OIDC client defaults, public hostname and matching edge file | `my-prod` |
 
 The distinction matters: a hyphen is illegal in an unquoted Postgres identifier,
 so a blind find-and-replace would produce `vxturebiz_my-prod_prod` and a database
 that cannot be created. The replacement table is ordered longest-match-first so
 every specific site is consumed before the generic rule sees the text.
 
-The script also rewrites **itself**, so the copy's `CURRENT` constant reads as the
-new code and the copy can in turn be copied. Renaming is a chain, not a one-shot
-from vxtpl. That is also why the table is derived from `CURRENT`'s three forms
-rather than hard-coded: a repo already renamed to `my-prod` carries `my_prod_svc`
-in its DDL, and a table built only from the raw `my-prod` would walk straight past
-it.
+The generated repository keeps the resolved name cascade. The shared workspace
+pages use `portals/app/product.config.json` for the entry mode, direct target and
+sample navigation. Development opens all five framework previews at
+`/system/frameworks`. The recent-work card and lists consume a domain work
+source through `framework/recent-work.server.ts`.
 
 Concretely, `my-prod` derives:
 
@@ -53,36 +57,34 @@ Concretely, `my-prod` derives:
 | stack root | `/srv/md0/my-prod` |
 | vhost | `my-prod.vxture.com` (the conf file is renamed too) |
 
-## What the script deliberately refuses to touch
+## Included files
 
-`docs/80-liaison/`, `docs/70-workplan/`, and the tech-debt register record what
-vxtpl did, when, and with whom. Rewriting `vxtpl` to your code inside them would
-not carry history forward - it would fabricate it, leaving your repo claiming to
-have sent letters it never sent. The script lists these files and leaves them
-alone; delete or archive them before your first commit.
+The output has fresh operation, plan, liaison and ADR indices. The source
+checkout keeps its own history, including the frozen HTML design. Generation
+excludes local credentials, browser artifacts and runtime data. With the
+default options, the output uses an empty work source and omits the challenge
+routes, styles, metrics, capabilities, Prisma model and domain DDL.
 
 ## What you still own
 
-The script prints this list when it finishes. In order of when it bites:
-
-1. **Delete vxtpl's history** - liaison correspondence, batch tracker, tech-debt
-   register.
-2. **Replace `docs/20-specs/`** with your product definition, and start a fresh
-   ADR register at ADR-001. vxtpl's ADRs are vxtpl's decisions.
-3. **Fill the exemplar zone.** The capability matrix, the model/skill catalog, the
+1. **Fill the exemplar zone.** The capability matrix, the model/skill catalog, the
    product surfaces under `portals/app/app/`, and the role/permission catalog are
    worked examples to replace - not mechanism to preserve. The boundary is in
    `CLAUDE.md` under "Rigid zone / exemplar zone".
-4. **Platform registration** (`docs/50-deployment/10-platform-registration-checklist.md`).
+2. **Platform registration** (`docs/50-deployment/10-platform-registration-checklist.md`).
    Nothing real works until the platform line registers the product, issues the
    OIDC client pair, allocates a host port, and grants Atlas/Runos access.
-5. **GitHub bootstrap** (`docs/50-deployment/20-github-bootstrap-checklist.md`).
+3. **GitHub bootstrap** (`docs/50-deployment/20-github-bootstrap-checklist.md`).
    Apply the branch-protection ruleset **last** - a restrictive ruleset applied
    before the first push blocks that push.
-6. **Get a port allocation and re-point the edge vhost.** Ports come from the org
-   port registry and nowhere else - do not pick one. `configs/edge/<code>.vxture.com.conf`
-   still carries vxtpl's upstream port; set yours there and in `APP_PUBLISH_PORT`
-   (one number, both places), then hand the vhost to the edge operator.
+4. **Apply the allocated port.** Update the deployment defaults and the edge
+   upstream from the port registry before deploying. The generated local
+   default allows an offline run.
+
+Run `pnpm doctor --stage production --env <file> --url <origin>` to check
+configuration and the public runtime. Add `--expect-version <version>` when
+checking a release candidate. Signed-in workspace operations and their real
+receipts complete platform acceptance.
 
 ## Adding a beta tier
 

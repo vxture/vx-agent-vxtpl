@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getOidcConfig } from "../lib/config";
 import { makePkce, randomToken } from "../lib/pkce";
-import { putAuthState } from "../lib/session-store";
+import { AUTH_STATE_TTL, putAuthState } from "../lib/session-store";
+import { authBindingCookieName, sessionCookieOptions } from "../lib/cookie";
 import { safeReturnTo } from "../lib/return-to";
+import { gateFailureHref } from "../../access/destination";
 
 // GET /auth/login (080-rp section 2.3): mint PKCE(S256) + state + nonce, persist
 // the handshake to Redis keyed by state (single-use), and top-level 302 to the
@@ -38,7 +40,15 @@ export async function GET(req: Request): Promise<Response> {
   const { verifier, challenge } = makePkce();
   const state = randomToken();
   const nonce = randomToken();
-  await putAuthState(cfg.clientId, state, { verifier, nonce, returnTo, silent });
+  const browserBinding = randomToken();
+  try {
+    await putAuthState(cfg.clientId, state, { verifier, nonce, returnTo, silent, browserBinding });
+  } catch {
+    return new NextResponse(null, {
+      status: 303,
+      headers: { location: gateFailureHref(returnTo, "unavailable"), "cache-control": "no-store" },
+    });
+  }
 
   const authorize = new URL(cfg.authorizeUrl);
   authorize.searchParams.set("response_type", "code");
@@ -49,5 +59,8 @@ export async function GET(req: Request): Promise<Response> {
   authorize.searchParams.set("nonce", nonce);
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");
-  return NextResponse.redirect(authorize.toString());
+  if (silent) authorize.searchParams.set("prompt", "none");
+  const response = NextResponse.redirect(authorize, { status: 303, headers: { "cache-control": "no-store" } });
+  response.cookies.set(authBindingCookieName(cfg, state), browserBinding, { ...sessionCookieOptions(cfg), maxAge: AUTH_STATE_TTL });
+  return response;
 }

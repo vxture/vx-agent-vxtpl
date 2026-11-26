@@ -1,7 +1,17 @@
 import { redirect } from "next/navigation";
+import { productRoutes } from "../../framework/product-experience";
 
-// The app is one screen (owner decision 2026-08-31): the deck lives at `/`.
-// This route survives only so old links and bookmarks keep landing somewhere.
-export default function ChallengeRedirect(): never {
-  redirect("/");
+export default async function ChallengeRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<never> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item !== undefined) query.append(key, item);
+    }
+  }
+  const search = query.toString();
+  redirect(search ? `${productRoutes.play}?${search}` : productRoutes.play);
 }

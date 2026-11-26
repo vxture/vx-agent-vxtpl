@@ -6,14 +6,14 @@ import "./globals.css";
 export const metadata = {
   title: BRAND.displayName,
   description: `${BRAND.displayName} - a Vxture product`,
+  icons: { icon: "/logo.svg" },
 };
 
 /**
  * The document, and nothing else.
  *
- * The product chrome lives in `(product)/layout.tsx` rather than here, because
- * the gate must not have any: it is a checkpoint, and a nav bar on it offers a
- * visitor links to places the gate has just decided they cannot go.
+ * Route layouts select their own chrome. The public entry and gate use the
+ * public header, and workspace routes use the header with workspace navigation.
  *
  * THEME. The design system's dark mode is driven by a `.dark` class on
  * `<html>`, and it never uses `prefers-color-scheme` - so a stylesheet that

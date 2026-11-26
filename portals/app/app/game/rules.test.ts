@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeEntitlement } from "../entitlement/resolver";
 import { UNLIMITED } from "../entitlement/quota";
+import { canUseFeature, minTierFor } from "../entitlement/capability";
 import {
   FREE_DAILY_RUNS,
   MAX_SCORE_MS,
@@ -18,6 +19,22 @@ import {
   seasonOf,
   utcDayStart,
 } from "./rules";
+
+test("the example ladder enables play, history and board in order and carries them upward", () => {
+  const ladder = {
+    "game:play": "free",
+    "game:unlimited-runs": "starter",
+    "game:history": "starter",
+    "game:leaderboard": "pro",
+    "game:trend": "pro",
+  };
+  for (const [feature, tier] of Object.entries(ladder)) {
+    assert.equal(minTierFor(feature), tier);
+    for (const upper of ["pro", "business", "enterprise"] as const) {
+      assert.equal(canUseFeature(makeEntitlement("ws", "p", { tier: upper }), feature), true);
+    }
+  }
+});
 
 test("free tier gets the product-default daily cap", () => {
   const e = makeEntitlement("ws", "vxtpl", { tier: "free" });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkInternalJob } from "../../../lib/internal-job";
 import { flushUsage } from "../../../usage/lib/flush";
 
 // POST /api/usage/flush: trigger the usage flush job. Gated by INTERNAL_JOB_TOKEN
@@ -7,9 +8,7 @@ import { flushUsage } from "../../../usage/lib/flush";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
-  const expected = process.env.INTERNAL_JOB_TOKEN;
-  const got = req.headers.get("x-internal-job-token");
-  if (!expected || got !== expected) {
+  if (!checkInternalJob(req)) {
     return new NextResponse("forbidden", { status: 403 });
   }
   const summary = await flushUsage();

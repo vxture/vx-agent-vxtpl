@@ -1,0 +1,184 @@
+/**
+ * Product shell and responsive content widths.
+ * @package @vxtpl/app
+ * @layer Presentation
+ * @category Styles
+ * @author AI-Generated
+ * @date 2026-11-25
+ */
+
+/* Shell and header */
+
+.product-framework {
+  --vxtpl-header-height: var(--spacing-header-md, 48px);
+  --vxtpl-header-control: var(--space-control-md, 32px);
+  --vxtpl-page-inset: clamp(20px, calc(6vw - 16px), 48px);
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.product-framework-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  block-size: var(--vxtpl-header-height);
+  flex: none;
+  padding-inline: var(--vxtpl-page-inset);
+  background: var(--card);
+  box-shadow: inset 0 -1px var(--border);
+}
+
+.product-framework-leading,
+.product-framework-nav,
+.product-framework-tools {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  block-size: var(--vxtpl-header-control);
+}
+
+.product-framework-leading { gap: 12px; }
+.product-framework-leading > a { flex: none; }
+.product-framework-leading > a img { inline-size: 24px; block-size: 24px; }
+.product-framework-nav { flex: 1; gap: 24px; overflow-x: auto; white-space: nowrap; }
+.product-framework-nav a { font-size: 14px; font-weight: 500; color: var(--muted-foreground); }
+.product-framework-nav a:hover { color: var(--foreground); }
+.product-framework-nav [aria-current="page"] { color: var(--primary); }
+.product-framework-tools { flex: none; gap: 8px; margin-inline-start: auto; }
+.product-display-controls { align-items: center; }
+.product-platform-link { display: inline-grid; place-items: center; border-radius: 8px; }
+.product-platform-link:hover { background: var(--accent); }
+.product-display-controls .product-display-control,
+.product-framework-tools .product-account-trigger,
+.product-framework-tools .product-assistant-control {
+  inline-size: var(--vxtpl-header-control);
+  block-size: var(--vxtpl-header-control);
+  padding: 0;
+}
+
+.product-framework-tools .product-assistant-control {
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted-foreground), var(--primary) 25%);
+}
+
+.product-assistant-control svg.product-assistant-icon { inline-size: 24px; block-size: 24px; }
+.product-framework-tools .product-assistant-control:is(:hover, .product-assistant-active) {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 17%, transparent);
+}
+
+.product-account-sign-in {
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--vxtpl-header-control);
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.product-framework-leading .product-scope-trigger {
+  max-inline-size: min(28vw, 320px);
+  min-inline-size: 0;
+  block-size: var(--vxtpl-header-control);
+}
+
+.product-scope-label { display: flex; min-inline-size: 0; align-items: center; gap: 6px; font-size: 14px; font-weight: 400; }
+.product-scope-label > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-scope-label > span { color: var(--foreground); }
+.product-scope-label small { font-size: 12px; color: var(--muted-foreground); }
+.product-scope-label small::before { content: "\00b7"; margin-inline-end: 6px; }
+.product-scope-details { display: grid; gap: 12px; }
+.product-scope-details dt { color: var(--muted-foreground); font-size: 12px; }
+.product-scope-details dd { margin: 0; overflow-wrap: anywhere; }
+
+.product-inline-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: top;
+  max-inline-size: 100%;
+  block-size: 1lh;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.product-inline-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 1em;
+  block-size: 1em;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.product-inline-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.product-inline-avatar > span { font-size: 0.65em; line-height: 1; }
+.product-inline-name { overflow: hidden; text-overflow: ellipsis; }
+
+/* Content and legal footer */
+
+.product-framework-content {
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: 1536px;
+  min-inline-size: 0;
+  margin-inline: auto;
+  padding: 32px var(--vxtpl-page-inset) 48px;
+}
+
+.product-framework-content[data-content-width="1920"] { max-inline-size: 1920px; }
+
+.product-framework-footer {
+  padding: 12px var(--vxtpl-page-inset);
+  flex: none;
+}
+
+.product-framework-footer .product-framework-footer-inner { max-inline-size: none; }
+.product-framework > .vx-gate { flex: 1; min-block-size: 0; padding-block: 28px; }
+
+/* Workspace and chat */
+
+.product-workspace-intro { padding-block: 24px 32px; border-block-end: 1px solid var(--border); }
+.product-workspace-intro h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 650; }
+.product-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-start: 16px;
+}
+.product-framework-content .chat-intro { max-inline-size: none; }
+.chat-surface { margin-block-start: 24px; }
+.framework-catalogue { display: grid; gap: 16px; margin-block-start: 24px; }
+.framework-catalogue li { padding-block-end: 16px; border-block-end: 1px solid var(--border); }
+.framework-catalogue a { font-weight: 600; }
+.framework-catalogue p { color: var(--muted-foreground); }
+
+@media (max-width: 900px) {
+  .product-framework-header { gap: 10px; }
+  .product-framework-header[data-variant="workspace"] {
+    position: relative;
+    margin-block-end: var(--vxtpl-header-control);
+  }
+  .product-framework-nav {
+    position: absolute;
+    inset: 100% 0 auto;
+    gap: 16px;
+    padding-inline: var(--vxtpl-page-inset);
+    background: var(--card);
+    box-shadow: inset 0 -1px var(--border);
+  }
+  .product-framework-tools { gap: 4px; }
+}
+
+@media (max-width: 480px) {
+  .product-framework-header { padding-inline: 12px; }
+  .product-framework-leading { gap: 4px; }
+  .product-framework-leading .product-scope-trigger { max-inline-size: 100%; }
+  .product-scope-label small { display: none; }
+}

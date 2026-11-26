@@ -26,7 +26,7 @@
  * Pure Node, zero dependencies.
  */
 
-import { readdirSync, statSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { readdirSync, lstatSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, relative, extname, dirname, basename } from "node:path";
 
 const CODE_RE = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -49,6 +49,14 @@ const SKIP_DIRS = new Set([
   "build",
   "out",
   "coverage",
+  "data",
+  "backup",
+  "private",
+  "runtime",
+  "generated",
+  "logs",
+  "output",
+  ".playwright-cli",
 ]);
 const BINARY_EXT = new Set([
   ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
@@ -91,10 +99,11 @@ if (code === CURRENT) {
 // --- Derivations ------------------------------------------------------------
 const snake = code.replaceAll("-", "_");
 const upper = snake.toUpperCase();
+const hostSlug = publicSlug(code);
 
 const derived = {
   "product code (raw)": code,
-  "OIDC clients": `${code} / ${code}-beta`,
+  "OIDC clients": `${hostSlug} / ${hostSlug}-beta`,
   "compose project/containers": `${code}-app / ${code}-redis / ${code}-db`,
   "image name": `${code}-app`,
   "database name": `vxturebiz_${snake}_prod`,
@@ -105,7 +114,7 @@ const derived = {
   "webhook secret": `${upper}_PROVISION_WEBHOOK_SECRET`,
   "webhook base URL var": `${upper}_WEBHOOK_BASE_URL`,
   "stack root": `/srv/md0/${code}`,
-  "public vhost": `${code}.vxture.com`,
+  "public vhost": `${hostSlug}.vxture.com`,
 };
 
 // The three forms the CURRENT code already appears in. These must be derived,
@@ -115,6 +124,7 @@ const derived = {
 // `vxturebiz_my_prod_prod` inside a repo that thinks it is called `acme`.
 const currentSnake = CURRENT.replaceAll("-", "_");
 const currentUpper = currentSnake.toUpperCase();
+const currentHost = publicSlug(CURRENT);
 /**
  * The CURRENT display name, READ from brand.ts rather than derived from the
  * product code. The two diverge on purpose: a real product carries a real
@@ -143,6 +153,10 @@ function titleCase(value) {
     .join(" ");
 }
 
+function publicSlug(value) {
+  return value.replace(/[-_]+/g, "-").replace(/-$/, "");
+}
+
 /**
  * Ordered longest-match-first: every specific site is consumed before the generic
  * rules see the text, so `vxturebiz_vxtpl_prod` becomes `vxturebiz_my_prod_prod`
@@ -152,11 +166,38 @@ const REPLACEMENTS = [
   [currentUpper, upper],                                  // secret names
   [`vxturebiz_${currentSnake}_`, `vxturebiz_${snake}_`],  // database name
   [`${currentSnake}_svc`, `${snake}_svc`],                // service role
+  [`${currentSnake}_meta`, `${snake}_meta`],              // migration ledger
+  [`${currentSnake}_game`, `${snake}_game`],              // example domain schema
+  [`__${currentSnake}`, `__${snake}`],                    // runtime global keys
+  [`PRODUCT_CODE_SNAKE:-${currentSnake}`, `PRODUCT_CODE_SNAKE:-${snake}`],
+  [`OIDC_CLIENT_ID=${currentHost}`, `OIDC_CLIENT_ID=${hostSlug}`],
+  [`${currentHost}.vxture.com`, `${hostSlug}.vxture.com`], // public hostname
   [`@${CURRENT}`, `@${code}`],                            // npm scope
   [currentTitle, titleCase(code)],                        // BRAND.displayName
   [CURRENT, code],                                        // raw: containers, image, vhost, scope-free prose
   [currentSnake, snake],                                  // any snake site the specific rules did not cover
 ];
+
+const replacementBySource = new Map();
+for (const [from, to] of REPLACEMENTS) {
+  if (!replacementBySource.has(from)) replacementBySource.set(from, to);
+}
+const sourcePattern = new RegExp(
+  [...replacementBySource.keys()]
+    .sort((left, right) => right.length - left.length)
+    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|"),
+  "g",
+);
+
+function rewrite(text) {
+  return text.replace(sourcePattern, (match) => replacementBySource.get(match));
+}
+
+function isLocalFile(name) {
+  return name.startsWith(".env") && name !== ".env.example" ||
+    /\.(?:env|pem|key|crt|p12|pfx|log)$/i.test(name);
+}
 
 function isHistoryPath(rel) {
   return HISTORY_PATHS.some((h) => rel === h || rel.startsWith(`${h}/`));
@@ -165,10 +206,10 @@ function isHistoryPath(rel) {
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    const st = statSync(full);
+    const st = lstatSync(full);
     if (st.isDirectory()) {
       if (!SKIP_DIRS.has(name)) walk(full, out);
-    } else if (st.isFile()) {
+    } else if (st.isFile() && !isLocalFile(name)) {
       out.push(full);
     }
   }
@@ -179,7 +220,7 @@ function walk(dir, out = []) {
 function walkDirs(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (!statSync(full).isDirectory()) continue;
+    if (!lstatSync(full).isDirectory()) continue;
     if (SKIP_DIRS.has(name)) continue;
     walkDirs(full, out);
     out.push(full);
@@ -205,8 +246,7 @@ for (const file of walk(".")) {
     skippedHistory.push(rel);
     continue;
   }
-  let next = text;
-  for (const [from, to] of REPLACEMENTS) next = next.replaceAll(from, to);
+  const next = rewrite(text);
   if (next !== text) {
     changed.push(rel);
     if (!dryRun) writeFileSync(file, next);
@@ -222,8 +262,7 @@ function renamePath(full) {
   if (!REPLACEMENTS.some(([from]) => name.includes(from))) return;
   const rel = relative(".", full).replaceAll("\\", "/");
   if (isHistoryPath(rel)) return;
-  let nextName = name;
-  for (const [from, to] of REPLACEMENTS) nextName = nextName.replaceAll(from, to);
+  const nextName = rewrite(name);
   if (nextName === name) return;
   const target = join(dirname(full), nextName);
   renamed.push(`${rel} -> ${relative(".", target).replaceAll("\\", "/")}`);
@@ -251,7 +290,7 @@ if (skippedHistory.length) {
   for (const s of skippedHistory) console.log(`  ${s}`);
 }
 
-console.log(`
+if (!process.env.VX_PRODUCT_GENERATOR) console.log(`
 [rename] Not done yet. This script only renames; the following are yours:
 
   1. Delete or archive vxtpl's history listed above - liaison correspondence,

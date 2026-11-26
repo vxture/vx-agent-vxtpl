@@ -1,8 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getEntitlementResolver } from "../../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../../entitlement/capability";
-import { isCallerError, resolveGameCaller } from "../../../game/api-caller";
+import { isCallerError, resolveGameEntitledCaller } from "../../../game/api-caller";
 import { getGameStore } from "../../../game/store";
 import {
   RUNS_METRIC,
@@ -20,10 +19,10 @@ import { recordUsage } from "../../../usage/lib/buffer";
 export const dynamic = "force-dynamic";
 
 export async function POST(): Promise<Response> {
-  const caller = await resolveGameCaller();
+  const caller = await resolveGameEntitledCaller();
   if (isCallerError(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
+  const { entitlement } = caller;
   if (!canUseFeature(entitlement, "game:play")) {
     return NextResponse.json(
       { error: "no active subscription covers the challenge", cta: true },

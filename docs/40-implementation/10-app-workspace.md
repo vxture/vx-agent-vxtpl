@@ -33,7 +33,8 @@ pnpm dev                     # http://localhost:4000
 
 An empty `.env` works: entitlement and chat fall back to mock resolvers, and
 `/api/chat` resolves against a local dev workspace rather than demanding a
-session, so every page is explorable with no credentials. `MOCK_TIER` /
+session, so every page is explorable with no credentials. Set `MOCK_TIER=free`
+to send a mock chat turn, or `MOCK_TIER=pro` to exercise work history. `MOCK_TIER` /
 `MOCK_STATUS` / `MOCK_BUNDLED` drive the mock entitlement resolver to any
 tier x status combination, which is how the gating logic gets exercised without a
 platform.
@@ -55,7 +56,105 @@ pnpm lint:docs-numbering
 pnpm lint:data-design
 ```
 
+## Product session lifecycle
+
+The OIDC callback consumes one Redis state record after checking the binding
+cookie created by the initiating browser. Redis arbitrates refreshes across
+instances. A refresh can update only the live record it rotated. Logout
+deletes the record atomically and a short-lived sid marker prevents a callback
+already in flight from recreating it.
+
+On `POST /auth/backchannel-logout`, Vxtpl verifies the registered client's
+standard OIDC logout token. It acknowledges the delivery after Redis applies
+the revocation. A storage failure returns a retryable response. Repeat
+deliveries are safe and act on the same central sid.
+
+`GET /auth/events` is a same-origin SSE stream for a live RP cookie. Each
+browser tab shares the stream across session consumers. Redis publication
+tells open pages when their RP session ends. A transport reconnect rechecks
+the session store. Chat opens its recovery overlay and retains the draft.
+Ordinary work pages and Emberstorm return to the gate.
+
+## Product access and provisioning
+
+The web gate, chat, game APIs and recent work read the current platform seat
+for the verified account and workspace before returning protected data or
+running an operation. Subscription and feature checks remain independent.
+A current denial and a temporarily unavailable platform decision have distinct
+UI and API responses.
+
+The canonical webhook validates the signed payload and applies the delivery,
+workspace state and ordering watermark in one transaction. Unversioned notices
+do not advance the watermark. A ready response to the platform uses a product
+service ticket bound to that workspace. Its receipt is recorded per workspace
+and sequence after the platform confirms it.
+
+The Node runtime starts provisioning reconciliation in configured deployments.
+It uses the product-scoped provisioning-read ticket to walk the platform list
+at startup and every 15 minutes after a round. It applies newer states and
+retries missing ready acknowledgements. Pending or absent rows leave local
+state in place. Operations can also invoke the internal reconciliation route
+with the shared internal job token already used by the usage flush route.
+
+## Platform integration acceptance
+
+Open `/platform-check` from the workspace home. The first action reads the
+Accounts issuer and keys, the verified workspace session, the OBO exchange,
+current product access, the first roster page, entitlements, the provisioned
+instance state, the Atlas endpoint grant and the Runos capability catalog.
+The roster row displays a count for the first page. Each row requires evidence
+from its own source.
+
+Configure a dedicated workspace and operator using
+`PLATFORM_DEMO_WORKSPACE_ID` and `PLATFORM_DEMO_SUBJECT`. For Runos, set
+`PLATFORM_DEMO_RUNOS_CAPABILITY_ID` to the approved read operation's capability.
+The operator signs in using the registered confidential client and an active
+product seat. The server confirms the current seat before each action.
+
+1. Run the C3 usage replay. Keep the returned original event ID as the receipt.
+   The same UTC-day workspace key is sent twice through the worker's
+   workspace-bound product service client.
+2. Run Atlas inference and Runos invocation. Each sends fixed sample content
+   in one attempt per UTC day. Keep the Atlas request ID and Runos call ID.
+   Runos also confirms receipt of the outcome report.
+3. Trigger provisioning through the platform and recheck the workspace's stored
+   state. Confirm logout by keeping the demo open and signing out of another
+   product under the same Accounts session. The demo returns to the gate.
+
+Record the tested environment, build, workspace, time and receipts in the
+[batch tracker](../70-workplan/10-template-foundation-batches.md).
+Use the [integration general rules](https://claude.ai/code/artifact/20e37039-ea59-4c5d-9fab-ba3ca3ad54f0)
+and [product integration example](https://claude.ai/code/artifact/f0bd83c7-6296-4200-a7d8-108b7755f584)
+for the platform interface contract.
+
+## Entitlement and usage runtime
+
+Interactive C2 reads use an OBO ticket from the verified current session. A
+workspace without subscription coverage can return an empty entitlement and
+show the subscribe action. A failed exchange, invalid response, or unavailable
+platform blocks protected operations with a temporary-unavailability response.
+Product seat checks use the live platform decision.
+
+Vxtpl shares C2 snapshots in Redis for up to 45 seconds. Open and close events,
+subscription notifications, reconciled versions and confirmed usage receipts
+evict the workspace snapshot. The Redis write checks the marker captured before
+the platform request so a delayed response cannot restore an evicted snapshot.
+When Redis is unavailable, C2 reads the platform directly.
+
+The internal job calls `POST /api/usage/flush` with its job token. The worker
+uses the configured OIDC client to exchange a platform service ticket for each
+workspace and sends the original amount, end-user attribution and idempotency
+key. A valid 200 receipt with `event_id` and completed cache eviction clears
+the local row. Unconfirmed rows keep their original keys for replay.
+
 ## How a chat turn flows
+
+The catalogue response carries a workspace scope fingerprint derived from the
+verified account and workspace. Both chat surfaces send it with each turn. The
+API verifies the live session and compares the expected scope before inference
+or usage recording. A recovery check for the same scope restores the mounted
+conversation. A different scope starts clean. Recovery only reads the catalogue,
+and the user chooses whether to send the previous draft.
 
 `/chat` is the surface worth reading first, because one user action exercises the
 whole integration chain:
@@ -65,7 +164,7 @@ whole integration chain:
    turn: the workspace is what entitlement is scoped to, what the S2S token is
    minted against, and what Atlas attributes the call to.
 2. **Entitlement** - `entitlement/resolver.ts` resolves the workspace's tier via
-   C2 (45s cache, invalidated by C3, stale-on-error, fail-closed).
+   C2 with the current OBO ticket and the shared 45-second cache.
 3. **Gate** - `entitlement/capability.ts` checks the selected model and skill
    against `CAPABILITY_MATRIX`. This happens before anything is spent: an
    ungated selection is a 403 with no token minted and no capability invoked.
@@ -79,7 +178,11 @@ whole integration chain:
    per-caller and changes without vxtpl redeploying. A skill that cannot run
    degrades the turn instead of failing it.
 6. **Inference** - `chat/atlas-client.ts` posts to Atlas `/v1/chat`, threading
-   any skill result into the prompt.
+   any skill result into the prompt. Chat and the assistant share the same
+   error response. Atlas capacity limits return 429 with the retry delay when
+   provided. Upstream account refusal returns 503 with a temporary-unavailability
+   message and no provider account details. A failed turn leaves the draft in
+   place. A new request requires an explicit send.
 7. **Metering** - `usage/lib/buffer.ts` records one `vxtpl.chat.messages` event.
    Deliberately not token counts: Atlas meters model tokens itself under
    `atlas.chat`, so reporting them here would double-count. A metering failure
@@ -121,7 +224,7 @@ a required check that never flakes.
 The suite is not uniform coverage; it is weighted to the places where being wrong
 is expensive: the OIDC claim bug-guards (`auth/lib/claims.test.ts` encodes two
 confirmed platform integration bugs so they cannot come back), webhook signature
-verification and rotation, flush 409-terminal semantics, and the status page's
+verification and rotation, usage receipt verification and replay, and the status page's
 no-secret-leak invariant.
 
 The three client test files (`lib/s2s-token.test.ts`, `chat/atlas-client.test.ts`,

@@ -57,6 +57,11 @@ export function isWorkspaceOwner(roles: readonly string[]): boolean {
 // (resolved from the product's own DB by (active_workspace, sub)).
 export interface AccessClaims {
   sub: string;
+  name?: string;
+  nickname?: string;
+  preferred_username?: string;
+  picture?: string;
+  email?: string;
   active_org?: string;
   active_org_type?: string;
   active_org_name?: string;
@@ -79,11 +84,8 @@ export interface AuthUser {
   isWorkspaceOwner: boolean;
 }
 
-// Display-only profile claims from the id_token ("openid profile email" is
-// in OIDC_SCOPES). The id_token's signature and nonce were verified at the
-// callback; here the payload is only RE-READ for profile fields, so a decode
-// without an exp check is correct - the short-lived id_token expiring
-// mid-session must not blank the user's name. Never used for authorization.
+// Display-only profile. The current platform supplies these fields in the
+// verified access token.
 export interface IdProfile {
   displayName: string | null;
   picture: string | null;

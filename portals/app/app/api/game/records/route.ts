@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getEntitlementResolver } from "../../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../../entitlement/capability";
-import { isCallerError, resolveGameCaller } from "../../../game/api-caller";
+import { isCallerError, resolveGameEntitledCaller } from "../../../game/api-caller";
 import { getGameStore, type GameRunRow } from "../../../game/store";
 import { TOP_PIN_COUNT, dailyTrend, historyWindowFor, seasonOf } from "../../../game/rules";
 
@@ -28,10 +27,10 @@ function runJson(r: GameRunRow) {
 }
 
 export async function GET(): Promise<Response> {
-  const caller = await resolveGameCaller();
+  const caller = await resolveGameEntitledCaller();
   if (isCallerError(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
+  const { entitlement } = caller;
   const window = historyWindowFor(entitlement);
 
   if (window.kind === "none") {

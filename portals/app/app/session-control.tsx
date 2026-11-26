@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { contactLineFor, displayNameFor, workspaceLabelFor } from "./auth/lib/display";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useSessionRevocation } from "./auth/session-events-client";
+import { gateLoginHref } from "./access/destination";
+import { displayNameFor, workspaceLabelFor, type DisplayIdentity } from "./auth/lib/display";
+import { Button, Popover, PopoverTrigger, ShellPanelContent, ShellScopeButton, ShellUserMenu } from "./ds";
 
 // The nav's sign-in / sign-out control.
 //
@@ -12,48 +16,84 @@ import { contactLineFor, displayNameFor, workspaceLabelFor } from "./auth/lib/di
 // Sign-out is a POST form, not a link, so it cannot be triggered by a prefetch
 // or a crawler following hrefs.
 
-interface SessionUser {
-  sub?: string;
-  email?: string | null;
-  displayName?: string | null;
-  activeWorkspace?: string;
-  activeWorkspaceName?: string | null;
+type ProductSessionState = { authenticated: boolean; user?: DisplayIdentity };
+const SessionContext = createContext<ProductSessionState | null>(null);
+
+export function ProductSession({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<ProductSessionState | null>(null);
+  useSessionRevocation(state?.authenticated === true, () => setState({ authenticated: false }));
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/auth/session", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<ProductSessionState> : null)
+      .then((next) => { if (!controller.signal.aborted) setState(next); })
+      .catch(() => {
+        if (!controller.signal.aborted) setState(null);
+      });
+    return () => controller.abort();
+  }, []);
+  return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
+}
+
+export function SessionScope() {
+  const state = useContext(SessionContext);
+  const organization = state?.user?.activeOrgName?.trim();
+  const workspace = workspaceLabelFor(state?.user);
+  if (!state?.authenticated || (!organization && !workspace)) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <ShellScopeButton
+          label={<span className="product-scope-label"><span>{organization || workspace}</span>{organization && workspace && <small>{workspace}</small>}</span>}
+          ariaLabel={[organization, workspace].filter(Boolean).join(" / ")}
+          className="product-scope-trigger"
+        />
+      </PopoverTrigger>
+      <ShellPanelContent align="start" aria-label="Current organization and workspace">
+        <dl className="product-scope-details">
+          {organization && <div><dt>Organization</dt><dd>{organization}</dd></div>}
+          {workspace && <div><dt>Workspace</dt><dd>{workspace}</dd></div>}
+        </dl>
+      </ShellPanelContent>
+    </Popover>
+  );
 }
 
 export function SessionControl() {
-  const [state, setState] = useState<{ authenticated: boolean; user?: SessionUser } | null>(null);
+  const state = useContext(SessionContext);
+  const pathname = usePathname();
   const [returnTo, setReturnTo] = useState("/");
-
   useEffect(() => {
     setReturnTo(window.location.pathname + window.location.search);
-    fetch("/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then(setState)
-      .catch(() => setState({ authenticated: false }));
-  }, []);
+  }, [pathname]);
 
-  if (!state) return <span className="nav-session" aria-hidden="true" />;
+  if (!state) return null;
 
   if (!state.authenticated) {
     return (
-      <a className="nav-session" href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
+      <a className="product-account-sign-in" href={gateLoginHref(returnTo)}>
         Sign in
       </a>
     );
   }
 
-  // Name, else email local part, else a neutral word - never the sub, and the
-  // workspace shows only if the token named it (owner rule 2026-09-02: ids are
-  // internal keys, so an unnamed workspace gets no tooltip rather than a uuid).
-  const who = displayNameFor(state.user, "Signed in");
   const workspace = workspaceLabelFor(state.user);
-  const title = [contactLineFor(state.user), workspace && `workspace ${workspace}`]
-    .filter(Boolean)
-    .join(" - ");
   return (
-    <form method="post" action="/auth/logout" className="nav-session">
-      <span title={title || undefined}>{who}</span>
-      <button type="submit">Sign out</button>
-    </form>
+    <ShellUserMenu
+      user={{
+        displayName: displayNameFor(state.user, "Signed in"),
+        avatarSrc: state.user?.picture || undefined,
+        meta: workspace || undefined,
+      }}
+      openLabel="Account menu"
+      online={false}
+      triggerClassName="product-account-trigger"
+      extras={
+        <form method="post" action="/auth/logout">
+          <Button type="submit" variant="ghost">Sign out</Button>
+        </form>
+      }
+    />
   );
 }

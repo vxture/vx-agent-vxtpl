@@ -61,6 +61,7 @@ export interface RunSkillOptions {
   taskId: string;
   identity: CallToolOptions["identity"];
   sessionId?: string;
+  readOnlyCapabilityId?: string;
 }
 
 export async function runSkill(
@@ -91,7 +92,9 @@ export async function runSkill(
     if (!found.ok) {
       return { ...base, status: "unavailable", detail: describeFailure(found.failure) };
     }
-    const capability = pickCapability(found.data.capabilities);
+    const capability = opts.readOnlyCapabilityId
+      ? found.data.capabilities.find((entry) => entry.capability_id === opts.readOnlyCapabilityId)
+      : pickCapability(found.data.capabilities);
     if (!capability) {
       return {
         ...base,
@@ -109,7 +112,9 @@ export async function runSkill(
         detail: describeFailure(resolved.failure),
       };
     }
-    const operation = resolved.data.contract?.operations?.[0];
+    const operation = opts.readOnlyCapabilityId
+      ? resolved.data.contract?.operations?.find((entry) => entry.riskLevel === "read")
+      : resolved.data.contract?.operations?.[0];
     if (!operation) {
       return {
         ...base,
@@ -146,12 +151,16 @@ export async function runSkill(
           callId: invoked.failure.call_id,
         };
 
-    // Fire-and-forget: a failed outcome report must not fail the user's turn.
-    void runosReportOutcome(cfg, invoked.ok ? "success" : "failure", {
+    const report = runosReportOutcome(cfg, invoked.ok ? "success" : "failure", {
       ...call,
       capabilitiesUsed: [capability.capability_id],
     }).catch(() => undefined);
-
+    if (opts.readOnlyCapabilityId && invoked.ok) {
+      const acknowledgement = await report;
+      if (!acknowledgement?.ok || acknowledgement.data?.acknowledged !== true) {
+        return { ...outcome, status: "failed", detail: "Outcome acknowledgement is unavailable" };
+      }
+    }
     return outcome;
   } catch (err) {
     // A transport/auth failure (401, 406, timeout) - the capability plane is

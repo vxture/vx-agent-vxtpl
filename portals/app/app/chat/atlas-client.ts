@@ -67,6 +67,7 @@ export interface AtlasErrorEnvelope extends Omit<PlatformErrorBody, "retryable">
 const ATLAS_RETRYABLE: Record<string, boolean> = {
   RATE_LIMITED: true,
   PROVIDER_UNAVAILABLE: true,
+  UPSTREAM_ACCOUNT_REFUSED: false,
   MODEL_RUNTIME_STREAM_FAILED: true,
   UPSTREAM_FRAME_UNPARSEABLE: true,
   MODEL_NOT_IMPLEMENTED: false,
@@ -103,7 +104,8 @@ export class AtlasError extends Error {
 
   /** How long the callee asked us to wait, when it said. */
   get retryAfterMs(): number | undefined {
-    return this.envelope.retryAfterMs;
+    const delay = this.envelope.retryAfterMs;
+    return typeof delay === "number" && Number.isSafeInteger(delay) && delay >= 0 ? delay : undefined;
   }
 }
 

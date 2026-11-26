@@ -8,6 +8,11 @@ Batch rows below are dated records of what was built and accepted. They are
 vxtpl's history: a repo copied from vxtpl deletes this tracker and starts its own
 rather than inheriting one.
 
+## App template foundation
+
+[Template foundation batches](10-template-foundation-batches.md) tracks the
+HTML 1.12 implementation and acceptance.
+
 ## Batch 1 (governance shell) - runbook batches A-D
 
 | Batch | Scope | Acceptance | State |

@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeUrl } from "../entitlement/deeplink";
 import { formatScoreMs } from "../game/rules";
-import { BRAND } from "@vxtpl/shared/brand";
+import { productRoutes } from "../framework/product-experience";
+import { SessionExit } from "../access/session-exit";
 import { GameView, type GameFinish } from "./deck/game-view";
 import { AvatarBadge, BoardModule, RecordsModule } from "./deck/panels";
+import "./deck/deck.css";
 
-// THE app: one fullscreen command deck at `/` (owner decision 2026-08-31 -
-// single interface). Reference style: the amber-on-charcoal data-viz
-// dashboard, and its smart-street sibling for the collapse pattern.
+// Emberstorm owns the fullscreen surface. Workspace routes use shared chrome.
 //
 // The collapse pattern, per the owner's re-review: the KEY information never
 // folds. The topbar always carries the two live numbers on the left and the
@@ -270,6 +270,7 @@ export default function DeckPage() {
 
   return (
     <div ref={deckRef} className="deck">
+      <SessionExit />
       <div className="deck__field" aria-hidden />
 
       {/* Topbar: the information that NEVER folds. Left, the two live
@@ -312,7 +313,7 @@ export default function DeckPage() {
         </div>
 
         <div className="deck-title">
-          <div className="deck-title__text">{BRAND.displayName}</div>
+          <div className="deck-title__text">Emberstorm</div>
           <div className="deck-title__sub">
             THE 20-SECOND CHALLENGE
             {signedIn ? ` / ${ctx ? tierLabel(ctx.tier) : "SYNCING"}` : ""}
@@ -382,9 +383,10 @@ export default function DeckPage() {
                 <p className="deck-dialog__body">
                   Runs, quota and records belong to your workspace, so the challenge needs you signed in.
                 </p>
-                <a className="deck-btn deck-btn-solid" href="/auth/login?returnTo=/">
+                <a className="deck-btn deck-btn-solid" href={`/auth/login?returnTo=${productRoutes.play}`}>
                   SIGN IN
                 </a>
+                <a className="deck-btn deck-btn-quiet" href={productRoutes.home}>WORKSPACE HOME</a>
               </div>
             )}
 
@@ -396,7 +398,7 @@ export default function DeckPage() {
                 </p>
                 <a
                   className="deck-btn deck-btn-solid"
-                  href={subscribeUrl({ intent: ctx.cta === "renew" || ctx.cta === "pay" ? "renew" : "upgrade" })}
+                  href={subscribeUrl()}
                 >
                   {ctx.cta === "pay" ? "FIX PAYMENT" : ctx.cta === "renew" ? "RENEW" : "SUBSCRIBE"}
                 </a>
@@ -420,7 +422,7 @@ export default function DeckPage() {
                     </p>
                     <a
                       className="deck-btn deck-btn-solid"
-                      href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}
+                      href={subscribeUrl()}
                     >
                       MOVE TO STARTER
                     </a>
@@ -455,7 +457,7 @@ export default function DeckPage() {
                   {quotaExhausted ? (
                     <a
                       className="deck-btn deck-btn-solid"
-                      href={subscribeUrl({ intent: "upgrade", targetTier: "starter" })}
+                      href={subscribeUrl()}
                     >
                       OUT OF RUNS - MOVE TO STARTER
                     </a>

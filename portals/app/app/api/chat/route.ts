@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getOidcConfig } from "../../auth/lib/config";
-import { getAuthContext } from "../../auth/lib/session";
-import { getEntitlementResolver } from "../../entitlement/resolver";
+import { readWorkspaceSession } from "../../auth/lib/workspace-session";
+import { hasWorkspaceSeat } from "../../entitlement/workspace-authority";
+import { readWorkspaceEntitlement } from "../../entitlement/resolver";
 import { canUseFeature } from "../../entitlement/capability";
+import { AtlasError } from "../../chat/atlas-client";
 import { findModel, findSkill, gatedModels, gatedSkills } from "../../chat/catalog";
 import { getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
-import { isDeployedStage } from "../../lib/deploy-stage";
+import { CHAT_SCOPE_HEADER } from "../../chat/types";
+import { hasProductAccess } from "../../entitlement/types";
 import { CHAT_TURNS_PER_MINUTE, allowChatTurn } from "../../chat/rate-limit";
 
 // GET/POST /api/chat - the tier-gated chat turn.
@@ -22,84 +23,96 @@ export const dynamic = "force-dynamic";
 
 const USAGE_METRIC = "vxtpl.chat.messages";
 
-/**
- * Stand-in workspace for local development with no IdP.
- *
- * This is NOT the old DEMO_WORKSPACE_ID by another name. That one applied on
- * every stack including production, so the deployed app resolved entitlement for
- * a workspace nobody owned. This path is unreachable once DEPLOY_STAGE is
- * production or beta, which the image always sets - so it can only ever engage
- * on a developer's machine, where the entitlement and chat resolvers are mocks
- * anyway.
- */
-const DEV_WORKSPACE_ID = "ws_local_dev";
-
 interface Caller {
+  session: Extract<Awaited<ReturnType<typeof readWorkspaceSession>>, { status: "ready" | "development" }>;
   workspaceId: string;
-  sub?: string; // end-user attribution for the usage record
+  scopeKey: string;
+  sub?: string;
   identity: ChatIdentity;
 }
 
-/** Resolve the caller, or the response body explaining why there isn't one. */
-async function resolveCaller(): Promise<Caller | { error: string; status: number }> {
-  const cfg = getOidcConfig();
-  if (!cfg.enabled) {
-    if (isDeployedStage()) {
-      return { error: "sign-in is not configured on this deployment (OIDC_RP_ENABLED is off)", status: 503 };
+function accessError(status: number, code: string, error: string): NextResponse {
+  return NextResponse.json({ code, error }, { status, headers: { "cache-control": "no-store" } });
+}
+
+function atlasChatError(failure: AtlasError): NextResponse {
+  const { code } = failure.envelope;
+  const retryable = failure.retryable;
+  const headers = new Headers({ "cache-control": "no-store" });
+  if (code === "RATE_LIMITED") {
+    const retryAfterMs = retryable ? failure.retryAfterMs : undefined;
+    let error = retryable ? "The model is busy. Try again shortly." : "The model is currently rate limited.";
+    if (retryAfterMs !== undefined) {
+      const seconds = Math.ceil(retryAfterMs / 1000);
+      headers.set("retry-after", String(seconds));
+      error = `The model is busy. Try again in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`;
     }
+    return NextResponse.json({ code, error, retryable, retryAfterMs }, { status: 429, headers });
+  }
+  const accountRefused = code === "UPSTREAM_ACCOUNT_REFUSED";
+  const error = accountRefused ? "The model is temporarily unavailable." : failure.message;
+  return NextResponse.json({ code, error, retryable }, { status: accountRefused ? 503 : 502, headers });
+}
+
+/* Keep transport failures distinct from a confirmed session decision. */
+async function resolveCaller(): Promise<Caller | NextResponse> {
+  const session = await readWorkspaceSession();
+  if (session.status === "development") {
     return {
-      workspaceId: DEV_WORKSPACE_ID,
-      identity: { workspaceId: DEV_WORKSPACE_ID, mint: { workspaceId: DEV_WORKSPACE_ID } },
+      session,
+      workspaceId: session.workspaceId,
+      scopeKey: session.scopeKey,
+      identity: { workspaceId: session.workspaceId, mint: { workspaceId: session.workspaceId } },
     };
   }
-  const jar = await cookies();
-  const rpsid = jar.get(cfg.cookieName)?.value;
-  const ctx = rpsid ? await getAuthContext(cfg, rpsid).catch(() => null) : null;
-  if (!ctx) return { error: "not signed in", status: 401 };
-  // A suspended or closed account is treated as no session at all (080-rp
-  // section 2.6), the same rule /auth/session applies. Without this a suspended
-  // user keeps a valid cookie and would go on spending Atlas tokens and
-  // invoking Runos capabilities.
-  if (ctx.user.accountStatus && ctx.user.accountStatus !== "active") {
-    return { error: "account is not active", status: 403 };
-  }
-  if (!ctx.user.activeWorkspace) {
-    return { error: "this session has no active workspace", status: 403 };
+  switch (session.status) {
+    case "anonymous": return accessError(401, "SESSION_REQUIRED", "Sign in to access chat.");
+    case "unavailable": return accessError(503, "SESSION_UNAVAILABLE", "The session could not be checked.");
+    case "unconfigured": return accessError(503, "SESSION_UNCONFIGURED", "Sign-in is unavailable in this environment.");
+    case "inactive-account": return accessError(403, "ACCOUNT_INACTIVE", "The account is unavailable.");
+    case "no-workspace": return accessError(403, "WORKSPACE_REQUIRED", "Select a workspace before using chat.");
   }
   return {
-    workspaceId: ctx.user.activeWorkspace,
-    sub: ctx.user.sub,
+    session,
+    workspaceId: session.workspaceId,
+    scopeKey: session.scopeKey,
+    sub: session.sub,
     identity: {
-      workspaceId: ctx.user.activeWorkspace,
-      // On-behalf-of: the platform reads workspace and subject from this token
-      // rather than trusting anything vxtpl declares. Runos additionally
-      // REQUIRES the `sub` that only an OBO token carries.
-      mint: { subjectToken: ctx.accessToken },
-      sessionId: rpsid,
+      workspaceId: session.workspaceId,
+      mint: { subjectToken: session.accessToken },
+      sessionId: session.sessionId,
     },
   };
 }
 
-function isFailure(v: Caller | { error: string; status: number }): v is { error: string; status: number } {
-  return "error" in v;
-}
-
 export async function GET(): Promise<Response> {
   const caller = await resolveCaller();
-  if (isFailure(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
+  if (caller instanceof NextResponse) return caller;
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
-  return NextResponse.json({
-    tier: entitlement.tier,
-    productAccess: entitlement.tier != null,
-    models: gatedModels(entitlement),
-    skills: gatedSkills(entitlement),
-  });
+  try {
+    const entitlement = await readWorkspaceEntitlement(caller.session);
+    if (hasProductAccess(entitlement) && !await hasWorkspaceSeat(caller.session)) {
+      return accessError(403, "PRODUCT_SEAT_REQUIRED", "Product access is not assigned.");
+    }
+    return NextResponse.json({
+      scopeKey: caller.scopeKey,
+      tier: entitlement.tier,
+      productAccess: hasProductAccess(entitlement),
+      models: gatedModels(entitlement),
+      skills: gatedSkills(entitlement),
+    }, { headers: { "cache-control": "no-store" } });
+  } catch {
+    return accessError(503, "WORKSPACE_ACCESS_UNAVAILABLE", "Workspace access could not be checked.");
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
   const caller = await resolveCaller();
-  if (isFailure(caller)) return NextResponse.json({ error: caller.error }, { status: caller.status });
+  if (caller instanceof NextResponse) return caller;
+  const expectedScope = req.headers.get(CHAT_SCOPE_HEADER);
+  if (expectedScope !== null && expectedScope !== caller.scopeKey) {
+    return accessError(409, "WORKSPACE_CHANGED", "Account or workspace changed.");
+  }
 
   // Debug-surface throttle (owner decision 2026-09-01): chat verifies the
   // S2S chain, it is not a product feature - and every turn spends Atlas
@@ -133,10 +146,20 @@ export async function POST(req: Request): Promise<Response> {
   const modelCode = typeof raw?.modelCode === "string" ? raw.modelCode : undefined;
   const skillCode = typeof raw?.skillCode === "string" ? raw.skillCode : undefined;
 
-  const entitlement = await getEntitlementResolver().resolve(caller.workspaceId);
+  let entitlement;
+  try {
+    entitlement = await readWorkspaceEntitlement(caller.session);
+    if (hasProductAccess(entitlement) && !await hasWorkspaceSeat(caller.session)) {
+      return accessError(403, "PRODUCT_SEAT_REQUIRED", "Product access is not assigned.");
+    }
+  } catch {
+    return accessError(503, "WORKSPACE_ACCESS_UNAVAILABLE", "Workspace access could not be checked.");
+  }
+  if (!hasProductAccess(entitlement)) {
+    return accessError(403, "WORKSPACE_ACCESS_REQUIRED", "This workspace cannot use chat.");
+  }
 
-  // Gate before anything is spent: no S2S token is minted and no capability is
-  // invoked for a selection the tier does not cover.
+  // Check feature entitlement before calling any metered service.
   if (modelCode !== undefined) {
     const model = findModel(modelCode);
     if (!model) return NextResponse.json({ error: `unknown model '${modelCode}'` }, { status: 400 });
@@ -162,6 +185,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     reply = await getChatResolver().reply(messages, caller.identity, { modelCode, skillCode });
   } catch (err) {
+    if (err instanceof AtlasError) return atlasChatError(err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "chat resolver failed" }, { status: 502 });
   }
 

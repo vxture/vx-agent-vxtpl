@@ -70,7 +70,7 @@ export class PrismaGameStore implements GameStore {
   async recentFinished(
     workspaceId: string,
     sub: string,
-    opts: { limit?: number; since?: Date },
+    opts: { limit?: number; offset?: number; since?: Date },
   ): Promise<GameRunRow[]> {
     const p = await getPrismaClient();
     // finished_at is THE season anchor (see the port doc in store.ts).
@@ -81,8 +81,9 @@ export class PrismaGameStore implements GameStore {
         status: "finished",
         finishedAt: opts.since ? { gte: opts.since } : { not: null },
       },
-      orderBy: { finishedAt: "desc" },
+      orderBy: [{ finishedAt: "desc" }, { id: "desc" }],
       ...(opts.limit !== undefined ? { take: opts.limit } : {}),
+      ...(opts.offset ? { skip: opts.offset } : {}),
     });
     return rows.map(toRow);
   }
