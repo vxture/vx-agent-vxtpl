@@ -17,6 +17,7 @@ import { AssistantPanel } from "./assistant-panel";
 import { useAssistantConversations } from "./assistant-conversations";
 import { ChatVerification } from "./chat-verification";
 import { readChatHistory, saveChatTurn, type SavedTurn } from "./chat-history";
+import { handleChatComposerKey, isChatEscapeKey } from "./chat-keyboard";
 import { ChatRequestError, requestChatTurn, type ChatContext } from "./client";
 import { DOCUMENT_CONVERSION_SKILL, MAX_HISTORY_MESSAGES, MAX_MESSAGE_LENGTH, WEB_SEARCH_SKILL, type ChatMessage, type ChatTarget, type TurnVerification } from "./types";
 import { ChatWorkspaceAccess } from "./workspace-access";
@@ -76,6 +77,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const logRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const receiptRef = useRef<HTMLElement>(null);
+  const receiptTriggerRef = useRef<HTMLButtonElement>(null);
   const sending = useRef(false);
 
   const scopeKey = ctx?.productAccess ? ctx.scopeKey : undefined;
@@ -100,6 +102,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const converting = skill?.code === DOCUMENT_CONVERSION_SKILL;
   const sample = converting ? HTML_EXAMPLE : useRunos ? null : CHAT_EXAMPLE;
   const canSend = !blocked && Boolean(scopedHistory && atlasTarget) && (!useRunos || Boolean(skill));
+  const canSubmit = canSend && !busy && Boolean(input.trim());
   const assistant = useAssistantConversations(blocked ? undefined : defaultRoute?.code, ctx?.scopeKey, onAccessFailure);
 
   useEffect(() => {
@@ -118,10 +121,17 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
     if (log) log.scrollTop = log.scrollHeight;
   }, [turns, busy]);
 
-  function inspectReceipt(id: string) {
+  function inspectReceipt(id: string, trigger: HTMLButtonElement) {
+    receiptTriggerRef.current = trigger;
     setSelectedReceiptId(id);
     receiptRef.current?.focus({ preventScroll: true });
     receiptRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
+  function returnFromReceipt() {
+    const trigger = receiptTriggerRef.current;
+    if (trigger?.isConnected) trigger.focus();
+    else composerRef.current?.focus();
   }
 
   async function rememberTurn(scopeKey: string, turn: SavedTurn) {
@@ -298,7 +308,12 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                 </div>
               </div>
 
-              <div ref={logRef} className="chat-log" role="log" aria-label={"\u5bf9\u8bdd\u6d88\u606f"} tabIndex={0}>
+              <div ref={logRef} className="chat-log" role="log" aria-label={"\u5bf9\u8bdd\u6d88\u606f"}
+                aria-keyshortcuts="Escape" tabIndex={0} onKeyDown={(event) => {
+                  if (!isChatEscapeKey(event) || blocked) return;
+                  event.preventDefault();
+                  composerRef.current?.focus();
+                }}>
                 {turns.length === 0 && !busy && (
                   <div className="chat-empty">
                     <span className="chat-empty-icon"><Icon name={converting ? "file-text" : "chat-circle"} size="lg" aria-hidden="true" /></span>
@@ -313,7 +328,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                       {turn.state === "received"
                         ? <p className="chat-message" data-role="assistant">{turn.reply.message.content}</p>
                         : <p className="chat-entry-error">{turn.message}</p>}
-                      <Button type="button" variant="ghost" size="sm" onClick={() => inspectReceipt(turn.id)}
+                      <Button type="button" variant="ghost" size="sm" onClick={(event) => inspectReceipt(turn.id, event.currentTarget)}
                         aria-controls="chat-call-receipts"
                         aria-label={`\u67e5\u770b\u7b2c ${index + 1} \u8f6e\u8c03\u7528\u56de\u6267`}>
                         {turn.state === "received" && turn.reply.skill?.sources?.length
@@ -326,19 +341,20 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                 {busy && !blocked && <p role="status" className="chat-log-status">{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</p>}
               </div>
 
-              <form className="chat-entry" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+              <form className="chat-entry" onSubmit={(event) => {
+                event.preventDefault();
+                if (!canSubmit) return;
+                composerRef.current?.focus({ preventScroll: true });
+                void send();
+              }}>
                 {!blocked && sendError && <p className="chat-entry-error" role="alert">{sendError}</p>}
                 <Textarea
                   ref={composerRef}
                   aria-label={converting ? "HTML \u6587\u6863" : "\u6d88\u606f"}
+                  aria-describedby="chat-composer-shortcuts"
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                      event.preventDefault();
-                      void send();
-                    }
-                  }}
+                  onKeyDown={(event) => handleChatComposerKey(event, canSubmit)}
                   placeholder={converting ? "\u7c98\u8d34\u4e00\u6bb5 HTML\u2026" : "\u8f93\u5165\u6d88\u606f\u2026"}
                   maxLength={MAX_MESSAGE_LENGTH}
                   rows={2}
@@ -353,8 +369,11 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                       {"\u586b\u5165\u6837\u4f8b"}
                     </Button>
                   )}
+                  <span id="chat-composer-shortcuts" className="chat-composer-hint">
+                    <kbd>Enter</kbd>{" \u53d1\u9001 \u00b7 "}<kbd>Shift+Enter</kbd>{" \u6362\u884c"}
+                  </span>
                   <span className="chat-entry-count">{input.length}/{MAX_MESSAGE_LENGTH}</span>
-                  <Button type="submit" size="sm" disabled={busy || !canSend || !input.trim()}>
+                  <Button type="submit" size="sm" disabled={!canSubmit} aria-keyshortcuts="Enter Control+Enter Meta+Enter">
                     {busy ? "\u53d1\u9001\u4e2d" : "\u53d1\u9001"}
                     <Icon name="arrow-up" size="sm" aria-hidden="true" />
                   </Button>
@@ -370,6 +389,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
             storageFailed={!blocked && scopedHistory?.storageFailed}
             selectedReceiptId={selectedIndex >= 0 ? selectedReceiptId : null}
             onSelectReceipt={setSelectedReceiptId}
+            onReturnFocus={blocked ? undefined : returnFromReceipt}
           />
         </div>
       </div>

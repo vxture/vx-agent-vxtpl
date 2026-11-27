@@ -14,6 +14,7 @@
 .assistant-panel-header h2 span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .assistant-panel-actions { display: flex; flex: none; gap: 2px; }
 .assistant-panel-messages { display: flex; flex-direction: column; align-items: stretch; gap: 12px; min-block-size: 0; flex: 1; overflow: auto; padding: 16px; }
+.assistant-panel-messages:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .assistant-panel-messages > p { color: var(--muted-foreground); font-size: 13px; }
 .assistant-panel-empty { display: grid; justify-items: center; align-content: start; gap: 8px; padding-block-start: clamp(20px, 9vh, 72px); text-align: center; }
 .assistant-panel-empty svg { color: var(--muted-foreground); }
@@ -22,10 +23,13 @@
 .assistant-panel-message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
 .assistant-panel-message[data-role="user"] { align-self: end; max-inline-size: 85%; padding: 8px 12px; border-radius: 12px; background: var(--accent); }
 .assistant-panel-composer { flex: none; border-block-start: 1px solid var(--border); padding: 12px; }
-.assistant-panel-composer > div { display: flex; gap: 8px; }
-.assistant-panel-composer input { flex: 1; min-inline-size: 0; }
+.assistant-panel-composer-row { display: flex; align-items: end; gap: var(--space-xs); }
+.assistant-panel-composer textarea { flex: 1; min-inline-size: 0; max-block-size: 8rem; resize: vertical; }
+.assistant-panel-shortcuts { margin-block-start: var(--space-2xs); color: var(--muted-foreground); font-size: var(--body-sm-font-size); }
+.assistant-panel-shortcuts kbd { font: inherit; font-weight: var(--label-md-font-weight); }
 .assistant-panel-composer p { color: var(--vxtpl-danger); font-size: 13px; margin-block-end: 6px; }
 .assistant-panel-menu { position: absolute; z-index: 1; inset-block-start: 100%; inset-inline-end: 12px; inline-size: min(280px, calc(100% - 24px)); padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: var(--shadow-overlay); }
 .assistant-conversation-list { max-block-size: 240px; overflow: auto; }
 .assistant-conversation-list button { display: block; inline-size: 100%; text-align: start; padding: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-radius: 6px; }
 .assistant-conversation-list button:is(:hover, [aria-current]) { background: var(--accent); }
+.assistant-conversation-list button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
