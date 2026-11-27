@@ -302,6 +302,8 @@
   block-size: var(--space-control-md);
 }
 
+.chat-receipt-actions .chat-receipt-close { flex: none; padding: 0; }
+
 .chat-receipt-close > svg,
 .chat-receipt-edge-button > svg {
   inline-size: var(--space-lg);
