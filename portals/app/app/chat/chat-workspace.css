@@ -40,6 +40,8 @@
   padding-block: var(--space-lg);
 }
 
+.chat-main > .vxtpl-view-header { margin-block-end: var(--space-md); }
+
 .chat-conversation,
 .chat-verification {
   min-inline-size: 0;
