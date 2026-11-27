@@ -73,6 +73,7 @@
     border-inline-start: 1px solid var(--border);
     border-radius: 0;
     overflow: auto;
+    scroll-padding-block-start: var(--space-control-3xl);
   }
 }
 
@@ -234,7 +235,6 @@
 
 /* Receipts */
 
-.chat-verification > header,
 .chat-verification-stage,
 .chat-receipt-summary,
 .chat-receipt-empty,
@@ -248,7 +248,19 @@
   outline-offset: 2px;
 }
 
-.chat-verification > header { border-block-end: 1px solid var(--border); }
+.chat-verification > header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: grid;
+  align-items: center;
+  block-size: var(--space-control-3xl);
+  padding-inline: var(--space-md);
+  border-block-end: 1px solid var(--border);
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+  background: var(--card);
+}
 
 .chat-receipt-history {
   display: grid;
@@ -258,7 +270,24 @@
   font-size: var(--label-sm-font-size);
 }
 
-.chat-receipt-history select { min-inline-size: 0; }
+.chat-receipt-history-trigger { min-inline-size: 0; }
+.chat-receipt-history-trigger > svg { flex: none; }
+
+.chat-receipt-history-options {
+  inline-size: var(--radix-select-trigger-width);
+  min-inline-size: 0;
+  max-block-size: min(20rem, var(--radix-select-content-available-height));
+}
+
+.chat-receipt-history-options [data-radix-select-viewport] { min-inline-size: 0; }
+.chat-receipt-history-trigger > span:first-child { display: block; }
+.chat-receipt-history-trigger > span:first-child,
+.chat-receipt-history-options [role="option"] > span:last-child {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .chat-receipt-summary { border-block-end: 1px solid var(--border); }
 .chat-verification-stage + .chat-verification-stage { border-block-start: 1px solid var(--border); }
@@ -292,7 +321,8 @@
   line-height: var(--body-sm-line-height);
 }
 
-.chat-receipt-history select,
+.chat-receipt-history-trigger,
+.chat-receipt-history-options [role="option"],
 .chat-receipt-task,
 .chat-evidence,
 .chat-search-sources,
