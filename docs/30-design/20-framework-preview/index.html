@@ -818,11 +818,11 @@ function assistantDock(){
   </header>
   <div class="assistant-dock-context">${dsIcon('folder')}<span>${escapeHtml(scopePreview.workspace)}</span></div>
   <div class="assistant-dock-menu" id="assistant-dock-menu" hidden></div>
-  <div class="assistant-dock-log" role="log" aria-label="\u5bf9\u8bdd\u8bb0\u5f55">${assistantLog()}</div>
+  <div class="assistant-dock-log" role="log" tabindex="0" aria-label="\u5bf9\u8bdd\u8bb0\u5f55">${assistantLog()}</div>
   <form class="assistant-composer" id="assistant-dock-form">
    <label class="sr-only" for="assistant-dock-input">\u8f93\u5165\u6d88\u606f</label>
-   <textarea id="assistant-dock-input" maxlength="500" placeholder="\u63a5\u4e0b\u6765\u60f3\u505a\u4ec0\u4e48\uff1f">${escapeHtml(activeConversation().draft)}</textarea>
-   <div class="row"><small>\u79bb\u7ebf\u793a\u4f8b</small><button class="icon-btn" type="submit" aria-label="\u53d1\u9001\u793a\u4f8b\u6d88\u606f" ${activeConversation().draft.trim()?'':'disabled'}>${dsIcon('arrow-up')}</button></div>
+   <textarea id="assistant-dock-input" aria-describedby="assistant-dock-keys" maxlength="500" placeholder="\u63a5\u4e0b\u6765\u60f3\u505a\u4ec0\u4e48\uff1f">${escapeHtml(activeConversation().draft)}</textarea>
+   <div class="row"><small id="assistant-dock-keys"><kbd>Enter</kbd> \u53d1\u9001 \u00b7 <kbd>Shift+Enter</kbd> \u6362\u884c</small><button class="icon-btn" type="submit" aria-keyshortcuts="Enter Control+Enter Meta+Enter" aria-label="\u53d1\u9001\u793a\u4f8b\u6d88\u606f" ${activeConversation().draft.trim()?'':'disabled'}>${dsIcon('arrow-up')}</button></div>
   </form>
  </aside>`;
 }
@@ -844,7 +844,7 @@ function applyAssistantDock(){
  document.getElementById('assistant-dock-backdrop').hidden=!drawer;
  app.querySelectorAll('[data-action="header-ai"]').forEach(button=>button.setAttribute('aria-expanded',String(open)));
  document.querySelector('.inspector [data-action="header-ai"]')?.setAttribute('aria-expanded',String(open));
- if(drawer&&!previousDrawer&&!dock.contains(document.activeElement))dock.querySelector('[data-action="assistant-close"]').focus();
+ if(drawer&&!previousDrawer&&!dock.contains(document.activeElement))dock.querySelector('textarea').focus();
 }
 function toggleAssistantDock(trigger,open=!assistantState.open){
  if(!document.getElementById('assistant-dock'))return;
@@ -857,7 +857,7 @@ function toggleAssistantDock(trigger,open=!assistantState.open){
  if(open){
   const log=document.querySelector('.assistant-dock-log');
   log.scrollTop=log.scrollHeight;
-  if(!(app.clientWidth<=1100))document.querySelector('[data-action="assistant-close"]').focus();
+  document.getElementById('assistant-dock-input').focus();
  }else{
   const previous=assistantState.trigger;
   (previous?.isConnected?previous:app.querySelector('[data-action="header-ai"]'))?.focus();
@@ -882,7 +882,7 @@ function setAssistantMenu(menu=null,restoreFocus=false){
  }else if(menu==='more'){
   panel.innerHTML='<div class="assistant-dock-menu-title">\u66f4\u591a\u64cd\u4f5c</div>'+button('\u590d\u5236\u6700\u8fd1\u56de\u590d','assistant-copy',null,'ghost',activeConversation().messages.length?'':'disabled');
  }
- if(menu)panel.querySelector('button:not([disabled])')?.focus();
+ if(menu)(panel.querySelector('[aria-current=true]')||panel.querySelector('button:not([disabled])'))?.focus();
  if(!menu&&restoreFocus&&previous)dock.querySelector(`[data-action="assistant-${previous}"]`).focus();
 }
 function refreshAssistantConversation(){
@@ -1233,7 +1233,7 @@ function components(){return `<main class="component-catalogue"><div class="cont
 // ============================================================================
 // Preview controls, keyboard behavior, and local interactions.
 // ============================================================================
-function businessConversation(){return `<div class="workspace business" id="workspace"><button class="mobile-backdrop" data-action="close-panels" aria-label="\u5173\u95ed\u8f85\u52a9\u9762\u677f"></button><aside class="region-left" id="left-region" data-region="\u5de6 \u00b7 \u5bf9\u8bdd\u5386\u53f2" aria-label="\u5bf9\u8bdd\u5386\u53f2"><div class="panel-heading"><h2>AI \u5bf9\u8bdd</h2>${tool('\u9690\u85cf\u5de6\u680f','left','left')}</div><div class="panel-scroll">${button('\u65b0\u5efa\u793a\u4f8b\u5bf9\u8bdd','new-chat','plus')}<div class="mini-label" style="margin-top:24px">\u5f53\u524d\u4f1a\u8bdd</div><button class="tree-item active" data-action="chat-current">${icon('sparkle')}\u5de5\u4f5c\u601d\u8def\u6574\u7406</button><div class="mini-label" style="margin-top:28px">\u5de5\u4f5c\u5185\u5bb9</div><button class="tree-item" data-action="select-doc" data-doc="\u4ea7\u54c1\u4f7f\u7528\u6307\u5357">${icon('file')}\u4ea7\u54c1\u4f7f\u7528\u6307\u5357</button></div></aside><main class="region-center conversation-center" id="center-region" data-region="\u4e2d \u00b7 \u5bf9\u8bdd\uff08\u59cb\u7ec8\u4fdd\u7559\uff09"><div class="workspace-center-content"><div class="page-heading"><div class="grow"><div class="breadcrumb">AI \u5bf9\u8bdd ${icon('chevron')} \u5f53\u524d\u4f1a\u8bdd</div><h1>\u5de5\u4f5c\u601d\u8def\u6574\u7406</h1><p>\u628a\u95ee\u9898\u8bf4\u6e05\u695a\uff0c\u8ba9\u601d\u8def\u5411\u524d\u4e00\u6b65\u3002</p></div>${tool('\u67e5\u770b\u4f1a\u8bdd\u6062\u590d\u8986\u76d6\u5c42','recovery','shield')}</div><div class="conversation-log" id="chat-log" aria-live="polite"><div class="assistant-intro"><div class="module-icon">${icon('sparkle')}</div><h2>\u4eca\u5929\uff0c\u6211\u4eec\u4ece\u54ea\u91cc\u5f00\u59cb\uff1f</h2><p>\u53ef\u4ee5\u6574\u7406\u4e00\u4efd\u6e05\u5355\uff0c\u4e5f\u53ef\u4ee5\u4e00\u8d77\u68b3\u7406\u4e00\u4e2a\u60f3\u6cd5\u3002</p></div><button class="suggestion" data-action="suggest" data-prompt="\u5e2e\u6211\u6574\u7406\u4e00\u4efd\u9879\u76ee\u542f\u52a8\u6e05\u5355">\u5e2e\u6211\u6574\u7406\u4e00\u4efd\u9879\u76ee\u542f\u52a8\u6e05\u5355 ${icon('arrow')}</button>${(state.workMessages||[]).map(chatMessage).join('')}</div><form class="assistant-composer" id="assistant-form"><label class="sr-only" for="assistant-input">\u5411\u52a9\u624b\u63d0\u95ee</label><textarea id="assistant-input" placeholder="\u63cf\u8ff0\u4f60\u7684\u95ee\u9898\u6216\u60f3\u6cd5\u2026"></textarea><div class="row"><small>\u79bb\u7ebf\u8bbe\u8ba1\u6837\u4f8b \u00b7 \u4e0d\u8c03\u7528\u6a21\u578b</small><button class="icon-btn" type="submit" aria-label="\u53d1\u9001\u793a\u4f8b\u6d88\u606f">${icon('send')}</button></div></form></div></main><aside class="region-right" id="right-region" data-region="\u53f3 \u00b7 \u5bf9\u8bdd\u4e0a\u4e0b\u6587" aria-label="\u5bf9\u8bdd\u4e0a\u4e0b\u6587"><div class="panel-heading"><h2>\u4e0a\u4e0b\u6587\u4e0e\u8d44\u6599</h2>${tool('\u9690\u85cf\u53f3\u680f','right','right')}</div><div class="panel-scroll"><div class="property-row"><span>\u5de5\u4f5c\u7a7a\u95f4</span><span>\u9ed8\u8ba4\u7a7a\u95f4</span></div><div class="property-row"><span>\u5173\u8054\u8d44\u6599</span><span>\u672a\u6dfb\u52a0</span></div><div class="empty-local">${icon('file')}<h3>\u4e3a\u5bf9\u8bdd\u8865\u5145\u4e0a\u4e0b\u6587</h3><p style="margin-top:10px">\u6b63\u5f0f\u4ea7\u54c1\u53ef\u5728\u6b64\u5f15\u7528\u6709\u6743\u8bbf\u95ee\u7684\u5de5\u4f5c\u8d44\u6599\u3002</p></div><div class="callout">${icon('shield')}<span>\u6a21\u578b\u8c03\u7528\u4e0e\u8d44\u6599\u6388\u6743\u7531\u7edf\u4e00\u63a5\u5165\u5c42\u5904\u7406\uff0c\u5f53\u524d\u9875\u9762\u4ec5\u5c55\u793a\u4ea4\u4e92\u3002</span></div></div></aside></div>`;}
+function businessConversation(){return `<div class="workspace business" id="workspace"><button class="mobile-backdrop" data-action="close-panels" aria-label="\u5173\u95ed\u8f85\u52a9\u9762\u677f"></button><aside class="region-left" id="left-region" data-region="\u5de6 \u00b7 \u5bf9\u8bdd\u5386\u53f2" aria-label="\u5bf9\u8bdd\u5386\u53f2"><div class="panel-heading"><h2>AI \u5bf9\u8bdd</h2>${tool('\u9690\u85cf\u5de6\u680f','left','left')}</div><div class="panel-scroll">${button('\u65b0\u5efa\u793a\u4f8b\u5bf9\u8bdd','new-chat','plus')}<div class="mini-label" style="margin-top:24px">\u5f53\u524d\u4f1a\u8bdd</div><button class="tree-item active" data-action="chat-current">${icon('sparkle')}\u5de5\u4f5c\u601d\u8def\u6574\u7406</button><div class="mini-label" style="margin-top:28px">\u5de5\u4f5c\u5185\u5bb9</div><button class="tree-item" data-action="select-doc" data-doc="\u4ea7\u54c1\u4f7f\u7528\u6307\u5357">${icon('file')}\u4ea7\u54c1\u4f7f\u7528\u6307\u5357</button></div></aside><main class="region-center conversation-center" id="center-region" data-region="\u4e2d \u00b7 \u5bf9\u8bdd\uff08\u59cb\u7ec8\u4fdd\u7559\uff09"><div class="workspace-center-content"><div class="page-heading"><div class="grow"><div class="breadcrumb">AI \u5bf9\u8bdd ${icon('chevron')} \u5f53\u524d\u4f1a\u8bdd</div><h1>\u5de5\u4f5c\u601d\u8def\u6574\u7406</h1><p>\u628a\u95ee\u9898\u8bf4\u6e05\u695a\uff0c\u8ba9\u601d\u8def\u5411\u524d\u4e00\u6b65\u3002</p></div>${tool('\u67e5\u770b\u4f1a\u8bdd\u6062\u590d\u8986\u76d6\u5c42','recovery','shield')}</div><div class="conversation-log" id="chat-log" role="log" tabindex="0" aria-keyshortcuts="Escape"><div class="assistant-intro"><div class="module-icon">${icon('sparkle')}</div><h2>\u4eca\u5929\uff0c\u6211\u4eec\u4ece\u54ea\u91cc\u5f00\u59cb\uff1f</h2><p>\u53ef\u4ee5\u6574\u7406\u4e00\u4efd\u6e05\u5355\uff0c\u4e5f\u53ef\u4ee5\u4e00\u8d77\u68b3\u7406\u4e00\u4e2a\u60f3\u6cd5\u3002</p></div><button class="suggestion" data-action="suggest" data-prompt="\u5e2e\u6211\u6574\u7406\u4e00\u4efd\u9879\u76ee\u542f\u52a8\u6e05\u5355">\u5e2e\u6211\u6574\u7406\u4e00\u4efd\u9879\u76ee\u542f\u52a8\u6e05\u5355 ${icon('arrow')}</button>${(state.workMessages||[]).map(chatMessage).join('')}</div><form class="assistant-composer" id="assistant-form"><label class="sr-only" for="assistant-input">\u5411\u52a9\u624b\u63d0\u95ee</label><textarea id="assistant-input" aria-describedby="assistant-keys" maxlength="500" placeholder="\u63cf\u8ff0\u4f60\u7684\u95ee\u9898\u6216\u60f3\u6cd5\u2026"></textarea><div class="row"><small id="assistant-keys"><kbd>Enter</kbd> \u53d1\u9001 \u00b7 <kbd>Shift+Enter</kbd> \u6362\u884c</small><button class="icon-btn" type="submit" aria-keyshortcuts="Enter Control+Enter Meta+Enter" aria-label="\u53d1\u9001\u793a\u4f8b\u6d88\u606f">${icon('send')}</button></div></form></div></main><aside class="region-right" id="right-region" data-region="\u53f3 \u00b7 \u5bf9\u8bdd\u4e0a\u4e0b\u6587" aria-label="\u5bf9\u8bdd\u4e0a\u4e0b\u6587"><div class="panel-heading"><h2>\u4e0a\u4e0b\u6587\u4e0e\u8d44\u6599</h2>${tool('\u9690\u85cf\u53f3\u680f','right','right')}</div><div class="panel-scroll"><div class="property-row"><span>\u5de5\u4f5c\u7a7a\u95f4</span><span>\u9ed8\u8ba4\u7a7a\u95f4</span></div><div class="property-row"><span>\u5173\u8054\u8d44\u6599</span><span>\u672a\u6dfb\u52a0</span></div><div class="empty-local">${icon('file')}<h3>\u4e3a\u5bf9\u8bdd\u8865\u5145\u4e0a\u4e0b\u6587</h3><p style="margin-top:10px">\u6b63\u5f0f\u4ea7\u54c1\u53ef\u5728\u6b64\u5f15\u7528\u6709\u6743\u8bbf\u95ee\u7684\u5de5\u4f5c\u8d44\u6599\u3002</p></div><div class="callout">${icon('shield')}<span>\u6a21\u578b\u8c03\u7528\u4e0e\u8d44\u6599\u6388\u6743\u7531\u7edf\u4e00\u63a5\u5165\u5c42\u5904\u7406\uff0c\u5f53\u524d\u9875\u9762\u4ec5\u5c55\u793a\u4ea4\u4e92\u3002</span></div></div></aside></div>`;}
 function renderInspector(){
  let html='';
  if(state.frame==='home')html=`<div class="segmented" aria-label="\u9996\u9875\u6a21\u5f0f">${[['workspace','\u5de5\u4f5c\u6982\u89c8'],['public','\u516c\u5f00\u5165\u53e3']].map(([id,label])=>`<button data-action="home-mode" data-mode="${id}" aria-pressed="${state.home===id}">${label}</button>`).join('')}</div><span class="small muted">\u5e73\u53f0\u4ea7\u54c1\u6846\u67b6\u7ed3\u6784\u53c2\u8003</span>`;
@@ -1324,7 +1324,7 @@ function sendMessage(text){
  if(!appendChatTurn(history,text))return;
  const log=document.getElementById('chat-log');
  if(log){log.insertAdjacentHTML('beforeend',history.slice(-2).map(chatMessage).join(''));log.scrollTop=log.scrollHeight;}
- const input=document.getElementById('assistant-input');if(input)input.value='';
+ const input=document.getElementById('assistant-input');if(input){input.value='';input.focus({preventScroll:true});}
 }
 async function action(name,element){
  if(state.frame==='components'&&['left','right','focus'].includes(name)){
@@ -1337,7 +1337,7 @@ async function action(name,element){
  case 'go-business':navigate('business');break;
  case 'resume':navigate('business',{doc:state.doc});break;
  case 'go-chat':navigate('business',{doc:'AI \u5bf9\u8bdd\u5de5\u4f5c\u7b14\u8bb0'});break;
- case 'new-chat':state.workMessages=[];render();break;
+ case 'new-chat':state.workMessages=[];render();document.getElementById('assistant-input')?.focus();break;
  case 'chat-current':document.getElementById('assistant-input')?.focus();break;
  case 'go-game':state.canvas='game';navigate('canvas');break;
  case 'canvas-empty':state.canvas='empty';navigate('canvas');break;
@@ -1394,8 +1394,9 @@ async function action(name,element){
  }
  case 'assistant-select':
   assistantState.active=Number(element.dataset.conversation);
-  setAssistantMenu(null,true);
+  setAssistantMenu();
   refreshAssistantConversation();
+  document.getElementById('assistant-dock-input').focus();
   break;
  case 'assistant-copy':
   try{await navigator.clipboard.writeText(activeConversation().messages.at(-1).text);notice('\u5df2\u590d\u5236\u56de\u590d');}
@@ -1477,13 +1478,29 @@ document.addEventListener('submit',event=>{
 document.addEventListener('keydown',event=>{
  if(app.querySelector('.shell-popover:popover-open'))return;
  if(app.querySelector('dialog[open]'))return;
- if(event.key==='Escape'&&assistantState.open){
+ if(event.defaultPrevented||event.isComposing||event.keyCode===229)return;
+ const source=event.target;
+ if(!(source instanceof Element))return;
+ if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&source instanceof HTMLTextAreaElement&&source.matches('#assistant-input,#assistant-dock-input')){
+  event.preventDefault();
+  if(!event.repeat&&source.value.trim())source.form?.requestSubmit();
+  return;
+ }
+ const escape=event.key==='Escape'&&!event.shiftKey&&!event.altKey&&!event.ctrlKey&&!event.metaKey;
+ if(escape&&source.closest('#chat-log')){
+  event.preventDefault();
+  document.getElementById('assistant-input')?.focus();
+  return;
+ }
+ if(escape&&assistantState.open&&source.closest('#assistant-dock')){
+  event.preventDefault();
+  if(event.repeat)return;
   if(assistantState.menu)setAssistantMenu(null,true);
   else toggleAssistantDock(null,false);
   return;
  }
- if(event.key==='Escape'){if(state.focus){state.focus=false;applyPanels();mapFocusControl()?.focus();}else if(app.querySelector('[data-drawer]')){const mapTrigger=state.right?'.map-view-info':'.map-view-picker';state.left=!isNarrow()&&state.frame==='management';state.right=false;applyPanels();(app.querySelector(mapTrigger)||app.querySelector('.product-header button'))?.focus();}return;}
- if(event.key==='Tab'){const drawer=app.querySelector('.assistant-dock[data-drawer]')||app.querySelector('[data-drawer]');if(!drawer)return;const items=[...drawer.querySelectorAll('button:not(:disabled),input,textarea,a[href]')].filter(el=>el.getClientRects().length);if(!items.length)return;const first=items[0],last=items.at(-1);if(event.shiftKey&&(document.activeElement===first||!drawer.contains(document.activeElement))){event.preventDefault();last.focus();}else if(!event.shiftKey&&(document.activeElement===last||!drawer.contains(document.activeElement))){event.preventDefault();first.focus();}}
+ if(escape){if(state.focus){state.focus=false;applyPanels();mapFocusControl()?.focus();}else if(app.querySelector('[data-drawer]')){const mapTrigger=state.right?'.map-view-info':'.map-view-picker';state.left=!isNarrow()&&state.frame==='management';state.right=false;applyPanels();(app.querySelector(mapTrigger)||app.querySelector('.product-header button'))?.focus();}return;}
+ if(event.key==='Tab'){const drawer=app.querySelector('.assistant-dock[data-drawer]')||app.querySelector('[data-drawer]');if(!drawer)return;const items=[...drawer.querySelectorAll('button:not(:disabled),input,textarea,a[href],[tabindex="0"]')].filter(el=>el.getClientRects().length);if(!items.length)return;const first=items[0],last=items.at(-1);if(event.shiftKey&&(document.activeElement===first||!drawer.contains(document.activeElement))){event.preventDefault();last.focus();}else if(!event.shiftKey&&(document.activeElement===last||!drawer.contains(document.activeElement))){event.preventDefault();first.focus();}}
 });
 document.addEventListener('fullscreenchange',()=>{app.querySelectorAll('[data-action="fullscreen"]').forEach(el=>{el.setAttribute('aria-pressed',String(Boolean(document.fullscreenElement)));if(el.dataset.iconSource==='ds')el.innerHTML=dsIcon(document.fullscreenElement?'minimize':'maximize');});updateDimensions();});
 const resizeObserver=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(isNarrow()&&state.left&&state.right)state.right=false;applyPanels();applyAssistantDock();updateDimensions();});});
