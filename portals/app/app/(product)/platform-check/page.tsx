@@ -219,52 +219,57 @@ export default function PlatformCheckPage() {
               return (
                 <li className="platform-demo__action" key={probe}>
                   <Card className="platform-demo__card platform-demo__action-card">
-                    <SectionHeader title={name} level={3} divider={false} description={detail} />
-                    <p className="platform-demo__detail">
-                      {report?.actionDetails?.[probe] ?? "先运行接入预检"}
-                    </p>
-                    {directModel && !!report?.atlasModelChoices?.length && (
-                      <NativeSelect
-                        aria-label="Atlas 直调模型"
-                        value={modelCode}
-                        onChange={(event) => setModelCode(event.target.value)}
-                        disabled={busy !== null || !report.actions[probe]}
-                        className="platform-demo__model-select"
-                      >
-                        <option value="">选择模型</option>
-                        {report.atlasModelChoices.map(({ code, name, provider }) => (
-                          <option key={code} value={code}>{name || code} · {provider} · {code}</option>
-                        ))}
-                      </NativeSelect>
-                    )}
-                    <div role="status">
-                      <CheckBadge state={receipt ? "verified" : outcome?.error ? "unavailable" : "waiting"} />
-                      {receipt && (
-                        <div className="platform-demo__receipt-detail">
-                          <h4>调用回执</h4>
-                          <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
-                          {receipt.evidence?.provider === "atlas" && (
-                            <p>
-                              {receipt.evidence.endpointCode
-                                ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
-                                : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
-                              {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
-                              {" · 任务 "}<code>{receipt.evidence.taskId}</code>
-                            </p>
-                          )}
-                          {receipt.responseText && <p>{receipt.responseText}</p>}
-                          {receipt.evidence?.provider === "runos" && (
-                            <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
-                          )}
-                        </div>
+                    <header className="platform-demo__action-title">
+                      <SectionHeader title={name} level={3} divider={false} />
+                      <span role="status"><CheckBadge state={receipt ? "verified" : outcome?.error ? "unavailable" : "waiting"} /></span>
+                    </header>
+                    <div className="platform-demo__action-content">
+                      <p className="platform-demo__detail">{detail}</p>
+                      <p className="platform-demo__detail">
+                        {report?.actionDetails?.[probe] ?? "先运行接入预检"}
+                      </p>
+                      {directModel && !!report?.atlasModelChoices?.length && (
+                        <NativeSelect
+                          aria-label="Atlas 直调模型"
+                          value={modelCode}
+                          onChange={(event) => setModelCode(event.target.value)}
+                          disabled={busy !== null || !report.actions[probe]}
+                          className="platform-demo__model-select"
+                        >
+                          <option value="">选择模型</option>
+                          {report.atlasModelChoices.map(({ code, name, provider }) => (
+                            <option key={code} value={code}>{name || code} · {provider} · {code}</option>
+                          ))}
+                        </NativeSelect>
                       )}
+                      <div role="status">
+                        {receipt && (
+                          <div className="platform-demo__receipt-detail">
+                            <h4>调用回执</h4>
+                            <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
+                            {receipt.evidence?.provider === "atlas" && (
+                              <p>
+                                {receipt.evidence.endpointCode
+                                  ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
+                                  : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
+                                {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
+                                {" · 任务 "}<code>{receipt.evidence.taskId}</code>
+                              </p>
+                            )}
+                            {receipt.responseText && <p>{receipt.responseText}</p>}
+                            {receipt.evidence?.provider === "runos" && (
+                              <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {outcome?.error && <p role="alert">{outcome.error}</p>}
                     </div>
-                    {outcome?.error && <p role="alert">{outcome.error}</p>}
-                    <div className="platform-demo__action-button">
+                    <footer className="platform-demo__action-button">
                       <Button variant="outline" onClick={() => run(probe)} disabled={busy !== null || !report?.actions[probe] || (directModel && !modelCode)}>
                         {busy === probe ? "正在调用…" : "执行验证"}
                       </Button>
-                    </div>
+                    </footer>
                   </Card>
                 </li>
               );
