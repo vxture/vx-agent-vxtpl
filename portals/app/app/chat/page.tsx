@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Checkbox, Icon, NativeSelect, SectionHeader, SegmentedControl, StatusBadge, Textarea, ViewHeader } from "../ds";
 import { ProductHeader } from "../framework/product-chrome";
 import { WorkspaceRegions } from "../framework/workspace-regions";
@@ -17,7 +17,7 @@ import { AssistantPanel } from "./assistant-panel";
 import { useAssistantConversations } from "./assistant-conversations";
 import { ChatVerification } from "./chat-verification";
 import { readChatHistory, saveChatTurn, type SavedTurn } from "./chat-history";
-import { handleChatComposerKey, isChatEscapeKey } from "./chat-keyboard";
+import { handleChatComposerKey, isChatEscapeKey, useChatInputHistory } from "./chat-keyboard";
 import { ChatRequestError, requestChatTurn, type ChatContext } from "./client";
 import { DOCUMENT_CONVERSION_SKILL, MAX_HISTORY_MESSAGES, MAX_MESSAGE_LENGTH, WEB_SEARCH_SKILL, type ChatMessage, type ChatTarget, type TurnVerification } from "./types";
 import { ChatWorkspaceAccess } from "./workspace-access";
@@ -68,7 +68,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const [useRunos, setUseRunos] = useState(false);
   const [preferredSkill, setPreferredSkill] = useState(DOCUMENT_CONVERSION_SKILL);
   const [history, setHistory] = useState<WorkspaceHistory | null>(null);
-  const [input, setInput] = useState("");
+  const [draft, setDraft] = useState("");
   const [submission, setSubmission] = useState<Extract<TurnVerification, { state: "pending" }> | null>(null);
   const [sendError, setSendError] = useState<string>();
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
@@ -83,6 +83,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const scopeKey = ctx?.productAccess ? ctx.scopeKey : undefined;
   const scopedHistory = history && history.scopeKey === scopeKey ? history : null;
   const turns = blocked ? EMPTY_HISTORY : scopedHistory?.turns ?? EMPTY_HISTORY;
+  const prompts = useMemo(() => turns.map(({ prompt }) => prompt), [turns]);
+  const { value: input, handleHistoryKey, resetHistory } = useChatInputHistory(prompts, draft);
   const direct = mode === "model";
   const busy = submission !== null;
   const currentReceipt = blocked ? null : submission ?? turns.at(-1) ?? null;
@@ -155,6 +157,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
       ]);
     next.push({ role: "user", content: text });
     sending.current = true;
+    setDraft(input);
+    resetHistory();
     setSelectedReceiptId(null);
     setSendError(undefined);
     setSubmission({ ...target, state: "pending" });
@@ -164,7 +168,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
         skillCode: target.skillCode,
       });
       await rememberTurn(ctx.scopeKey, { ...target, state: "received", reply, prompt: text, id: crypto.randomUUID(), createdAt: Date.now() });
-      setInput("");
+      setDraft("");
     } catch (failure) {
       const accessHandled = onAccessFailure(failure, ctx.scopeKey);
       const requestError = failure instanceof ChatRequestError ? failure : undefined;
@@ -353,8 +357,9 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                   aria-label={converting ? "HTML \u6587\u6863" : "\u6d88\u606f"}
                   aria-describedby="chat-composer-shortcuts"
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => handleChatComposerKey(event, canSubmit)}
+                  aria-keyshortcuts="ArrowUp ArrowDown"
+                  onChange={(event) => { resetHistory(); setDraft(event.target.value); }}
+                  onKeyDown={(event) => { if (!handleHistoryKey(event)) handleChatComposerKey(event, canSubmit); }}
                   placeholder={converting ? "\u7c98\u8d34\u4e00\u6bb5 HTML\u2026" : "\u8f93\u5165\u6d88\u606f\u2026"}
                   maxLength={MAX_MESSAGE_LENGTH}
                   rows={2}
@@ -365,12 +370,12 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                 <div className="chat-entry-actions">
                   {sample && (
                     <Button type="button" variant="ghost" size="sm" disabled={busy || !canSend || Boolean(input.trim())}
-                      onClick={() => { setInput(sample); composerRef.current?.focus(); }}>
+                      onClick={() => { resetHistory(); setDraft(sample); composerRef.current?.focus(); }}>
                       {"\u586b\u5165\u6837\u4f8b"}
                     </Button>
                   )}
                   <span id="chat-composer-shortcuts" className="chat-composer-hint">
-                    <kbd>Enter</kbd>{" \u53d1\u9001 \u00b7 "}<kbd>Shift+Enter</kbd>{" \u6362\u884c"}
+                    <kbd>Enter</kbd>{" \u53d1\u9001 \u00b7 "}<kbd>Shift+Enter</kbd>{" \u6362\u884c \u00b7 "}<kbd>{"\u2191/\u2193"}</kbd>{" \u5386\u53f2"}
                   </span>
                   <span className="chat-entry-count">{input.length}/{MAX_MESSAGE_LENGTH}</span>
                   <Button type="submit" size="sm" disabled={!canSubmit} aria-keyshortcuts="Enter Control+Enter Meta+Enter">
