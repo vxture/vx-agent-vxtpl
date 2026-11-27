@@ -17,6 +17,7 @@ const navigation = [
   { label: "Home", href: productRoutes.home },
   ...(productExperience.example ? [productExperience.example] : []),
   { label: "Chat", href: productRoutes.chat },
+  { label: "\u5e73\u53f0\u63a5\u5165\u6f14\u793a", href: productRoutes.platformCheck },
 ];
 
 export function ProductNavigation() {
