@@ -12,6 +12,7 @@ export interface ChatMessage {
 
 export const CHAT_SCOPE_HEADER = "x-vxtpl-workspace-context";
 export const DOCUMENT_CONVERSION_SKILL = "document-conversion";
+export const WEB_SEARCH_SKILL = "web-search";
 
 export type ChatTarget =
   | { endpointCode: string; modelCode?: never }
@@ -38,6 +39,7 @@ export interface SkillOutcome {
   version?: string;
   resultKind?: "executed" | "distributed";
   contentDigest?: string;
+  sources?: string[];
   errorCode?: string;
   outcomeAcknowledged?: boolean;
 }
@@ -67,6 +69,17 @@ export interface ChatReply {
   latencyMs?: number;
   finishReason?: string;
 }
+
+interface TurnTarget {
+  atlasTarget: ChatTarget;
+  skillCode?: string;
+}
+
+export type TurnVerification = TurnTarget & (
+  | { state: "pending" }
+  | { state: "received"; reply: ChatReply }
+  | { state: "failed"; message?: string; runosBlockedAtlas: boolean; runosCallId?: string; evidence?: ChatFailureEvidence }
+);
 
 export const MAX_HISTORY_MESSAGES = 20;
 // 500, not 4000 (owner decision 2026-09-01): chat is a DEBUG surface that

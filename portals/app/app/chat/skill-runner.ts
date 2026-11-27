@@ -11,8 +11,9 @@ import {
 } from "../runos/client";
 import { isEntitlementRejection } from "../lib/platform-error";
 import { convertHtmlToMarkdown, DOCUMENT_CONVERTER } from "../runos/document-conversion";
+import { searchPublicWeb } from "../runos/web-search";
 import { findSkill } from "./catalog";
-import { DOCUMENT_CONVERSION_SKILL, type ChatMessage, type SkillOutcome } from "./types";
+import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type ChatMessage, type SkillOutcome } from "./types";
 
 // Skill execution: turn a selected skill into a real Runos capability call.
 //
@@ -31,7 +32,7 @@ import { DOCUMENT_CONVERSION_SKILL, type ChatMessage, type SkillOutcome } from "
 //             A retryable failure is reported to the user, who can ask again.
 //   report    closes the task so Runos can attribute the outcome.
 //
-// A skill that cannot run is NOT an error for the chat turn. The catalog is
+// Generic skills may degrade the turn. Search and conversion require evidence. The catalog is
 // per-caller and sparse - for a long time it was empty, and `unavailable` was
 // the only honest answer production could give. It is no longer empty (Runos
 // registered MarkItDown, `providerId` markitdown, 2026-08-17), but a skill with
@@ -48,7 +49,6 @@ import { DOCUMENT_CONVERSION_SKILL, type ChatMessage, type SkillOutcome } from "
  */
 const SKILL_QUERIES: Record<string, { query: string; category?: string }> = {
   summarize: { query: "summarize document text" },
-  "web-search": { query: "web search retrieve pages" },
   "code-exec": { query: "run python code sandbox", category: "development" },
   "data-analysis": { query: "analyze spreadsheet tabular data" },
 };
@@ -86,6 +86,7 @@ export async function runSkill(
   };
 
   try {
+    if (skillCode === WEB_SEARCH_SKILL) return await searchPublicWeb(cfg, userText, call);
     if (skillCode === DOCUMENT_CONVERSION_SKILL) {
       const conversion = await convertHtmlToMarkdown(cfg, userText, call);
       const receipt = {

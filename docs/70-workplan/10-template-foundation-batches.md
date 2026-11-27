@@ -286,3 +286,26 @@
 - [x] 文档转换失败时保留任务及 Runos 调用证据，并标明 Atlas 未发起。Atlas 调用失败时可对照已有 Runos 回执、任务 ID、Atlas 请求 ID 与错误码。
 - [x] TypeScript 检查与 53 项定向测试通过。本机浏览器在 1007 × 893 和 473 × 893 下复测，上下各留白 24px，无横向溢出。验证了矮屏滚动、离线单服务与组合回执、逐轮回看及回到最新。
 - [ ] 新版尚待发布，生产测试工作空间的真实对话回执待验收。
+
+## 33. Atlas 授权目录与 Vxtpl 工作台发布准备（2026-11-27）
+
+- [x] Atlas 调用方授权目录与现有 HTTP 参考同步，90 项定向测试通过，SonarCloud 新增代码覆盖率 100%。[Atlas PR #149](https://github.com/vxture-foundation/vxture-atlas/pull/149) 检查与镜像构建通过。
+- [x] Vxtpl 工作台及统一修订记录纳入 [Vxtpl PR #105](https://github.com/vxture/vx-agent-vxtpl/pull/105)。232 项本地应用测试通过，PR 构建及全部检查通过。
+- [x] 两仓合并至 `main`，合并文件树与验收候选一致。Atlas `523b3973` 和 Vxtpl `bec0ba57` 的主干必需检查均通过。
+- [x] Atlas `v0.10.2`／`523b3973` [生产部署成功](https://github.com/vxture-foundation/vxture-atlas/actions/runs/45951012002)，健康和就绪检查均通过。使用登记工作空间的 Vxtpl 服务票读取生产授权目录，得到 6 条活跃对话路由和 4 个授权对话模型。
+- [x] Vxtpl `v0.4.8`／`bec0ba57` 已完成 [GitHub 生产部署](https://github.com/vxture/vx-agent-vxtpl/actions/runs/45952108224)。公开健康接口确认生产版本和提交一致。
+- [x] 在登记测试账号的「如影智能科技有限公司 / default workspace」完成三轮生产验收。聊天页显示 6 条可选 Atlas 路由和 4 个授权对话模型。回执可展开，回看第一轮再回到最新轮可恢复对应调用信息。
+
+| 轮次 | 调用 | 生产结果 | 回执 |
+| --- | --- | --- | --- |
+| 1 | Atlas 路由 `chat/default` | `deepseek-v4-flash` 回复验证文本，941 ms，140 tokens | 请求 `ca7b66cd-2869-4c9e-9786-12656761057d`，任务 `vxtpl-67db9245-bdec-4d36-a890-44c031d55cf9` |
+| 2 | Atlas 直调 `deepseek-v4-flash` | 请求模型与实际服务模型一致，857 ms，95 tokens | 请求 `4b267d83-114b-4d32-8725-8a453c707ca8`，任务 `vxtpl-cf3d0a97-98a9-451c-a14e-1b30fe26786c` |
+| 3 | Runos HTML 转 Markdown → Atlas 摘要 | `markitdown.document-to-markdown` 1.0.0 返回 Markdown 且结果回报已确认，Atlas 摘要正确，2296 ms，180 tokens | Runos `01a21bd8-20ac-7891-9f51-f47e120dc65c`，Atlas `cd42bbed-0ae1-46c9-b0e9-ad5f3c0e11e3`，任务 `vxtpl-4a262efb-b3ec-43f3-a419-f01d70e49ca3` |
+
+## 34. Runos 联网搜索与历史回执（2026-11-27）
+
+- [x] 联网搜索从当前工作空间的 Runos 授权目录确认只读连接器 `exa.web-research`，解析版本后调用 `web_search_exa`，提交 `query` 和 `objective`。回执保留调用标识、结果回报和可打开的搜索来源。
+- [x] Atlas 使用 Runos 返回的检索正文生成回复。搜索失败或缺少来源时保留失败回执并标明 Atlas 未发起。
+- [x] 对话和成功、失败轮次的回执一起保存到当前浏览器，按已验证账号与工作空间隔离。刷新后恢复，可通过右侧历史回执选择器或消息旁入口回看。
+- [x] TypeScript、234 项全量应用测试和本机浏览器验收通过。浏览器验收使用契约样例，覆盖来源展开、失败回执、刷新恢复及返回最新。
+- [ ] 发布后使用登记测试工作空间验收真实联网搜索、来源和刷新后的历史回执。

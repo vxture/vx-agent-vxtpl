@@ -15,9 +15,10 @@ import { ProductHeader } from "../framework/product-chrome";
 import { WorkspaceRegions } from "../framework/workspace-regions";
 import { AssistantPanel } from "./assistant-panel";
 import { useAssistantConversations } from "./assistant-conversations";
-import { ChatVerification, type TurnVerification } from "./chat-verification";
+import { ChatVerification } from "./chat-verification";
+import { readChatHistory, saveChatTurn, type SavedTurn } from "./chat-history";
 import { ChatRequestError, requestChatTurn, type ChatContext } from "./client";
-import { DOCUMENT_CONVERSION_SKILL, MAX_MESSAGE_LENGTH, type ChatMessage, type ChatTarget } from "./types";
+import { DOCUMENT_CONVERSION_SKILL, MAX_HISTORY_MESSAGES, MAX_MESSAGE_LENGTH, WEB_SEARCH_SKILL, type ChatMessage, type ChatTarget, type TurnVerification } from "./types";
 import { ChatWorkspaceAccess } from "./workspace-access";
 import "./chat-workspace.css";
 
@@ -28,12 +29,18 @@ const HTML_EXAMPLE = "<article>\n  <h1>\u9879\u76ee\u5468\u62a5</h1>\n  <p>\u672
 const SKILL_LABELS: Record<string, string> = {
   [DOCUMENT_CONVERSION_SKILL]: "HTML \u8f6c Markdown",
   summarize: "\u6458\u8981",
-  "web-search": "\u7f51\u7edc\u641c\u7d22",
+  [WEB_SEARCH_SKILL]: "\u7f51\u7edc\u641c\u7d22",
   "code-exec": "\u4ee3\u7801\u6267\u884c",
   "data-analysis": "\u6570\u636e\u5206\u6790",
 };
 
-type CompletedTurn = Extract<TurnVerification, { state: "received" }> & { prompt: string };
+const EMPTY_HISTORY: SavedTurn[] = [];
+
+interface WorkspaceHistory {
+  scopeKey: string;
+  turns: SavedTurn[];
+  storageFailed: boolean;
+}
 type AtlasMode = "route" | "model";
 
 interface WorkspaceProps {
@@ -59,10 +66,11 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const [mode, setMode] = useState<AtlasMode>("route");
   const [useRunos, setUseRunos] = useState(false);
   const [preferredSkill, setPreferredSkill] = useState(DOCUMENT_CONVERSION_SKILL);
-  const [turns, setTurns] = useState<CompletedTurn[]>([]);
+  const [history, setHistory] = useState<WorkspaceHistory | null>(null);
   const [input, setInput] = useState("");
-  const [submission, setSubmission] = useState<Exclude<TurnVerification, { state: "received" }> | null>(null);
-  const [selectedReceipt, setSelectedReceipt] = useState<number | null>(null);
+  const [submission, setSubmission] = useState<Extract<TurnVerification, { state: "pending" }> | null>(null);
+  const [sendError, setSendError] = useState<string>();
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantWide, setAssistantWide] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -70,10 +78,14 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const receiptRef = useRef<HTMLElement>(null);
   const sending = useRef(false);
 
+  const scopeKey = ctx?.productAccess ? ctx.scopeKey : undefined;
+  const scopedHistory = history && history.scopeKey === scopeKey ? history : null;
+  const turns = blocked ? EMPTY_HISTORY : scopedHistory?.turns ?? EMPTY_HISTORY;
   const direct = mode === "model";
-  const busy = submission?.state === "pending";
-  const currentReceipt = submission ?? turns.at(-1) ?? null;
-  const visibleReceipt = selectedReceipt === null ? currentReceipt : turns[selectedReceipt] ?? currentReceipt;
+  const busy = submission !== null;
+  const currentReceipt = blocked ? null : submission ?? turns.at(-1) ?? null;
+  const selectedIndex = turns.findIndex((turn) => turn.id === selectedReceiptId);
+  const visibleReceipt = turns[selectedIndex] ?? currentReceipt;
   const availableRoutes = ctx?.models.filter((route) => route.allowed) ?? [];
   const defaultRoute = availableRoutes.find((route) => route.code === ctx?.defaultModelCode) ?? availableRoutes[0];
   const selectedRoute = preferredRoute ? availableRoutes.find((route) => route.code === preferredRoute) : defaultRoute;
@@ -87,18 +99,36 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const skill = useRunos ? selectedSkill : undefined;
   const converting = skill?.code === DOCUMENT_CONVERSION_SKILL;
   const sample = converting ? HTML_EXAMPLE : useRunos ? null : CHAT_EXAMPLE;
-  const canSend = !blocked && Boolean(atlasTarget) && (!useRunos || Boolean(skill));
+  const canSend = !blocked && Boolean(scopedHistory && atlasTarget) && (!useRunos || Boolean(skill));
   const assistant = useAssistantConversations(blocked ? undefined : defaultRoute?.code, ctx?.scopeKey, onAccessFailure);
+
+  useEffect(() => {
+    if (!scopeKey) return;
+    let active = true;
+    void readChatHistory(scopeKey).then((turns) => {
+      if (active) setHistory({ scopeKey, turns, storageFailed: false });
+    }).catch(() => {
+      if (active) setHistory({ scopeKey, turns: [], storageFailed: true });
+    });
+    return () => { active = false; };
+  }, [scopeKey]);
 
   useEffect(() => {
     const log = logRef.current;
     if (log) log.scrollTop = log.scrollHeight;
   }, [turns, busy]);
 
-  function inspectReceipt(index: number | null) {
-    setSelectedReceipt(index);
+  function inspectReceipt(id: string) {
+    setSelectedReceiptId(id);
     receiptRef.current?.focus({ preventScroll: true });
     receiptRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
+  async function rememberTurn(scopeKey: string, turn: SavedTurn) {
+    const saved = await saveChatTurn(scopeKey, turn).then(() => true, () => false);
+    setHistory((current) => current?.scopeKey === scopeKey
+      ? { ...current, turns: [...current.turns, turn], storageFailed: current.storageFailed || !saved }
+      : current);
   }
 
   // Submission and evidence share the same immutable selection for this turn.
@@ -108,37 +138,42 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
     if (!text || sending.current || !canSend || !ctx || !atlasTarget) return;
 
     const target = { atlasTarget, skillCode: skill?.code };
-    const next: ChatMessage[] = turns.flatMap(({ prompt, reply }) => [
-      { role: "user", content: prompt },
-      reply.message,
-    ]);
+    const next: ChatMessage[] = turns.filter((turn) => turn.state === "received")
+      .slice(-Math.floor((MAX_HISTORY_MESSAGES - 1) / 2)).flatMap(({ prompt, reply }) => [
+        { role: "user", content: prompt },
+        { role: "assistant", content: reply.message.content.slice(0, MAX_MESSAGE_LENGTH) },
+      ]);
     next.push({ role: "user", content: text });
     sending.current = true;
-    setSelectedReceipt(null);
+    setSelectedReceiptId(null);
+    setSendError(undefined);
     setSubmission({ ...target, state: "pending" });
     try {
       const reply = await requestChatTurn(next, ctx.scopeKey, {
         target: target.atlasTarget,
         skillCode: target.skillCode,
       });
-      setTurns((history) => [...history, { ...target, state: "received", reply, prompt: text }]);
+      await rememberTurn(ctx.scopeKey, { ...target, state: "received", reply, prompt: text, id: crypto.randomUUID(), createdAt: Date.now() });
       setInput("");
-      setSubmission(null);
     } catch (failure) {
       const accessHandled = onAccessFailure(failure, ctx.scopeKey);
       const requestError = failure instanceof ChatRequestError ? failure : undefined;
-      const conversionFailed = requestError?.code === "DOCUMENT_CONVERSION_UNAVAILABLE";
-      setSubmission({
-        ...target,
-        state: "failed",
-        conversionFailed,
-        runosCallId: conversionFailed ? requestError?.callId : undefined,
-        evidence: requestError?.evidence,
-        message: accessHandled ? undefined : conversionFailed
-          ? "Runos \u672a\u5b8c\u6210\u6587\u6863\u8f6c\u6362\uff0c\u8349\u7a3f\u5df2\u4fdd\u7559\u3002"
-          : failure instanceof Error ? failure.message : "\u53d1\u9001\u5931\u8d25\uff0c\u8349\u7a3f\u5df2\u4fdd\u7559\u3002",
-      });
+      if (!accessHandled) {
+        const conversionFailed = requestError?.code === "DOCUMENT_CONVERSION_UNAVAILABLE";
+        const searchFailed = requestError?.code === "WEB_SEARCH_UNAVAILABLE";
+        const message = conversionFailed
+          ? "Runos \u672a\u5b8c\u6210\u6587\u6863\u8f6c\u6362\u3002"
+          : searchFailed ? "\u8054\u7f51\u641c\u7d22\u672a\u83b7\u5f97\u53ef\u7528\u6765\u6e90\u3002"
+          : failure instanceof Error ? failure.message : "\u53d1\u9001\u5931\u8d25\u3002";
+        await rememberTurn(ctx.scopeKey, {
+          ...target, state: "failed", runosBlockedAtlas: conversionFailed || searchFailed,
+          runosCallId: requestError?.callId, evidence: requestError?.evidence, message,
+          prompt: text, id: crypto.randomUUID(), createdAt: Date.now(),
+        });
+        setSendError("\u8349\u7a3f\u5df2\u4fdd\u7559\uff0c\u53ef\u4fee\u6539\u540e\u91cd\u8bd5\u3002");
+      }
     } finally {
+      setSubmission(null);
       sending.current = false;
     }
   }
@@ -271,25 +306,28 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
                     <p>{converting ? "\u7c98\u8d34\u77ed\u6587\u6863\uff0c\u6216\u586b\u5165\u6837\u4f8b\u67e5\u770b\u8f6c\u6362\u548c\u6458\u8981\u3002" : "\u8f93\u5165\u4e00\u6761\u6d88\u606f\uff0c\u6216\u586b\u5165\u6837\u4f8b\u67e5\u770b\u5b9e\u9645\u8c03\u7528\u7ed3\u679c\u3002"}</p>
                   </div>
                 )}
-                {turns.map(({ prompt, reply }, index) => (
-                  <div key={index} className="chat-message-pair">
-                    <p className="chat-message" data-role="user">{prompt}</p>
+                {turns.map((turn, index) => (
+                  <div key={turn.id} className="chat-message-pair">
+                    <p className="chat-message" data-role="user">{turn.prompt}</p>
                     <div className="chat-reply">
-                      <p className="chat-message" data-role="assistant">{reply.message.content}</p>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => inspectReceipt(index)}
+                      {turn.state === "received"
+                        ? <p className="chat-message" data-role="assistant">{turn.reply.message.content}</p>
+                        : <p className="chat-entry-error">{turn.message}</p>}
+                      <Button type="button" variant="ghost" size="sm" onClick={() => inspectReceipt(turn.id)}
                         aria-controls="chat-call-receipts"
                         aria-label={`\u67e5\u770b\u7b2c ${index + 1} \u8f6e\u8c03\u7528\u56de\u6267`}>
-                        {"\u67e5\u770b\u56de\u6267"}
+                        {turn.state === "received" && turn.reply.skill?.sources?.length
+                          ? "\u67e5\u770b\u6765\u6e90\u4e0e\u56de\u6267" : "\u67e5\u770b\u56de\u6267"}
                       </Button>
                     </div>
                   </div>
                 ))}
-                {busy && <p className="chat-message" data-role="user">{input.trim()}</p>}
-                {busy && <p role="status" className="chat-log-status">{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</p>}
+                {busy && !blocked && <p className="chat-message" data-role="user">{input.trim()}</p>}
+                {busy && !blocked && <p role="status" className="chat-log-status">{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</p>}
               </div>
 
               <form className="chat-entry" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-                {submission?.state === "failed" && submission.message && <p className="chat-entry-error" role="alert">{submission.message}</p>}
+                {!blocked && sendError && <p className="chat-entry-error" role="alert">{sendError}</p>}
                 <Textarea
                   ref={composerRef}
                   aria-label={converting ? "HTML \u6587\u6863" : "\u6d88\u606f"}
@@ -327,8 +365,11 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
           <ChatVerification
             panelRef={receiptRef}
             turn={visibleReceipt}
-            turnNumber={selectedReceipt !== null ? selectedReceipt + 1 : turns.length + (submission ? 1 : 0)}
-            onLatest={selectedReceipt !== null && visibleReceipt !== currentReceipt ? () => inspectReceipt(null) : undefined}
+            turnNumber={selectedIndex >= 0 ? selectedIndex + 1 : turns.length + (submission ? 1 : 0)}
+            history={turns}
+            storageFailed={!blocked && scopedHistory?.storageFailed}
+            selectedReceiptId={selectedIndex >= 0 ? selectedReceiptId : null}
+            onSelectReceipt={setSelectedReceiptId}
           />
         </div>
       </div>

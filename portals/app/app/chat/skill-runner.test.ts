@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { runSkill } from "./skill-runner";
 import { resetS2STokenCache } from "../lib/s2s-token";
 import { runRunosSample } from "../platform-demo/runos-sample";
-import { AtlasChatResolver, ChatConversionError, ChatInferenceError } from "./resolver";
+import { AtlasChatResolver, ChatConversionError, ChatInferenceError, ChatWebSearchError } from "./resolver";
 import { AtlasError } from "./atlas-client";
-import { DOCUMENT_CONVERSION_SKILL } from "./types";
+import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL } from "./types";
 
 // What a capability answers is not all for the model.
 //
@@ -37,7 +37,8 @@ const HISTORY = [{ role: "user" as const, content: "summarize this" }];
 /** Answers the four MCP tools in sequence; `payload` is what invoke returns. */
 function stub(
   payload: Record<string, unknown>,
-  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean; failAtlas?: boolean } = {},
+  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean; failAtlas?: boolean;
+    search?: boolean; searchFailure?: boolean; searchText?: string[] } = {},
 ) {
   const calls: { name: string; arguments: Record<string, unknown>; taskId?: string }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -62,8 +63,10 @@ function stub(
     };
     const tool = params?.name;
     if (params && tool) calls.push({ name: tool, arguments: params.arguments, taskId: params._meta?.vxture?.task_id });
-    const structured = answer(tool, payload, options);
-    return new Response(JSON.stringify({ result: { isError: false, structuredContent: structured } }), {
+    const structured = options.search ? searchAnswer(tool, payload, options.acknowledged) : answer(tool, payload, options);
+    const content = tool === "runos_invoke" ? options.searchText?.map((text) => ({ type: "text", text })) : undefined;
+    const isError = tool === "runos_invoke" && Boolean(options.searchFailure);
+    return new Response(JSON.stringify({ result: { isError, structuredContent: structured, content } }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -96,6 +99,21 @@ function answer(
   }
   if (tool === "runos_invoke") return payload;
   return { acknowledged: options.acknowledged ?? false };
+}
+
+function searchAnswer(tool: string | undefined, payload: Record<string, unknown>, acknowledged?: boolean): Record<string, unknown> {
+  const search = { operation: "web_search_exa", risk_level: "read" };
+  const connector = { capability_id: "exa.web-research", primitive_type: "connector" };
+  if (tool === "runos_discover") return { capabilities: [
+    { capability_id: "k-dense-ai.exa-search", primitive_type: "skill", operations: [{ operation: "fetch", risk_level: "read" }] },
+    { ...connector, operations: [search] },
+  ] };
+  if (tool === "runos_resolve") return { ...connector, version: "1.0.0", contract: { operations: [
+    { operation: "web_fetch_exa", riskLevel: "read" },
+    { operation: search.operation, riskLevel: "read" },
+  ] } };
+  if (tool === "runos_invoke") return payload;
+  return { acknowledged };
 }
 
 beforeEach(() => {
@@ -240,4 +258,46 @@ test("the chat workflow sends the converted document to Atlas under the Runos ta
       && error.cause instanceof AtlasError
       && error.cause.envelope.requestId === "atlas-failed-request",
   );
+});
+
+test("network search selects the entitled Exa connector and gives Atlas sourced evidence", async () => {
+  const url = "https://example.org/company";
+  const calls = stub({ _meta: { vxture: { call_id: "search-call", version_resolved: "1.0.0" } } }, {
+    search: true, acknowledged: true, searchText: ["Provider notes", "Company profile: " + url],
+  });
+  const question = "Find the company business scope";
+  const resolver = new AtlasChatResolver({ baseUrl: "https://atlas.test" });
+  const result = await resolver.reply([{ role: "user", content: question }], { workspaceId: "ws-1", mint: OPTS.identity }, {
+    modelCode: "chat/default", skillCode: WEB_SEARCH_SKILL,
+  });
+  assert.deepEqual(calls.map((call) => call.name), ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome", "atlas"]);
+  const invoke = calls[2].arguments;
+  assert.equal(invoke.capability_id, "exa.web-research");
+  assert.equal(invoke.operation, "web_search_exa");
+  assert.equal(invoke.version, "1.0.0");
+  const args = invoke.arguments as Record<string, string>;
+  assert.equal(args.query, question);
+  assert.match(args.objective, /public sources/);
+  assert.equal(calls[3].arguments.outcome, "success");
+  assert.equal(result.skill?.outcomeAcknowledged, true);
+  assert.deepEqual(result.skill?.sources, [url]);
+  const atlasMessages = calls[4].arguments.messages as { content: string }[];
+  assert.ok(atlasMessages[0].content.includes("Company profile: " + url));
+});
+
+test("network search preserves Runos errors and never answers without search evidence", async () => {
+  const resolver = new AtlasChatResolver({ baseUrl: "https://atlas.test" });
+  const errors = [
+    { payload: { code: "CALLER_INVALID_ARGUMENTS", call_id: "search-failed" }, rejected: true, code: "CALLER_INVALID_ARGUMENTS", callId: "search-failed" },
+    { payload: { _meta: { vxture: { call_id: "no-evidence" } } }, rejected: false, code: "WEB_SEARCH_NO_EVIDENCE", callId: "no-evidence" },
+  ];
+  for (const { payload, rejected, code, callId } of errors) {
+    const calls = stub(payload, { search: true, searchFailure: rejected, acknowledged: true });
+    await assert.rejects(resolver.reply(HISTORY, { workspaceId: "ws-1", mint: OPTS.identity }, {
+      modelCode: "chat/default", skillCode: WEB_SEARCH_SKILL,
+    }), (error: unknown) => error instanceof ChatWebSearchError && error.skill.errorCode === code
+      && error.skill.callId === callId && error.taskId === calls[0].taskId);
+    assert.deepEqual(calls.map((call) => call.name), ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome"]);
+    assert.equal(calls[3].arguments.outcome, "failure");
+  }
 });
