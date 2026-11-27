@@ -198,15 +198,17 @@
 /* Content and legal footer */
 
 .product-framework-content {
+  --vxtpl-content-max: var(--container-content-wide-2xl);
   flex: 1;
   inline-size: 100%;
-  max-inline-size: 1536px;
+  max-inline-size: var(--vxtpl-content-max);
   min-inline-size: 0;
   margin-inline: auto;
   padding: 32px var(--vxtpl-page-inset) 48px;
 }
 
-.product-framework-content[data-content-width="1920"] { max-inline-size: 1920px; }
+.product-framework-content[data-content-width="1280"] { --vxtpl-content-max: var(--container-content-base-xl); }
+.product-framework-content[data-content-width="1920"] { --vxtpl-content-max: var(--container-content-ultra-3xl); }
 
 .product-framework-footer {
   padding: 12px var(--vxtpl-page-inset);
