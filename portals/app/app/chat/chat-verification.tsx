@@ -8,7 +8,7 @@
  */
 
 import { useRef, useState, type ReactNode, type Ref } from "react";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, ShellIconButton, StatusBadge } from "../ds";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusBadge } from "../ds";
 import type { SavedTurn } from "./chat-history";
 import { isChatEscapeKey } from "./chat-keyboard";
 import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type SkillOutcome, type TurnVerification } from "./types";
@@ -115,8 +115,10 @@ export function ChatVerification({
               {selectedReceiptId && (
                 <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
               )}
-              <ShellIconButton className="chat-receipt-close" icon="x" label={"\u5173\u95ed\u8c03\u7528\u56de\u6267"}
-                onClick={(event) => onClose(event.detail === 0)} />
+              <Button type="button" size="sm" variant="ghost" className="chat-receipt-close"
+                aria-label={"\u5173\u95ed\u8c03\u7528\u56de\u6267"} onClick={(event) => onClose(event.detail === 0)}>
+                <Icon name="x" size={24} aria-hidden="true" />
+              </Button>
             </div>
           )}
         />
