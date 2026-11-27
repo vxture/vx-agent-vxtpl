@@ -1,8 +1,8 @@
 import { canUseFeature, minTierFor, type FeatureKey } from "../entitlement/capability";
 import type { Entitlement, Tier } from "../entitlement/types";
 import type { MintOptions } from "../lib/s2s-token";
-import { listGrantedEndpoints, type AtlasClientConfig } from "./atlas-client";
-import { DOCUMENT_CONVERSION_SKILL } from "./types";
+import { listAtlasModels, listGrantedEndpoints, type AtlasClientConfig } from "./atlas-client";
+import { DOCUMENT_CONVERSION_SKILL, type AtlasModelChoice } from "./types";
 
 interface FeatureOption {
   code: string;
@@ -12,6 +12,8 @@ interface FeatureOption {
 
 // These entries preserve existing labels and subscription tiers for known
 // routes. Atlas controls membership in the live list.
+export const ATLAS_GRANTED_FEATURE = "model:atlas-granted";
+
 const MODEL_TIER_RULES = new Map<string, Omit<FeatureOption, "code">>([
   ["chat/default", { label: "Standard", featureKey: "model:chat-default" }],
   ["chat/cheap", { label: "Economy", featureKey: "model:chat-cheap" }],
@@ -67,8 +69,22 @@ export async function readAtlasChatModels(
     .map(({ endpointCode }) => endpointCode));
   return gate(Array.from(codes, (code) => ({
     code,
-    ...(MODEL_TIER_RULES.get(code) ?? { label: code, featureKey: "model:atlas-granted" }),
+    ...(MODEL_TIER_RULES.get(code) ?? { label: code, featureKey: ATLAS_GRANTED_FEATURE }),
   })), entitlement);
+}
+
+/** Picks only active chat models from the caller-scoped Atlas directory. */
+export async function readGrantedAtlasChatModels(
+  config: AtlasClientConfig,
+  identity: MintOptions,
+  entitlement: Entitlement,
+): Promise<AtlasModelChoice[] | null> {
+  if (!canUseFeature(entitlement, ATLAS_GRANTED_FEATURE)) return [];
+  const models = await listAtlasModels(config, identity, "caller");
+  if (models.length && models.every(({ modelType }) => !modelType?.trim())) return null;
+  return models
+    .filter(({ state, modelType }) => state === "active" && modelType === "chat")
+    .map(({ modelCode, modelName, provider }) => ({ code: modelCode, name: modelName, provider }));
 }
 
 /** Offline examples for development without an Atlas connection. */

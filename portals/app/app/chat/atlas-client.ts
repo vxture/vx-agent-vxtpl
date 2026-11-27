@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { assertInternalTarget } from "../lib/internal-target";
 import { invalidateS2SToken, mintS2S, type MintOptions, type S2SToken } from "../lib/s2s-token";
 import { isRetryable, type PlatformErrorBody } from "../lib/platform-error";
-import type { ChatMessage } from "./types";
+import type { ChatMessage, ChatTarget } from "./types";
 
 // Atlas client - the model supply plane (L1). Contract verified against the
 // Atlas interface reference, section 04 "data plane" (POST /v1/chat) and
@@ -188,9 +188,7 @@ async function atlasFetch(
   return send();
 }
 
-export type AtlasChatTarget =
-  | { endpointCode: string; modelCode?: never }
-  | { modelCode: string; endpointCode?: never };
+export type AtlasChatTarget = ChatTarget;
 
 export type ChatCallOptions = AtlasChatTarget & {
   /**
@@ -300,11 +298,17 @@ function isAtlasModel(row: unknown): row is AtlasModel {
  * is invoked. Use listGrantedEndpoints for the product-specific route list.
  * @param cfg - Atlas runtime configuration.
  * @param identity - Server-owned ticket exchange identity.
+ * @param scope - Select the verified caller's grant scope for product pickers.
  * @returns Atlas model summaries.
  * @throws {AtlasError} If Atlas rejects the read or sends an invalid directory.
  */
-export async function listAtlasModels(cfg: AtlasClientConfig, identity: MintOptions): Promise<AtlasModel[]> {
-  const res = await atlasFetch(cfg, identity, "/v1/models", () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
+export async function listAtlasModels(
+  cfg: AtlasClientConfig,
+  identity: MintOptions,
+  scope?: "caller",
+): Promise<AtlasModel[]> {
+  const path = scope === "caller" ? "/v1/models?scope=caller" : "/v1/models";
+  const res = await atlasFetch(cfg, identity, path, () => ({ method: "GET" }), PROBE_TIMEOUT_MS);
   if (!res.ok) await throwAtlasError(res);
   const raw: unknown = await res.json();
   if (!Array.isArray(raw) || !raw.every(isAtlasModel)) {

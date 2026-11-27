@@ -1,116 +1,47 @@
 /**
- * Full workspace chat and its optional assistant panel.
+ * Workspace conversation and platform call controls.
  * @package @vxtpl/app
  * @layer Presentation
  * @category Page
  * @author AI-Generated
- * @date 2026-11-25
+ * @date 2026-11-27
  */
 
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Stack,
-  StatusBadge,
-} from "../ds";
-import { DOCUMENT_CONVERSION_SKILL, MAX_MESSAGE_LENGTH, type ChatMessage, type ChatReply, type SkillOutcome } from "./types";
-import type { GatedOption } from "./catalog";
-import { requestChatTurn, type ChatContext } from "./client";
-import { AssistantPanel } from "./assistant-panel";
-import { useAssistantConversations } from "./assistant-conversations";
-import { ChatWorkspaceAccess } from "./workspace-access";
+import { Button, Checkbox, Icon, NativeSelect, SectionHeader, SegmentedControl, StatusBadge, Textarea, ViewHeader } from "../ds";
 import { ProductHeader } from "../framework/product-chrome";
 import { WorkspaceRegions } from "../framework/workspace-regions";
+import { AssistantPanel } from "./assistant-panel";
+import { useAssistantConversations } from "./assistant-conversations";
+import { ChatVerification, type TurnVerification } from "./chat-verification";
+import { ChatRequestError, requestChatTurn, type ChatContext } from "./client";
+import { DOCUMENT_CONVERSION_SKILL, MAX_MESSAGE_LENGTH, type ChatMessage, type ChatTarget } from "./types";
+import { ChatWorkspaceAccess } from "./workspace-access";
+import "./chat-workspace.css";
 
-// Chat surface. Talks to /api/chat, which requires a signed-in session: the
-// workspace it resolves entitlement for is also what the S2S token is minted
-// against and what Atlas attributes the call to. Model and skill selection are
-// entitlement-gated (tier -> CAPABILITY_MATRIX, entitlement/capability.ts), and
-// a selected skill is executed as a real Runos capability.
+// Conversation presets
 
-const NO_SKILL = "";
+const CHAT_EXAMPLE = "\u8bf7\u7528\u4e00\u53e5\u8bdd\u8bf4\u51fa\u5de5\u4f5c\u8fdb\u5c55\u5468\u62a5\u5e94\u8be5\u5305\u542b\u7684\u4e09\u9879\u4fe1\u606f\u3002";
+const HTML_EXAMPLE = "<article>\n  <h1>\u9879\u76ee\u5468\u62a5</h1>\n  <p>\u672c\u5468\u5b8c\u6210\u9700\u6c42\u8bc4\u5ba1\uff0c\u4e0b\u5468\u5f00\u59cb\u8054\u8c03\u3002</p>\n</article>";
+const SKILL_LABELS: Record<string, string> = {
+  [DOCUMENT_CONVERSION_SKILL]: "HTML \u8f6c Markdown",
+  summarize: "\u6458\u8981",
+  "web-search": "\u7f51\u7edc\u641c\u7d22",
+  "code-exec": "\u4ee3\u7801\u6267\u884c",
+  "data-analysis": "\u6570\u636e\u5206\u6790",
+};
 
-type TurnMeta = Omit<ChatReply, "message">;
+type CompletedTurn = Extract<TurnVerification, { state: "received" }> & { prompt: string };
+type AtlasMode = "route" | "model";
 
-function tierLabel(tier: string | null): string {
-  return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "No subscription";
+interface WorkspaceProps {
+  ctx: ChatContext | null;
+  blocked: boolean;
+  revision: number;
+  onAccessFailure: (error: unknown, scopeKey: string) => boolean;
 }
-
-function tierTone(tier: string | null): "neutral" | "warning" | "brand" {
-  if (!tier) return "neutral";
-  if (tier === "free" || tier === "starter") return "warning";
-  return "brand";
-}
-
-/**
- * Model and skill, as toolbar pills rather than sidebar cards.
- *
- * A picker parked in a sidebar reads as configuration you set once. These are a
- * per-turn choice, so they sit next to the thing they change. The `label` is
- * part of the control rather than a heading above it, which is what lets two of
- * them share one row without either looking like a section.
- *
- * An option the tier does not cover stays VISIBLE and disabled, carrying the
- * tier it needs. Hiding it would answer "why can I not pick that" with silence.
- */
-function PillSelect({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: GatedOption[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <span className="pill-select">
-      <span className="pill-label">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.code} value={o.code} disabled={!o.allowed}>
-            {o.label}
-            {!o.allowed ? ` \u{1F512} ${o.requiredTier ?? "?"}` : ""}
-          </option>
-        ))}
-      </select>
-    </span>
-  );
-}
-
-/** What the selected skill actually did. Silence here would read as "it worked". */
-function SkillReport({ skill }: { skill: SkillOutcome }) {
-  const tone = skill.status === "ran" ? "success" : skill.status === "failed" ? "warning" : "neutral";
-  return (
-    <div style={{ marginTop: "0.6rem", fontSize: "0.8rem", color: "var(--vxtpl-slate)" }}>
-      <StatusBadge tone={tone} dot>
-        {skill.code}: {skill.status}
-      </StatusBadge>
-      {skill.capabilityId && (
-        <div style={{ marginTop: 4 }}>
-          via <code>{skill.capabilityId}</code>
-        </div>
-      )}
-      {skill.callId && <div>Runos call <code>{skill.callId}</code></div>}
-      {typeof skill.outcomeAcknowledged === "boolean" && (
-        <div>{skill.outcomeAcknowledged ? "Outcome acknowledged" : "Outcome unconfirmed"}</div>
-      )}
-      {skill.detail && (
-        <div style={{ marginTop: 4, wordBreak: "break-word" }}>{skill.detail.slice(0, 240)}</div>
-      )}
-    </div>
-  );
-}
-
-/* Context and submission */
 
 export default function ChatPage() {
   return (
@@ -122,72 +53,104 @@ export default function ChatPage() {
   );
 }
 
-function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
-  ctx: ChatContext | null;
-  blocked: boolean;
-  revision: number;
-  onAccessFailure: (error: unknown, scopeKey: string) => boolean;
-}) {
-  const [preferredModel, setModelCode] = useState("");
-  const [preferredSkill, setSkillCode] = useState(NO_SKILL);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspaceProps) {
+  const [preferredRoute, setPreferredRoute] = useState("");
+  const [preferredModel, setPreferredModel] = useState("");
+  const [mode, setMode] = useState<AtlasMode>("route");
+  const [useRunos, setUseRunos] = useState(false);
+  const [preferredSkill, setPreferredSkill] = useState(DOCUMENT_CONVERSION_SKILL);
+  const [turns, setTurns] = useState<CompletedTurn[]>([]);
   const [input, setInput] = useState("");
-  const [turn, setTurn] = useState<TurnMeta | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submission, setSubmission] = useState<Exclude<TurnVerification, { state: "received" }> | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<number | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantWide, setAssistantWide] = useState(false);
-  const eligibleModels = ctx?.models.filter((model) => model.allowed) ?? [];
-  const assistantModel = eligibleModels.find((model) => model.code === ctx?.defaultModelCode)?.code ?? eligibleModels[0]?.code;
-  const modelCode = eligibleModels.find((model) => model.code === preferredModel)?.code ?? assistantModel;
-  const skillCode = ctx?.skills.find((skill) => skill.code === preferredSkill && skill.allowed)?.code ?? NO_SKILL;
-  const assistant = useAssistantConversations(blocked ? undefined : assistantModel, ctx?.scopeKey, onAccessFailure);
   const logRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const receiptRef = useRef<HTMLElement>(null);
   const sending = useRef(false);
 
+  const direct = mode === "model";
+  const busy = submission?.state === "pending";
+  const currentReceipt = submission ?? turns.at(-1) ?? null;
+  const visibleReceipt = selectedReceipt === null ? currentReceipt : turns[selectedReceipt] ?? currentReceipt;
+  const availableRoutes = ctx?.models.filter((route) => route.allowed) ?? [];
+  const defaultRoute = availableRoutes.find((route) => route.code === ctx?.defaultModelCode) ?? availableRoutes[0];
+  const selectedRoute = preferredRoute ? availableRoutes.find((route) => route.code === preferredRoute) : defaultRoute;
+  const directModels = ctx?.atlasDirectModels ?? null;
+  const selectedModel = directModels?.find((model) => model.code === preferredModel);
+  const atlasTarget: ChatTarget | null = direct
+    ? selectedModel ? { modelCode: selectedModel.code } : null
+    : selectedRoute ? { endpointCode: selectedRoute.code } : null;
+  const availableSkills = ctx?.skills.filter((skill) => skill.allowed) ?? [];
+  const selectedSkill = availableSkills.find((skill) => skill.code === preferredSkill);
+  const skill = useRunos ? selectedSkill : undefined;
+  const converting = skill?.code === DOCUMENT_CONVERSION_SKILL;
+  const sample = converting ? HTML_EXAMPLE : useRunos ? null : CHAT_EXAMPLE;
+  const canSend = !blocked && Boolean(atlasTarget) && (!useRunos || Boolean(skill));
+  const assistant = useAssistantConversations(blocked ? undefined : defaultRoute?.code, ctx?.scopeKey, onAccessFailure);
+
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, busy]);
+    const log = logRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [turns, busy]);
+
+  function inspectReceipt(index: number | null) {
+    setSelectedReceipt(index);
+    receiptRef.current?.focus({ preventScroll: true });
+    receiptRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
+  // Submission and evidence share the same immutable selection for this turn.
 
   async function send() {
     const text = input.trim();
-    if (!text || sending.current || blocked || !ctx || !modelCode) return;
+    if (!text || sending.current || !canSend || !ctx || !atlasTarget) return;
+
+    const target = { atlasTarget, skillCode: skill?.code };
+    const next: ChatMessage[] = turns.flatMap(({ prompt, reply }) => [
+      { role: "user", content: prompt },
+      reply.message,
+    ]);
+    next.push({ role: "user", content: text });
     sending.current = true;
-    setError(null);
-    const next = [...messages, { role: "user" as const, content: text }];
-    setBusy(true);
+    setSelectedReceipt(null);
+    setSubmission({ ...target, state: "pending" });
     try {
-      const body = await requestChatTurn(next, ctx.scopeKey, {
-        modelCode,
-        skillCode: skillCode || undefined,
+      const reply = await requestChatTurn(next, ctx.scopeKey, {
+        target: target.atlasTarget,
+        skillCode: target.skillCode,
       });
-      setMessages([...next, body.message]);
+      setTurns((history) => [...history, { ...target, state: "received", reply, prompt: text }]);
       setInput("");
-      setTurn({
-        mode: body.mode,
-        modelCode: body.modelCode,
-        skill: body.skill,
-        skillCode: body.skillCode,
-        taskId: body.taskId,
-        requestId: body.requestId,
-        usage: body.usage,
-        latencyMs: body.latencyMs,
+      setSubmission(null);
+    } catch (failure) {
+      const accessHandled = onAccessFailure(failure, ctx.scopeKey);
+      const requestError = failure instanceof ChatRequestError ? failure : undefined;
+      const conversionFailed = requestError?.code === "DOCUMENT_CONVERSION_UNAVAILABLE";
+      setSubmission({
+        ...target,
+        state: "failed",
+        conversionFailed,
+        runosCallId: conversionFailed ? requestError?.callId : undefined,
+        evidence: requestError?.evidence,
+        message: accessHandled ? undefined : conversionFailed
+          ? "Runos \u672a\u5b8c\u6210\u6587\u6863\u8f6c\u6362\uff0c\u8349\u7a3f\u5df2\u4fdd\u7559\u3002"
+          : failure instanceof Error ? failure.message : "\u53d1\u9001\u5931\u8d25\uff0c\u8349\u7a3f\u5df2\u4fdd\u7559\u3002",
       });
-    } catch (err) {
-      if (!onAccessFailure(err, ctx.scopeKey)) setError(err instanceof Error ? err.message : "chat request failed");
     } finally {
       sending.current = false;
-      setBusy(false);
     }
   }
 
-  /* Conversation and diagnostics */
+  // Conversation and controls
 
   return (
     <WorkspaceRegions
+      className="chat-shell"
       width="1920"
       renderHeader={(actions, control) => <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />}
-      right={assistantModel || assistantOpen ? {
+      right={defaultRoute || assistantOpen ? {
         title: "AI assistant",
         assistant: true,
         open: assistantOpen,
@@ -198,157 +161,177 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: {
         ),
       } : undefined}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.7rem", flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: "1.7rem" }}>Chat</h1>
-        <StatusBadge tone="warning" dot>
-          debug surface
-        </StatusBadge>
-        <StatusBadge tone={tierTone(ctx?.tier ?? null)} dot>
-          {ctx ? tierLabel(ctx.tier) : "..."}
-        </StatusBadge>
-      </div>
-      <p className="lede chat-intro">
-        A tier-gated turn against the platform&apos;s model gateway; a selected skill runs as a real Runos
-        capability. This is a DEBUG surface for verifying the S2S chain, not a product feature - turns are
-        capped at 500 characters and 6 per minute.
-      </p>
-
-      {/* One conversation column; model and skill sit UNDER the composer, which
-          is where every major assistant put them and not by coincidence. They
-          are the last thing you touch before sending, so they belong at the end
-          of the reading path, next to Send - not above the transcript, where
-          they read as settings you configured before the conversation started.
-          Keeping them adjacent to the input also means the choice and its effect
-          are in one glance when a locked option explains itself.
-
-          The transcript scrolls to the card's own edges and the composer block
-          sits flush against its bottom rule, so the card contributes the frame
-          only - its padding and inter-child gap are zeroed rather than worked
-          around. */}
-      <div className="chat-surface">
-        <Card style={{ padding: 0, gap: 0, height: 560, overflow: "hidden", width: "100%" }}>
-          <div
-            ref={logRef}
-            style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: 10 }}
-          >
-            {messages.length === 0 && !busy && (
-              <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.88rem" }}>Say something to verify the round trip.</span>
-            )}
-            {(busy ? [...messages, { role: "user", content: input.trim() }] : messages).map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  background: m.role === "user" ? "var(--vxtpl-accent-soft)" : "var(--vxtpl-paper)",
-                  color: m.role === "user" ? "var(--vxtpl-accent-ink)" : "var(--vxtpl-ink-soft)",
-                  border: m.role === "assistant" ? "1px solid var(--border)" : "none",
-                  borderRadius: 12,
-                  padding: "0.55rem 0.85rem",
-                  maxWidth: "min(78%, 640px)",
-                  whiteSpace: "pre-wrap",
-                  overflowWrap: "anywhere",
-                  fontSize: "0.92rem",
-                  lineHeight: 1.5,
-                }}
-              >
-                {m.content}
-              </div>
-            ))}
-            {busy && <span role="status" style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</span>}
-          </div>
-          <div className="chat-composer">
-            <div className="chat-composer__row">
-              <Input
-                style={{ flex: 1, minWidth: 0 }}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) void send();
-                }}
-                placeholder={skillCode === DOCUMENT_CONVERSION_SKILL ? "Paste a short HTML document" : "Type a short message"}
-                maxLength={MAX_MESSAGE_LENGTH}
-                disabled={busy || blocked}
-              />
-              <Button onClick={send} disabled={busy || blocked || !modelCode || !input.trim()}>
-                {busy ? "..." : "Send"}
-              </Button>
-            </div>
-
-            <div className="chat-toolbar">
-              {ctx && modelCode ? (
-                <>
-                  <PillSelect label="Model" options={ctx.models} value={modelCode} onChange={setModelCode} />
-                  <PillSelect
-                    label="Skill"
-                    options={[{ code: NO_SKILL, label: "None", allowed: true, requiredTier: null }, ...ctx.skills]}
-                    value={skillCode}
-                    onChange={setSkillCode}
+      <div className="chat-workspace">
+        <div className="chat-workspace-grid" data-assistant-open={assistantOpen || undefined}>
+          <div className="chat-main max-w-content-ultra-3xl">
+            <ViewHeader
+              icon="chat-circle"
+              title={"\u5bf9\u8bdd\u5de5\u4f5c\u53f0"}
+              description={"\u901a\u8fc7 Atlas \u8def\u7531\u6216\u6307\u5b9a\u6a21\u578b\u53d1\u8d77\u5bf9\u8bdd\u3002"}
+              secondary={ctx?.atlasSource === "mock" ? <StatusBadge tone="warning">{"\u79bb\u7ebf\u6837\u4f8b"}</StatusBadge> : undefined}
+              action={(
+                <Button asChild size="sm" variant="ghost">
+                  <a href="/platform-check#platform-actions">
+                    {"\u63a5\u53e3\u9a8c\u6536"} <Icon name="arrow-right" size="sm" aria-hidden="true" />
+                  </a>
+                </Button>
+              )}
+            />
+            <section className="chat-conversation" aria-label={"\u5bf9\u8bdd"}>
+              <div className="chat-configuration">
+                <SectionHeader title={"Atlas \u8c03\u7528"} level={2} divider={false} className="chat-configuration-heading" />
+                <div className="chat-mode" onKeyDown={(event) => {
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+                  if (!(event.target instanceof HTMLButtonElement) || event.target.getAttribute("role") !== "radio") return;
+                  const nextOption = event.currentTarget.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="false"]:enabled');
+                  if (!nextOption || event.target === nextOption) return;
+                  event.preventDefault();
+                  nextOption.click();
+                  nextOption.focus();
+                }}>
+                  <span className="chat-field-label">{"\u8c03\u7528\u65b9\u5f0f"}</span>
+                  <SegmentedControl<AtlasMode>
+                    ariaLabel={"Atlas \u8c03\u7528\u65b9\u5f0f"}
+                    value={mode}
+                    onChange={setMode}
+                    items={[
+                      { value: "route", label: "\u8def\u7531\u8c03\u7528", disabled: busy || blocked },
+                      { value: "model", label: "\u6a21\u578b\u76f4\u8c03", disabled: busy || blocked },
+                    ]}
                   />
-                </>
-              ) : ctx ? (
-                <span role="status">{"\u5f53\u524d\u5de5\u4f5c\u7a7a\u95f4\u6ca1\u6709\u53ef\u7528\u7684\u5bf9\u8bdd\u6a21\u578b\u3002"}</span>
-              ) : (
-                <span style={{ color: "var(--vxtpl-slate-faint)", fontSize: "0.82rem" }}>loading catalog...</span>
-              )}
-              {turn && (
-                <span style={{ marginLeft: "auto" }}>
-                  <StatusBadge tone={turn.mode === "atlas" ? "success" : "neutral"} dot>
-                    {turn.mode === "atlas" ? "Atlas" : "Mock"}
-                  </StatusBadge>
-                </span>
-              )}
-            </div>
-            {error && <p role="alert" style={{ color: "var(--vxtpl-danger)", fontSize: "0.86rem" }}>{error}</p>}
-          </div>
-        </Card>
-
-        {/* What the last turn actually did, under the conversation rather than
-            beside it: it is a result, so it belongs downstream of the thing that
-            produced it and it should not occupy width while there is nothing to
-            report. */}
-        {(turn?.skill || turn?.usage || turn?.taskId) && (
-          <Stack gap="md" style={{ marginTop: "1rem" }}>
-            {turn.skill && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Skill</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <SkillReport skill={turn.skill} />
-                </CardContent>
-              </Card>
-            )}
-            {(turn.usage || turn.taskId) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Last turn</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div style={{ fontSize: "0.8rem", color: "var(--vxtpl-slate)", lineHeight: 1.7 }}>
-                    <div>
-                      served by <code>{turn.modelCode}</code>
+                </div>
+                <div className="chat-configuration-fields">
+                  {direct ? (
+                    <label>
+                      <span>{"Atlas \u6a21\u578b"}</span>
+                      <NativeSelect value={selectedModel?.code ?? ""} onChange={(event) => setPreferredModel(event.target.value)}
+                        disabled={busy || blocked || !directModels?.length}>
+                        <option value="">{!ctx ? "\u6b63\u5728\u8bfb\u53d6\u6388\u6743\u6a21\u578b"
+                          : ctx.atlasSource === "mock" ? "\u79bb\u7ebf\u9884\u89c8\u672a\u8fde\u63a5 Atlas"
+                          : ctx.atlasDirectRequiredTier ? "\u9700 " + ctx.atlasDirectRequiredTier.toUpperCase() + " \u5957\u9910"
+                          : directModels === null ? "\u6388\u6743\u76ee\u5f55\u6682\u4e0d\u53ef\u7528"
+                          : directModels.length ? "\u9009\u62e9\u5df2\u6388\u6743\u6a21\u578b" : "\u6ca1\u6709\u5df2\u6388\u6743\u7684\u5bf9\u8bdd\u6a21\u578b"}</option>
+                        {directModels?.map(({ code, name, provider }) => (
+                          <option key={code} value={code}>
+                            {name === code ? code : name + " \u00b7 " + code}{" \u00b7 "}{provider}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>{"Atlas \u8def\u7531"}</span>
+                      <NativeSelect value={selectedRoute?.code ?? ""} onChange={(event) => setPreferredRoute(event.target.value)}
+                        disabled={busy || blocked || !availableRoutes.length}>
+                        {!selectedRoute && <option value="">{!ctx ? "\u6b63\u5728\u8bfb\u53d6\u8def\u7531"
+                          : ctx.atlasRouteCatalogAvailable === false ? "\u6388\u6743\u76ee\u5f55\u6682\u4e0d\u53ef\u7528"
+                          : availableRoutes.length ? "\u91cd\u65b0\u9009\u62e9\u8def\u7531" : "\u6ca1\u6709\u5df2\u6388\u6743\u7684\u5bf9\u8bdd\u8def\u7531"}</option>}
+                        {availableRoutes.map(({ code }) => <option key={code} value={code}>{code}</option>)}
+                      </NativeSelect>
+                    </label>
+                  )}
+                  {useRunos && (
+                    <label>
+                      <span>{"Runos \u80fd\u529b"}</span>
+                      <NativeSelect value={skill?.code ?? ""} onChange={(event) => setPreferredSkill(event.target.value)}
+                        disabled={busy || blocked || !availableSkills.length}>
+                        {!skill && <option value="">{availableSkills.length ? "\u9009\u62e9\u4e00\u4e2a\u80fd\u529b" : "\u6682\u65e0\u53ef\u7528\u80fd\u529b"}</option>}
+                        {ctx?.skills.map(({ code, label, allowed, requiredTier }) => (
+                          <option key={code} value={code} disabled={!allowed}>
+                            {SKILL_LABELS[code] ?? label}{!allowed && requiredTier ? " \u00b7 \u9700\u8981 " + requiredTier.toUpperCase() : ""}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </label>
+                  )}
+                </div>
+                <div className="chat-flow-hint">
+                  <p>{converting ? "Runos \u8f6c\u6362 HTML \u4e3a Markdown\uff0cAtlas \u751f\u6210\u6458\u8981"
+                    : useRunos ? "Atlas \u57fa\u4e8e Runos \u8fd4\u56de\u7684\u5185\u5bb9\u751f\u6210\u56de\u590d"
+                    : direct ? "\u901a\u8fc7 Atlas \u8bf7\u6c42\u6240\u9009\u6a21\u578b"
+                    : ctx?.atlasSource === "mock" ? `${availableRoutes.length} \u6761\u79bb\u7ebf\u8def\u7531\u6837\u4f8b`
+                    : ctx && ctx.atlasRouteCatalogAvailable !== false
+                      ? `${availableRoutes.length} \u6761\u53ef\u9009\u5bf9\u8bdd\u8def\u7531\uff0c\u8def\u7531\u7f16\u7801\u6765\u81ea Atlas`
+                      : null}</p>
+                  {availableSkills.length > 0 && (
+                    <div className="chat-runos-toggle">
+                      <Checkbox id="chat-runos" checked={useRunos} disabled={busy || blocked}
+                        onCheckedChange={(checked) => setUseRunos(checked === true)} />
+                      <label htmlFor="chat-runos">{"Runos \u9884\u5904\u7406"}</label>
                     </div>
-                    {turn.taskId && <div>Task <code>{turn.taskId}</code></div>}
-                    {turn.requestId && <div>Atlas request <code>{turn.requestId}</code></div>}
-                    {turn.usage && (
-                      <div>
-                        {turn.usage.promptTokens} prompt + {turn.usage.completionTokens} completion ={" "}
-                        {turn.usage.totalTokens} tokens
-                      </div>
-                    )}
-                    {turn.latencyMs != null && <div>{turn.latencyMs} ms</div>}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </Stack>
-        )}
-      </div>
+                  )}
+                </div>
+              </div>
 
-      <nav className="page-links" aria-label="Chat diagnostics">
-        <a href="/status">-&gt; integration status</a>
-        <a href="/platform-check">-&gt; Atlas/Runos platform check</a>
-      </nav>
+              <div ref={logRef} className="chat-log" role="log" aria-label={"\u5bf9\u8bdd\u6d88\u606f"} tabIndex={0}>
+                {turns.length === 0 && !busy && (
+                  <div className="chat-empty">
+                    <span className="chat-empty-icon"><Icon name={converting ? "file-text" : "chat-circle"} size="lg" aria-hidden="true" /></span>
+                    <h2>{converting ? "\u4ece\u4e00\u6bb5 HTML \u5f00\u59cb" : "\u5f00\u59cb\u4e00\u8f6e\u5bf9\u8bdd"}</h2>
+                    <p>{converting ? "\u7c98\u8d34\u77ed\u6587\u6863\uff0c\u6216\u586b\u5165\u6837\u4f8b\u67e5\u770b\u8f6c\u6362\u548c\u6458\u8981\u3002" : "\u8f93\u5165\u4e00\u6761\u6d88\u606f\uff0c\u6216\u586b\u5165\u6837\u4f8b\u67e5\u770b\u5b9e\u9645\u8c03\u7528\u7ed3\u679c\u3002"}</p>
+                  </div>
+                )}
+                {turns.map(({ prompt, reply }, index) => (
+                  <div key={index} className="chat-message-pair">
+                    <p className="chat-message" data-role="user">{prompt}</p>
+                    <div className="chat-reply">
+                      <p className="chat-message" data-role="assistant">{reply.message.content}</p>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => inspectReceipt(index)}
+                        aria-controls="chat-call-receipts"
+                        aria-label={`\u67e5\u770b\u7b2c ${index + 1} \u8f6e\u8c03\u7528\u56de\u6267`}>
+                        {"\u67e5\u770b\u56de\u6267"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {busy && <p className="chat-message" data-role="user">{input.trim()}</p>}
+                {busy && <p role="status" className="chat-log-status">{"\u6b63\u5728\u7b49\u5f85\u56de\u590d\u2026"}</p>}
+              </div>
+
+              <form className="chat-entry" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+                {submission?.state === "failed" && submission.message && <p className="chat-entry-error" role="alert">{submission.message}</p>}
+                <Textarea
+                  ref={composerRef}
+                  aria-label={converting ? "HTML \u6587\u6863" : "\u6d88\u606f"}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      void send();
+                    }
+                  }}
+                  placeholder={converting ? "\u7c98\u8d34\u4e00\u6bb5 HTML\u2026" : "\u8f93\u5165\u6d88\u606f\u2026"}
+                  maxLength={MAX_MESSAGE_LENGTH}
+                  rows={2}
+                  className="chat-input"
+                  disabled={blocked}
+                  readOnly={busy}
+                />
+                <div className="chat-entry-actions">
+                  {sample && (
+                    <Button type="button" variant="ghost" size="sm" disabled={busy || !canSend || Boolean(input.trim())}
+                      onClick={() => { setInput(sample); composerRef.current?.focus(); }}>
+                      {"\u586b\u5165\u6837\u4f8b"}
+                    </Button>
+                  )}
+                  <span className="chat-entry-count">{input.length}/{MAX_MESSAGE_LENGTH}</span>
+                  <Button type="submit" size="sm" disabled={busy || !canSend || !input.trim()}>
+                    {busy ? "\u53d1\u9001\u4e2d" : "\u53d1\u9001"}
+                    <Icon name="arrow-up" size="sm" aria-hidden="true" />
+                  </Button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <ChatVerification
+            panelRef={receiptRef}
+            turn={visibleReceipt}
+            turnNumber={selectedReceipt !== null ? selectedReceipt + 1 : turns.length + (submission ? 1 : 0)}
+            onLatest={selectedReceipt !== null && visibleReceipt !== currentReceipt ? () => inspectReceipt(null) : undefined}
+          />
+        </div>
+      </div>
     </WorkspaceRegions>
   );
 }

@@ -3,12 +3,12 @@ import { NextResponse } from "next/server";
 import { readWorkspaceSession } from "../../auth/lib/workspace-session";
 import { hasWorkspaceSeat } from "../../entitlement/workspace-authority";
 import { readWorkspaceEntitlement } from "../../entitlement/resolver";
-import { canUseFeature } from "../../entitlement/capability";
+import { canUseFeature, minTierFor } from "../../entitlement/capability";
 import { AtlasError, getAtlasClientConfig } from "../../chat/atlas-client";
-import { chooseChatModel, findSkill, gatedMockModels, gatedSkills, readAtlasChatModels, type GatedOption } from "../../chat/catalog";
-import { ChatConversionError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
+import { ATLAS_GRANTED_FEATURE, chooseChatModel, findSkill, gatedMockModels, gatedSkills, readAtlasChatModels, readGrantedAtlasChatModels, type GatedOption } from "../../chat/catalog";
+import { ChatConversionError, ChatInferenceError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
-import { CHAT_SCOPE_HEADER } from "../../chat/types";
+import { CHAT_SCOPE_HEADER, type ChatFailureEvidence, type ChatTarget } from "../../chat/types";
 import { hasProductAccess, type Entitlement } from "../../entitlement/types";
 import { isDeployedStage } from "../../lib/deploy-stage";
 import { CHAT_TURNS_PER_MINUTE, allowChatTurn } from "../../chat/rate-limit";
@@ -38,12 +38,13 @@ function accessError(status: number, code: string, error: string): NextResponse 
   return NextResponse.json({ code, error }, { status, headers: { "cache-control": "no-store" } });
 }
 
-function atlasChatError(failure: AtlasError): NextResponse {
-  const { code } = failure.envelope;
+function atlasChatError(failure: AtlasError, evidence: ChatFailureEvidence): NextResponse {
+  const { code, requestId } = failure.envelope;
+  const receipt: ChatFailureEvidence = { ...evidence, atlasRequestId: requestId, atlasErrorCode: code };
   const retryable = failure.retryable;
   const headers = new Headers({ "cache-control": "no-store" });
   if (code === "ENDPOINT_NOT_ROUTABLE" || code === "MODEL_NOT_ROUTABLE" || code === "NOT_ENTITLED") {
-    return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
+    return NextResponse.json({ code: "MODEL_NOT_GRANTED", error: MODEL_NOT_GRANTED, evidence: receipt }, { status: 403, headers });
   }
   if (code === "RATE_LIMITED") {
     const retryAfterMs = retryable ? failure.retryAfterMs : undefined;
@@ -53,11 +54,11 @@ function atlasChatError(failure: AtlasError): NextResponse {
       headers.set("retry-after", String(seconds));
       error = `The model is busy. Try again in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`;
     }
-    return NextResponse.json({ code, error, retryable, retryAfterMs }, { status: 429, headers });
+    return NextResponse.json({ code, error, retryable, retryAfterMs, evidence: receipt }, { status: 429, headers });
   }
   const accountRefused = code === "UPSTREAM_ACCOUNT_REFUSED";
   const error = accountRefused ? "The model is temporarily unavailable." : failure.message;
-  return NextResponse.json({ code, error, retryable }, { status: accountRefused ? 503 : 502, headers });
+  return NextResponse.json({ code, error, retryable, evidence: receipt }, { status: accountRefused ? 503 : 502, headers });
 }
 
 /* Keep transport failures distinct from a confirmed session decision. */
@@ -112,19 +113,27 @@ export async function GET(): Promise<Response> {
     return accessError(503, "WORKSPACE_ACCESS_UNAVAILABLE", "Workspace access could not be checked.");
   }
   const productAccess = hasProductAccess(entitlement);
-  try {
-    const models = productAccess ? await readModelChoices(caller, entitlement) : [];
-    return NextResponse.json({
-      scopeKey: caller.scopeKey,
-      tier: entitlement.tier,
-      productAccess,
-      models,
-      defaultModelCode: chooseChatModel(models) ?? null,
-      skills: gatedSkills(entitlement),
-    }, { headers: { "cache-control": "no-store" } });
-  } catch {
+  const atlas = getAtlasClientConfig();
+  const [routes, atlasDirectModels] = await Promise.all([
+    productAccess ? readModelChoices(caller, entitlement).catch(() => null) : [],
+    productAccess && atlas ? readGrantedAtlasChatModels(atlas, caller.identity.mint, entitlement).catch(() => null) : null,
+  ]);
+  if (routes === null && atlasDirectModels === null) {
     return accessError(503, "MODEL_CATALOG_UNAVAILABLE", MODEL_CATALOG_UNAVAILABLE);
   }
+  return NextResponse.json({
+    scopeKey: caller.scopeKey,
+    tier: entitlement.tier,
+    productAccess,
+    models: routes ?? [],
+    defaultModelCode: routes ? chooseChatModel(routes) ?? null : null,
+    atlasSource: atlas ? "live" : "mock",
+    atlasRouteCatalogAvailable: routes !== null,
+    atlasDirectModels,
+    atlasDirectRequiredTier: productAccess && !canUseFeature(entitlement, ATLAS_GRANTED_FEATURE)
+      ? minTierFor(ATLAS_GRANTED_FEATURE) : null,
+    skills: gatedSkills(entitlement),
+  }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -164,9 +173,24 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "history must end with a user message" }, { status: 400 });
   }
 
-  const modelCode = raw?.modelCode;
-  if (modelCode !== undefined && typeof modelCode !== "string") {
+  const legacyRouteCode = raw?.modelCode;
+  if (legacyRouteCode !== undefined && typeof legacyRouteCode !== "string") {
     return accessError(400, "INVALID_MODEL_CODE", "Model code must be a string.");
+  }
+  let requestedTarget: ChatTarget | undefined;
+  if (raw?.target !== undefined) {
+    const candidate = raw.target;
+    if (!candidate || typeof candidate !== "object" || legacyRouteCode !== undefined) {
+      return accessError(400, "INVALID_CHAT_TARGET", "Provide one route or model target.");
+    }
+    const { endpointCode, modelCode } = candidate as Record<string, unknown>;
+    if (typeof endpointCode === "string" && endpointCode.trim() && modelCode === undefined) {
+      requestedTarget = { endpointCode: endpointCode.trim() };
+    } else if (typeof modelCode === "string" && modelCode.trim() && endpointCode === undefined) {
+      requestedTarget = { modelCode: modelCode.trim() };
+    } else {
+      return accessError(400, "INVALID_CHAT_TARGET", "Provide one route or model target.");
+    }
   }
   const skillCode = typeof raw?.skillCode === "string" ? raw.skillCode : undefined;
 
@@ -184,15 +208,24 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Check feature entitlement before calling any metered service.
-  let models: GatedOption[];
+  let target: ChatTarget;
   try {
-    models = await readModelChoices(caller, entitlement);
+    if (requestedTarget?.modelCode !== undefined) {
+      const config = getAtlasClientConfig();
+      const choices = config ? await readGrantedAtlasChatModels(config, caller.identity.mint, entitlement) : null;
+      if (choices === null) return accessError(503, "MODEL_CATALOG_UNAVAILABLE", MODEL_CATALOG_UNAVAILABLE);
+      if (!choices.some(({ code }) => code === requestedTarget.modelCode)) {
+        return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
+      }
+      target = requestedTarget;
+    } else {
+      const routes = await readModelChoices(caller, entitlement);
+      const endpointCode = chooseChatModel(routes, requestedTarget?.endpointCode ?? legacyRouteCode);
+      if (!endpointCode) return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
+      target = { endpointCode };
+    }
   } catch {
     return accessError(503, "MODEL_CATALOG_UNAVAILABLE", MODEL_CATALOG_UNAVAILABLE);
-  }
-  const selectedModel = chooseChatModel(models, modelCode);
-  if (!selectedModel) {
-    return accessError(403, "MODEL_NOT_GRANTED", MODEL_NOT_GRANTED);
   }
   if (skillCode !== undefined) {
     const skill = findSkill(skillCode);
@@ -207,11 +240,20 @@ export async function POST(req: Request): Promise<Response> {
 
   let reply;
   try {
-    reply = await getChatResolver().reply(messages, caller.identity, { modelCode: selectedModel, skillCode });
+    reply = await getChatResolver().reply(messages, caller.identity, { target, skillCode });
   } catch (err) {
-    if (err instanceof AtlasError) return atlasChatError(err);
     if (err instanceof ChatConversionError) {
-      return NextResponse.json({ code: "DOCUMENT_CONVERSION_UNAVAILABLE", error: err.message, callId: err.callId }, {
+      return NextResponse.json({
+        code: "DOCUMENT_CONVERSION_UNAVAILABLE",
+        error: err.message,
+        callId: err.skill.callId,
+        evidence: { taskId: err.taskId, skill: { ...err.skill, detail: "" } } satisfies ChatFailureEvidence,
+      }, { status: 502, headers: { "cache-control": "no-store" } });
+    }
+    if (err instanceof ChatInferenceError) {
+      const evidence = { taskId: err.taskId, skill: err.skill } satisfies ChatFailureEvidence;
+      if (err.cause instanceof AtlasError) return atlasChatError(err.cause, evidence);
+      return NextResponse.json({ code: "ATLAS_REQUEST_FAILED", error: err.message, evidence }, {
         status: 502, headers: { "cache-control": "no-store" },
       });
     }

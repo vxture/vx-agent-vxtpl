@@ -7,6 +7,9 @@
  * @date 2026-11-26
  */
 
+import type { AtlasModelChoice } from "../chat/types";
+export type { AtlasModelChoice } from "../chat/types";
+
 export type Check = { state: "verified" | "waiting" | "blocked" | "unavailable"; detail: string };
 export const PROBES = ["c3-replay", "atlas-inference", "atlas-model-inference", "runos-invoke"] as const;
 export type Probe = (typeof PROBES)[number];
@@ -15,8 +18,6 @@ export type DailyProbe = (typeof DAILY_PROBES)[number];
 export type ProbeCommand =
   | { probe: Exclude<Probe, "atlas-model-inference"> }
   | { probe: "atlas-model-inference"; modelCode: string };
-export type AtlasModelChoice = { code: string; name: string; provider: string };
-
 export type PlatformReport = {
   checkedAt: string;
   stage: "dev" | "beta" | "production";

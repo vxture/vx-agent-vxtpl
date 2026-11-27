@@ -16,6 +16,7 @@ import {
   type ChatMessage,
   type ChatOptions,
   type ChatReply,
+  type ChatTarget,
   type SkillOutcome,
 } from "./types";
 
@@ -37,11 +38,20 @@ export interface ChatResolver {
   reply(history: ChatMessage[], identity: ChatIdentity, options: ResolvedChatOptions): Promise<ChatReply>;
 }
 
-type ResolvedChatOptions = ChatOptions & { modelCode: string };
+type ResolvedChatOptions = { skillCode?: string } & (
+  | { target: ChatTarget; modelCode?: never }
+  | { target?: never; modelCode: string }
+);
 
 export class ChatConversionError extends Error {
-  constructor(readonly callId?: string) {
+  constructor(readonly taskId: string, readonly skill: SkillOutcome) {
     super("HTML conversion could not be completed.");
+  }
+}
+
+export class ChatInferenceError extends Error {
+  constructor(readonly taskId: string, readonly skill: SkillOutcome | undefined, cause: unknown) {
+    super("Atlas inference could not be completed.", { cause });
   }
 }
 
@@ -64,7 +74,7 @@ export class MockChatResolver implements ChatResolver {
   async reply(history: ChatMessage[], _identity: ChatIdentity, options: ChatOptions = {}): Promise<ChatReply> {
     const last = history[history.length - 1];
     const echo = last?.content ?? "";
-    const modelCode = options.modelCode ?? DEFAULT_MOCK_MODEL;
+    const modelCode = options.target?.modelCode ?? options.target?.endpointCode ?? options.modelCode ?? DEFAULT_MOCK_MODEL;
     const skillNote = options.skillCode ? ` [skill: ${options.skillCode}]` : "";
     return {
       mode: "mock",
@@ -85,7 +95,7 @@ export class AtlasChatResolver implements ChatResolver {
   constructor(private readonly cfg: AtlasClientConfig) {}
 
   async reply(history: ChatMessage[], identity: ChatIdentity, options: ResolvedChatOptions): Promise<ChatReply> {
-    const { modelCode } = options;
+    const target = options.target ?? { endpointCode: options.modelCode };
     // ONE task id spans the whole turn - the Runos skill invocation, the outcome
     // report that closes it, and the Atlas inference call. Both planes require
     // it and both store it verbatim, so a turn that spent a capability call and
@@ -103,7 +113,7 @@ export class AtlasChatResolver implements ChatResolver {
         sessionId: identity.sessionId,
       });
       if (options.skillCode === DOCUMENT_CONVERSION_SKILL && skill.status !== "ran") {
-        throw new ChatConversionError(skill.callId);
+        throw new ChatConversionError(taskId, skill);
       }
       // A skill that produced something feeds the model; one that did not is
       // reported honestly rather than silently dropped, so the user can tell
@@ -124,13 +134,15 @@ export class AtlasChatResolver implements ChatResolver {
 
     const completion = await fetchChatCompletion(this.cfg, identity.mint, messages, {
       taskId,
-      endpointCode: modelCode,
+      ...target,
+    }).catch((cause: unknown) => {
+      throw new ChatInferenceError(taskId, skill, cause);
     });
 
     return {
       mode: "atlas",
       // Report the model that actually served, not the one requested.
-      modelCode: completion.modelCode || modelCode,
+      modelCode: completion.modelCode || (target.modelCode ?? target.endpointCode),
       skillCode: options.skillCode ?? null,
       skill,
       taskId,

@@ -124,6 +124,7 @@ test("Atlas verification independently exercises the route and direct model path
       case "/v1/model-routes":
         return Response.json({ endpoints: granted ? [{ endpointCode: route, category: "chat", state: "active" }] : [] });
       case "/v1/models": {
+        assert.equal(url.search, "?scope=caller");
         catalogReads++;
         const entries = [
           { ...model, state: modelActive ? "active" : "inactive", modelType: "chat" },

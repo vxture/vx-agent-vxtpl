@@ -7,7 +7,7 @@
  * @date 2026-11-25
  */
 
-import { CHAT_SCOPE_HEADER, type ChatMessage, type ChatOptions, type ChatReply } from "./types";
+import { CHAT_SCOPE_HEADER, type AtlasModelChoice, type ChatFailureEvidence, type ChatMessage, type ChatOptions, type ChatReply } from "./types";
 import type { GatedOption } from "./catalog";
 
 export interface ChatContext {
@@ -16,22 +16,38 @@ export interface ChatContext {
   productAccess: boolean;
   models: GatedOption[];
   defaultModelCode?: string | null;
+  atlasSource?: "live" | "mock";
+  atlasRouteCatalogAvailable?: boolean;
+  atlasDirectModels?: AtlasModelChoice[] | null;
+  atlasDirectRequiredTier?: string | null;
   skills: GatedOption[];
 }
 
 export class ChatRequestError extends Error {
-  constructor(readonly status: number, readonly code: string | undefined, message: string) {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+    message: string,
+    readonly callId?: string,
+    readonly evidence?: ChatFailureEvidence,
+  ) {
     super(message);
   }
 }
 
 async function readResult<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => null) as T & { code?: string; error?: string } | null;
+  const body = await response.json().catch(() => null) as T & {
+    code?: string;
+    error?: string;
+    callId?: unknown;
+    evidence?: ChatFailureEvidence;
+  } | null;
   if (!response.ok || !body) {
     const message = response.status === 502 || response.status === 504
       ? "\u6682\u672a\u6536\u5230\u6a21\u578b\u56de\u590d\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"
       : `Unable to complete the request (HTTP ${response.status}).`;
-    throw new ChatRequestError(response.status, body?.code, body?.error ?? message);
+    const callId = typeof body?.callId === "string" ? body.callId : undefined;
+    throw new ChatRequestError(response.status, body?.code, body?.error ?? message, callId, body?.evidence);
   }
   return body;
 }

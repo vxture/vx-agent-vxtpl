@@ -83,6 +83,9 @@ export {
 export {
   Button,
   Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   DataTable,
   Icon,
   Input,
@@ -90,7 +93,9 @@ export {
   Popover,
   PopoverTrigger,
   SectionHeader,
+  SegmentedControl,
   ShellSidebarFrame,
+  Textarea,
   ViewHeader,
 } from "@vxture/design-system";
 

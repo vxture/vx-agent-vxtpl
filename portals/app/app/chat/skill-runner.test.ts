@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { runSkill } from "./skill-runner";
 import { resetS2STokenCache } from "../lib/s2s-token";
 import { runRunosSample } from "../platform-demo/runos-sample";
-import { AtlasChatResolver, ChatConversionError } from "./resolver";
+import { AtlasChatResolver, ChatConversionError, ChatInferenceError } from "./resolver";
+import { AtlasError } from "./atlas-client";
 import { DOCUMENT_CONVERSION_SKILL } from "./types";
 
 // What a capability answers is not all for the model.
@@ -36,7 +37,7 @@ const HISTORY = [{ role: "user" as const, content: "summarize this" }];
 /** Answers the four MCP tools in sequence; `payload` is what invoke returns. */
 function stub(
   payload: Record<string, unknown>,
-  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean } = {},
+  options: { riskLevel?: string; acknowledged?: boolean; sample?: boolean; failAtlas?: boolean } = {},
 ) {
   const calls: { name: string; arguments: Record<string, unknown>; taskId?: string }[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -48,6 +49,9 @@ function stub(
     const body = JSON.parse(String(init?.body ?? "{}"));
     if (String(input).endsWith("/v1/chat")) {
       calls.push({ name: "atlas", arguments: body, taskId: body.taskId });
+      if (options.failAtlas) {
+        return Response.json({ code: "PROVIDER_UNAVAILABLE", requestId: "atlas-failed-request" }, { status: 502 });
+      }
       return Response.json({
         id: "atlas-request-1", modelCode: "served-model",
         message: { role: "assistant", content: "The report is weekly." },
@@ -205,6 +209,8 @@ test("the chat workflow sends the converted document to Atlas under the Runos ta
   assert.deepEqual(calls.map(({ name }) => name), ["runos_discover", "runos_resolve", "runos_invoke", "runos_report_outcome", "atlas"]);
   assert.ok(reply.taskId && calls.every(({ taskId }) => taskId === reply.taskId));
   assert.equal(reply.skill?.callId, "runos-call-1");
+  assert.equal(reply.skill?.operation, "convert_to_markdown");
+  assert.equal(reply.skill?.version, "1.0.0");
   assert.equal(reply.skill?.outcomeAcknowledged, true);
   assert.equal(reply.requestId, "atlas-request-1");
   const messages = calls[4].arguments.messages as { content: string }[];
@@ -216,7 +222,22 @@ test("the chat workflow sends the converted document to Atlas under the Runos ta
     resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, {
       modelCode: "chat/default", skillCode: DOCUMENT_CONVERSION_SKILL,
     }),
-    ChatConversionError,
+    (error: unknown) => error instanceof ChatConversionError && error.skill.status === "unavailable"
+      && error.taskId === rejected[0].taskId,
   );
   assert.deepEqual(rejected.map(({ name }) => name), ["runos_discover", "runos_resolve"]);
+
+  const partial = stub({ ...convertedSample, _meta: { vxture: { call_id: "runos-partial-call" } } },
+    { sample: true, riskLevel: "read", acknowledged: true, failAtlas: true });
+  await assert.rejects(
+    resolver.reply(history, { workspaceId: "ws-1", mint: OPTS.identity }, {
+      modelCode: "chat/default", skillCode: DOCUMENT_CONVERSION_SKILL,
+    }),
+    (error: unknown) => error instanceof ChatInferenceError
+      && error.taskId === partial[0].taskId
+      && error.skill?.callId === "runos-partial-call"
+      && error.skill.outcomeAcknowledged === true
+      && error.cause instanceof AtlasError
+      && error.cause.envelope.requestId === "atlas-failed-request",
+  );
 });

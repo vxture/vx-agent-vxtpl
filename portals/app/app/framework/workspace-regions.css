@@ -17,7 +17,8 @@
 .workspace-regions {
   --vxtpl-region-left: var(--spacing-sidebar-expanded, 256px);
   --vxtpl-region-rail: var(--spacing-sidebar-collapsed, 64px);
-  --vxtpl-region-right: 420px;
+  /* Narrow dock width from the DS ShellDock layout. */
+  --vxtpl-region-right: 26.25rem;
   --vxtpl-region-wide-reserved: 540px;
   container-type: inline-size;
   display: flex;
