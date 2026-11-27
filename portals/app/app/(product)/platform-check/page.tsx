@@ -44,6 +44,13 @@ const actions: { probe: Probe; name: string; detail: string }[] = [
   { probe: "runos-invoke", name: "Runos 实际调用", detail: "将固定 HTML 样本转换为 Markdown，校验转换内容和结果回报后显示调用回执。" },
 ];
 
+const manualChecks = [
+  { group: "C1", title: "跨产品退出", detail: "保持本页打开，从同一 Accounts 会话的另一产品退出，确认本页收到事件并返回门禁。" },
+  { group: "C2", title: "准入与订阅权益", detail: "分别使用有席位和无席位的账号核验准入，并用相应订阅状态核对开通、续订和权益读取失败。" },
+  { group: "C3", title: "开通与对账", detail: "核对平台投递及 ACK，验证重复投递和漏投后的对账补齐。" },
+  { group: "C3", title: "计量与权益", detail: "核对真实入账、回放与额度更新，并保留平台事件 ID。" },
+];
+
 const stages = { dev: "开发", beta: "验收", production: "生产" };
 const states = {
   verified: { tone: "success", label: "已核验" },
@@ -175,26 +182,23 @@ export default function PlatformCheckPage() {
               const verified = checks.filter(({ id }) => report?.checks[id]?.state === "verified").length;
               return (
                 <Card className="platform-demo__card platform-demo__check-card" key={code}>
-                  <details>
-                    <summary className="platform-demo__summary">
-                      <Icon name={icon} size="md" aria-hidden="true" />
-                      <span className="platform-demo__group-title"><strong>{code}</strong><span>{title}</span></span>
-                      <span className="platform-demo__detail">{report ? `${verified}/${checks.length} 已核验` : `${checks.length} 项`}</span>
-                      <Icon name="chevron-down" size="sm" aria-hidden="true" />
-                    </summary>
-                    <ul className="platform-demo__check-list">
-                      {checks.map(({ id, name }) => {
-                        const result = report?.checks[id];
-                        return (
-                          <li className="platform-demo__check" key={id}>
-                            <strong>{name}</strong>
-                            <CheckBadge state={result?.state ?? "waiting"} />
-                            <p className="platform-demo__detail">{result?.detail ?? "等待核验"}</p>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </details>
+                  <header className="platform-demo__check-heading">
+                    <Icon name={icon} size="md" aria-hidden="true" />
+                    <div className="platform-demo__group-title"><h3>{code}</h3><p>{title}</p></div>
+                    <span className="platform-demo__detail">{report ? `${verified}/${checks.length} 已核验` : `${checks.length} 项`}</span>
+                  </header>
+                  <ul className="platform-demo__check-list">
+                    {checks.map(({ id, name }) => {
+                      const result = report?.checks[id];
+                      return (
+                        <li className="platform-demo__check" key={id}>
+                          <strong>{name}</strong>
+                          <CheckBadge state={result?.state ?? "waiting"} />
+                          <p className="platform-demo__detail">{result?.detail ?? "等待核验"}</p>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </Card>
               );
             })}
@@ -236,25 +240,23 @@ export default function PlatformCheckPage() {
                     <div role="status">
                       <CheckBadge state={receipt ? "verified" : outcome?.error ? "unavailable" : "waiting"} />
                       {receipt && (
-                        <details className="platform-demo__receipt">
-                          <summary className="platform-demo__summary">查看调用回执<Icon name="chevron-down" size="sm" aria-hidden="true" /></summary>
-                          <div className="platform-demo__receipt-detail">
-                            <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
-                            {receipt.evidence?.provider === "atlas" && (
-                              <p>
-                                {receipt.evidence.endpointCode
-                                  ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
-                                  : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
-                                {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
-                                {" · 任务 "}<code>{receipt.evidence.taskId}</code>
-                              </p>
-                            )}
-                            {receipt.responseText && <p>{receipt.responseText}</p>}
-                            {receipt.evidence?.provider === "runos" && (
-                              <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
-                            )}
-                          </div>
-                        </details>
+                        <div className="platform-demo__receipt-detail">
+                          <h4>调用回执</h4>
+                          <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
+                          {receipt.evidence?.provider === "atlas" && (
+                            <p>
+                              {receipt.evidence.endpointCode
+                                ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
+                                : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
+                              {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
+                              {" · 任务 "}<code>{receipt.evidence.taskId}</code>
+                            </p>
+                          )}
+                          {receipt.responseText && <p>{receipt.responseText}</p>}
+                          {receipt.evidence?.provider === "runos" && (
+                            <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
+                          )}
+                        </div>
                       )}
                     </div>
                     {outcome?.error && <p role="alert">{outcome.error}</p>}
@@ -272,15 +274,14 @@ export default function PlatformCheckPage() {
 
         <section className="platform-demo__section" aria-labelledby="platform-logout">
           <SectionHeader icon="clipboard" title={<span id="platform-logout">人工联调</span>} />
-          <details className="platform-demo__manual">
-            <summary className="platform-demo__summary">查看联调清单<Icon name="chevron-down" size="sm" aria-hidden="true" /></summary>
-            <ul>
-              <li>C1 跨产品退出。保持本页打开，从同一 Accounts 会话的另一产品退出，确认本页收到事件并返回门禁。</li>
-              <li>C2 准入与权益。用有席位和无席位的账号检查允许与拒绝；用相应订阅状态核对开通、续订和权益读取失败。</li>
-              <li>C3 开通与对账。核对平台投递及 ACK，验证一次重复投递和一次漏投后的对账补齐。</li>
-              <li>C3 计量与权益。核对真实入账、回放与额度更新，并保留平台事件 ID。</li>
-            </ul>
-          </details>
+          <ul className="platform-demo__manual">
+            {manualChecks.map(({ group, title, detail }) => (
+              <li key={title}>
+                <span className="platform-demo__manual-code">{group}</span>
+                <div><h3>{title}</h3><p>{detail}</p></div>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
     </ProductContent>
