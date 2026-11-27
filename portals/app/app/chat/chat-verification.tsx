@@ -8,7 +8,7 @@
  */
 
 import { useRef, useState, type ReactNode, type Ref } from "react";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusBadge } from "../ds";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, ShellIconButton, StatusBadge } from "../ds";
 import type { SavedTurn } from "./chat-history";
 import { isChatEscapeKey } from "./chat-keyboard";
 import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type SkillOutcome, type TurnVerification } from "./types";
@@ -80,6 +80,8 @@ function ReceiptDisclosure({ label, children }: { label: string; children: React
 }
 
 interface ChatVerificationProps {
+  open: boolean;
+  onClose: (restoreFocus: boolean) => void;
   turn: TurnVerification | null;
   turnNumber: number;
   panelRef: Ref<HTMLElement>;
@@ -91,13 +93,13 @@ interface ChatVerificationProps {
 }
 
 export function ChatVerification({
-  turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt, onReturnFocus,
+  open, onClose, turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt, onReturnFocus,
 }: ChatVerificationProps) {
   const historySelect = useRef<HTMLButtonElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const latest = "latest";
   return (
-    <aside id="chat-call-receipts" className="chat-verification" aria-labelledby="chat-verification-title"
+    <aside id="chat-call-receipts" className="chat-verification" hidden={!open} aria-labelledby="chat-verification-title"
       aria-keyshortcuts={onReturnFocus ? "Escape" : undefined} tabIndex={-1} ref={panelRef}
       onKeyDown={(event) => {
         if (!onReturnFocus || historyOpen || !isChatEscapeKey(event) || !event.currentTarget.contains(event.target as Node)) return;
@@ -108,8 +110,14 @@ export function ChatVerification({
         <SectionHeader
           title={<span id="chat-verification-title">{"\u8c03\u7528\u56de\u6267"}</span>}
           divider={false}
-          action={selectedReceiptId && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
+          action={(
+            <div className="chat-receipt-actions">
+              {selectedReceiptId && (
+                <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
+              )}
+              <ShellIconButton className="chat-receipt-close" icon="x" label={"\u5173\u95ed\u8c03\u7528\u56de\u6267"}
+                onClick={(event) => onClose(event.detail === 0)} />
+            </div>
           )}
         />
       </header>
