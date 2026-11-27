@@ -9,10 +9,14 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Button, Icon, Input, ShellIconButton } from "../ds";
+import { useEffect, useId, useRef, useState } from "react";
+import { Button, Icon, ShellIconButton, Textarea } from "../ds";
 import { conversationTitle, type useAssistantConversations } from "./assistant-conversations";
+import { handleChatComposerKey, isChatEscapeKey } from "./chat-keyboard";
+import { MAX_MESSAGE_LENGTH } from "./types";
 import "./assistant-panel.css";
+
+// Panel layout
 
 interface AssistantPanelProps {
   readonly chat: ReturnType<typeof useAssistantConversations>;
@@ -30,23 +34,57 @@ function WidthGlyph({ wide }: { wide: boolean }) {
   );
 }
 
+// Conversation controls and focus
+
 export function AssistantPanel({ chat, wide, onWidthChange, onClose }: AssistantPanelProps) {
   const messages = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const historyTrigger = useRef<HTMLButtonElement>(null);
+  const actionsTrigger = useRef<HTMLButtonElement>(null);
+  const menuContent = useRef<HTMLDivElement>(null);
+  const id = useId();
   const [menu, setMenu] = useState<"history" | "actions" | null>(null);
   const { active } = chat;
+  const canSend = chat.canSend && !active.busy && Boolean(active.draft.trim());
   useEffect(() => {
     if (messages.current) messages.current.scrollTop = messages.current.scrollHeight;
   }, [active.messages]);
+
+  useEffect(() => {
+    // Let a narrow native dialog open before moving focus into its composer.
+    const frame = requestAnimationFrame(() => composer.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!menu) return;
+    const content = menuContent.current;
+    const target = content?.querySelector<HTMLButtonElement>('[aria-current="true"]') ??
+      content?.querySelector<HTMLButtonElement>("button:enabled");
+    target?.focus();
+  }, [menu]);
+
+  function focusComposer() {
+    setMenu(null);
+    composer.current?.focus({ preventScroll: true });
+  }
 
   return (
     <section
       className="assistant-panel"
       aria-label="AI assistant conversation"
+      aria-keyshortcuts="Escape"
       onKeyDown={(event) => {
-        if (event.key === "Escape" && menu) {
-          event.preventDefault();
-          setMenu(null);
+        if (!isChatEscapeKey(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        if (!menu) {
+          onClose();
+          return;
         }
+        setMenu(null);
+        (menu === "history" ? historyTrigger : actionsTrigger).current?.focus();
       }}
     >
       <header className="assistant-panel-header">
@@ -55,19 +93,23 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
           <ShellIconButton icon="arrow-left-right" label={wide ? "Narrow assistant" : "Widen assistant"} onClick={onWidthChange}>
             <WidthGlyph wide={wide} />
           </ShellIconButton>
-          <ShellIconButton icon="plus" label="New conversation" onClick={() => { setMenu(null); chat.start(); }} />
-          <ShellIconButton icon="list" label="All conversations" active={menu === "history"} onClick={() => setMenu(menu === "history" ? null : "history")} />
-          <ShellIconButton icon="dots-three" label="More conversation actions" active={menu === "actions"} onClick={() => setMenu(menu === "actions" ? null : "actions")} />
+          <ShellIconButton icon="plus" label="New conversation" onClick={() => { chat.start(); focusComposer(); }} />
+          <ShellIconButton ref={historyTrigger} icon="list" label="All conversations" active={menu === "history"}
+            aria-expanded={menu === "history"} aria-controls={menu === "history" ? id + "-history" : undefined}
+            onClick={() => setMenu(menu === "history" ? null : "history")} />
+          <ShellIconButton ref={actionsTrigger} icon="dots-three" label="More conversation actions" active={menu === "actions"}
+            aria-expanded={menu === "actions"} aria-controls={menu === "actions" ? id + "-actions" : undefined}
+            onClick={() => setMenu(menu === "actions" ? null : "actions")} />
           <ShellIconButton icon="x" label="Close assistant" onClick={onClose} />
           {menu === "history" && (
-            <div className="assistant-panel-menu" aria-label="All conversations">
+            <div id={id + "-history"} ref={menuContent} className="assistant-panel-menu" aria-label="All conversations">
               <ul className="assistant-conversation-list">
                 {chat.conversations.map((conversation) => (
                   <li key={conversation.id}>
                     <button
                       type="button"
                       aria-current={active.id === conversation.id || undefined}
-                      onClick={() => { chat.setActiveId(conversation.id); setMenu(null); }}
+                      onClick={() => { chat.setActiveId(conversation.id); focusComposer(); }}
                     >
                       {conversationTitle(conversation)}
                     </button>
@@ -77,13 +119,13 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
             </div>
           )}
           {menu === "actions" && (
-            <div className="assistant-panel-menu" aria-label="Conversation actions">
-              <Button variant="ghost" disabled={active.busy || (!active.messages.length && !active.draft)} onClick={() => { chat.clear(); setMenu(null); }}>Clear conversation</Button>
+            <div id={id + "-actions"} ref={menuContent} className="assistant-panel-menu" aria-label="Conversation actions">
+              <Button variant="ghost" disabled={active.busy || (!active.messages.length && !active.draft)} onClick={() => { chat.clear(); focusComposer(); }}>Clear conversation</Button>
             </div>
           )}
         </div>
       </header>
-      <div ref={messages} className="assistant-panel-messages" role="log" aria-label="Conversation messages">
+      <div ref={messages} className="assistant-panel-messages" role="log" aria-label="Conversation messages" tabIndex={0}>
         {active.messages.length === 0 && (
           <div className="assistant-panel-empty">
             <Icon name="sparkles" size="xl" aria-hidden="true" />
@@ -96,11 +138,22 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
         ))}
         {active.busy && <p role="status">Thinking...</p>}
       </div>
-      <form className="assistant-panel-composer" onSubmit={(event) => { event.preventDefault(); void chat.send(); }}>
+      <form className="assistant-panel-composer" onSubmit={(event) => {
+        event.preventDefault();
+        if (!canSend) return;
+        focusComposer();
+        void chat.send();
+      }}>
         {active.error && <p role="alert">{active.error}</p>}
-        <div>
-          <Input aria-label="Message assistant" value={active.draft} onChange={(event) => chat.setDraft(event.target.value)} maxLength={500} disabled={active.busy} />
-          <Button type="submit" disabled={active.busy || !chat.canSend || !active.draft.trim()}>Send</Button>
+        <div className="assistant-panel-composer-row">
+          <Textarea ref={composer} aria-label="Message assistant" aria-describedby={id + "-shortcuts"}
+            value={active.draft} onChange={(event) => chat.setDraft(event.target.value)}
+            onKeyDown={(event) => handleChatComposerKey(event, canSend)}
+            rows={2} maxLength={MAX_MESSAGE_LENGTH} readOnly={active.busy} />
+          <Button type="submit" disabled={!canSend} aria-keyshortcuts="Enter Control+Enter Meta+Enter">Send</Button>
+        </div>
+        <div id={id + "-shortcuts"} className="assistant-panel-shortcuts">
+          <kbd>Enter</kbd> to send <span aria-hidden="true">&middot;</span> <kbd>Shift+Enter</kbd> for a new line
         </div>
       </form>
     </section>

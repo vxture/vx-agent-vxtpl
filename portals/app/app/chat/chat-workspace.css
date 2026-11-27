@@ -210,6 +210,16 @@
   resize: vertical;
 }
 
+.chat-entry-actions { flex-wrap: wrap; }
+
+.chat-composer-hint {
+  color: var(--muted-foreground);
+  font-size: var(--body-sm-font-size);
+  white-space: nowrap;
+}
+
+.chat-composer-hint kbd { font: inherit; font-weight: var(--label-md-font-weight); }
+
 .chat-entry-count {
   margin-inline-start: auto;
   white-space: nowrap;

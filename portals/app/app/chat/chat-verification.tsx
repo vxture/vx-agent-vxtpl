@@ -7,9 +7,10 @@
  * @date 2026-11-27
  */
 
-import type { ReactNode, Ref } from "react";
+import { useRef, type ReactNode, type Ref } from "react";
 import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, NativeSelect, SectionHeader, StatusBadge } from "../ds";
 import type { SavedTurn } from "./chat-history";
+import { isChatEscapeKey } from "./chat-keyboard";
 import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type SkillOutcome, type TurnVerification } from "./types";
 
 // Evidence model
@@ -86,24 +87,34 @@ interface ChatVerificationProps {
   storageFailed?: boolean;
   selectedReceiptId: string | null;
   onSelectReceipt: (id: string | null) => void;
+  onReturnFocus?: () => void;
 }
 
-export function ChatVerification({ turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt }: ChatVerificationProps) {
+export function ChatVerification({
+  turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt, onReturnFocus,
+}: ChatVerificationProps) {
+  const historySelect = useRef<HTMLSelectElement>(null);
   return (
-    <aside id="chat-call-receipts" className="chat-verification" aria-labelledby="chat-verification-title" tabIndex={-1} ref={panelRef}>
+    <aside id="chat-call-receipts" className="chat-verification" aria-labelledby="chat-verification-title"
+      aria-keyshortcuts={onReturnFocus ? "Escape" : undefined} tabIndex={-1} ref={panelRef}
+      onKeyDown={(event) => {
+        if (!onReturnFocus || !isChatEscapeKey(event) || event.target instanceof HTMLSelectElement) return;
+        event.preventDefault();
+        onReturnFocus();
+      }}>
       <header>
         <SectionHeader
           title={<span id="chat-verification-title">{"\u8c03\u7528\u56de\u6267"}</span>}
           divider={false}
           action={selectedReceiptId && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => onSelectReceipt(null)}>{"\u56de\u5230\u6700\u65b0"}</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
           )}
         />
       </header>
       {history.length > 0 && (
         <label className="chat-receipt-history">
           <span>{"\u5386\u53f2\u56de\u6267"}</span>
-          <NativeSelect value={selectedReceiptId ?? ""} onChange={(event) => onSelectReceipt(event.target.value || null)}>
+          <NativeSelect ref={historySelect} value={selectedReceiptId ?? ""} onChange={(event) => onSelectReceipt(event.target.value || null)}>
             <option value="">{"\u6700\u65b0\u4e00\u8f6e"}</option>
             {history.map((saved, index) => (
               <option key={saved.id} value={saved.id}>
