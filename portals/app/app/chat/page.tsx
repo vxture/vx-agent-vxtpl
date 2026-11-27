@@ -10,7 +10,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Checkbox, Icon, NativeSelect, SectionHeader, SegmentedControl, StatusBadge, Textarea, ViewHeader } from "../ds";
+import { Button, Checkbox, Icon, NativeSelect, SectionHeader, SegmentedControl, ShellIconButton, StatusBadge, Textarea, ViewHeader } from "../ds";
 import { ProductHeader } from "../framework/product-chrome";
 import { WorkspaceRegions } from "../framework/workspace-regions";
 import { AssistantPanel } from "./assistant-panel";
@@ -72,12 +72,15 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   const [submission, setSubmission] = useState<Extract<TurnVerification, { state: "pending" }> | null>(null);
   const [sendError, setSendError] = useState<string>();
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(true);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantWide, setAssistantWide] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const receiptRef = useRef<HTMLElement>(null);
   const receiptTriggerRef = useRef<HTMLButtonElement>(null);
+  const receiptLauncherRef = useRef<HTMLButtonElement>(null);
+  const receiptFocusTarget = useRef<"panel" | "launcher" | null>(null);
   const sending = useRef(false);
 
   const scopeKey = ctx?.productAccess ? ctx.scopeKey : undefined;
@@ -123,11 +126,39 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
     if (log) log.scrollTop = log.scrollHeight;
   }, [turns, busy]);
 
+  useEffect(() => {
+    const target = receiptFocusTarget.current;
+    receiptFocusTarget.current = null;
+    if (target === "panel") {
+      const panel = receiptRef.current;
+      panel?.scrollIntoView({ block: "start" });
+      panel?.focus({ preventScroll: true });
+    } else if (target === "launcher") {
+      (receiptLauncherRef.current ?? composerRef.current)?.focus({ preventScroll: true });
+    }
+  }, [receiptOpen]);
+
   function inspectReceipt(id: string, trigger: HTMLButtonElement) {
     receiptTriggerRef.current = trigger;
     setSelectedReceiptId(id);
-    receiptRef.current?.focus({ preventScroll: true });
-    receiptRef.current?.scrollIntoView({ block: "nearest" });
+    if (receiptOpen) {
+      receiptRef.current?.scrollIntoView({ block: "nearest" });
+      receiptRef.current?.focus({ preventScroll: true });
+    } else {
+      receiptFocusTarget.current = "panel";
+      setReceiptOpen(true);
+    }
+  }
+
+  function closeReceipt(restoreFocus: boolean) {
+    receiptFocusTarget.current = restoreFocus ? "launcher" : null;
+    setReceiptOpen(false);
+  }
+
+  function openReceipt() {
+    receiptTriggerRef.current = null;
+    receiptFocusTarget.current = "panel";
+    setReceiptOpen(true);
   }
 
   function returnFromReceipt() {
@@ -198,7 +229,18 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
     <WorkspaceRegions
       className="chat-shell"
       width="1920"
-      renderHeader={(actions, control) => <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />}
+      renderHeader={(actions, control) => (
+        <>
+          <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />
+          {!receiptOpen && !assistantOpen && (
+            <div className="chat-receipt-edge">
+              <ShellIconButton ref={receiptLauncherRef} className="chat-receipt-edge-button"
+                icon="sidebar" label={"\u5c55\u5f00\u8c03\u7528\u56de\u6267"} aria-controls="chat-call-receipts"
+                aria-expanded={false} onClick={openReceipt} />
+            </div>
+          )}
+        </>
+      )}
       right={defaultRoute || assistantOpen ? {
         title: "AI assistant",
         assistant: true,
@@ -211,7 +253,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
       } : undefined}
     >
       <div className="chat-workspace">
-        <div className="chat-workspace-grid" data-assistant-open={assistantOpen || undefined}>
+        <div className="chat-workspace-grid" data-assistant-open={assistantOpen || undefined}
+          data-receipt-closed={!receiptOpen || undefined}>
           <div className="chat-main max-w-content-ultra-3xl">
             <ViewHeader
               icon="chat-circle"
@@ -387,6 +430,8 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
             </section>
           </div>
           <ChatVerification
+            open={receiptOpen}
+            onClose={closeReceipt}
             panelRef={receiptRef}
             turn={visibleReceipt}
             turnNumber={selectedIndex >= 0 ? selectedIndex + 1 : turns.length + (submission ? 1 : 0)}
