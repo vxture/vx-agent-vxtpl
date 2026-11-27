@@ -10,11 +10,19 @@
 import type { ReactNode } from "react";
 import "./product-framework.css";
 
-export type ProductContentWidth = "1536" | "1920";
+const contentWidths = {
+  narrow: "1280",
+  default: "1536",
+  wide: "1920",
+  "1536": "1536",
+  "1920": "1920",
+} as const;
+
+export type ProductContentWidth = keyof typeof contentWidths;
 
 export function ProductContent({
   children,
-  width = "1536",
+  width = "default",
   className = "",
 }: {
   children: ReactNode;
@@ -22,7 +30,7 @@ export function ProductContent({
   className?: string;
 }) {
   return (
-    <main className={`product-framework-content ${className}`} data-content-width={width}>
+    <main className={`product-framework-content ${className}`} data-content-width={contentWidths[width]}>
       {children}
     </main>
   );
