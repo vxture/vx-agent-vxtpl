@@ -117,7 +117,7 @@ export function ChatVerification({
               )}
               <Button type="button" size="sm" variant="ghost" className="chat-receipt-close"
                 aria-label={"\u5173\u95ed\u8c03\u7528\u56de\u6267"} onClick={(event) => onClose(event.detail === 0)}>
-                <Icon name="x" size={24} aria-hidden="true" />
+                <Icon name="x" size="md" aria-hidden="true" />
               </Button>
             </div>
           )}
