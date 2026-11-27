@@ -8,7 +8,7 @@
  */
 
 .assistant-panel { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; background: var(--card); }
-.assistant-panel-header { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: 4px; padding: 8px 12px; border-block-end: 1px solid var(--border); }
+.assistant-panel-header { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-xs); block-size: var(--space-control-3xl); padding-inline: var(--space-sm); border-block-end: 1px solid var(--border); }
 .assistant-panel-header h2 { display: flex; align-items: center; min-inline-size: 0; gap: 6px; font-size: 14px; font-weight: 600; }
 .assistant-panel-header h2 svg { flex: none; color: var(--muted-foreground); }
 .assistant-panel-header h2 span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
