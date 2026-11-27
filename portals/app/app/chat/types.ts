@@ -13,7 +13,15 @@ export interface ChatMessage {
 export const CHAT_SCOPE_HEADER = "x-vxtpl-workspace-context";
 export const DOCUMENT_CONVERSION_SKILL = "document-conversion";
 
+export type ChatTarget =
+  | { endpointCode: string; modelCode?: never }
+  | { modelCode: string; endpointCode?: never };
+
+export type AtlasModelChoice = { code: string; name: string; provider: string };
+
 export interface ChatOptions {
+  target?: ChatTarget;
+  /** Legacy Vxtpl callers supplied a route code here. */
   modelCode?: string;
   skillCode?: string;
 }
@@ -26,7 +34,19 @@ export interface SkillOutcome {
   status: "ran" | "unavailable" | "failed" | "not-invoked";
   detail: string;
   callId?: string;
+  operation?: string;
+  version?: string;
+  resultKind?: "executed" | "distributed";
+  contentDigest?: string;
+  errorCode?: string;
   outcomeAcknowledged?: boolean;
+}
+
+export interface ChatFailureEvidence {
+  taskId?: string;
+  skill?: SkillOutcome;
+  atlasRequestId?: string;
+  atlasErrorCode?: string;
 }
 
 export interface ChatReply {

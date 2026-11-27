@@ -41,11 +41,19 @@ test("chat discovers a new Atlas route, rechecks it at send time, and fails clos
   });
 
   const newRoute = "workspace-dialogue";
-  const chatCalls: string[] = [];
+  const chatCalls: { endpointCode?: string; modelCode?: string }[] = [];
+  const directCode = "granted-chat-model";
+  const grantedModel = {
+    modelCode: directCode, modelName: "Granted chat model", provider: "fixture",
+    protocol: "openai", capabilities: [], state: "active", modelType: "chat", deprecatedAt: null,
+  };
   const jwt = Buffer.from(JSON.stringify({ workspace_id: "ws_local_dev" })).toString("base64url");
   const token = `fixture.${jwt}.signature`;
   let granted = true;
+  let directlyGranted = true;
   let readable = true;
+  let inferenceUnavailable = false;
+  let failedTaskId: string | undefined;
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     switch (String(input)) {
       case "http://accounts.internal/oidc/token":
@@ -58,10 +66,22 @@ test("chat discovers a new Atlas route, rechecks it at send time, and fails clos
           { endpointCode: "chat/ghost", category: null, state: "missing" },
           ...(granted ? [{ endpointCode: newRoute, category: "chat", state: "active" }] : []),
         ] }) : Response.json({ code: "TEMPORARY_ERROR" }, { status: 503 });
-      case "http://atlas.internal/v1/chat":
+      case "http://atlas.internal/v1/models?scope=caller":
         assert.equal(new Headers(init?.headers).get("authorization"), `Bearer ${token}`);
-        chatCalls.push(JSON.parse(String(init?.body)).endpointCode);
+        return Response.json(directlyGranted ? [grantedModel,
+          { ...grantedModel, modelCode: "embedding-fixture", modelType: "embedding" },
+        ] : []);
+      case "http://atlas.internal/v1/chat": {
+        assert.equal(new Headers(init?.headers).get("authorization"), `Bearer ${token}`);
+        const { endpointCode, modelCode, taskId } = JSON.parse(String(init?.body));
+        chatCalls.push(modelCode ? { modelCode } : { endpointCode });
+        assert.ok(Boolean(modelCode) !== Boolean(endpointCode));
+        if (inferenceUnavailable) {
+          failedTaskId = taskId;
+          return Response.json({ code: "PROVIDER_UNAVAILABLE", requestId: "failed-receipt" }, { status: 502 });
+        }
         return Response.json({ message: { role: "assistant", content: "Reply" }, modelCode: "serving-model", id: "receipt" });
+      }
       default:
         throw new Error(`Unexpected request: ${String(input)}`);
     }
@@ -69,21 +89,26 @@ test("chat discovers a new Atlas route, rechecks it at send time, and fails clos
 
   // Catalog and turn assertions
 
-  const send = (modelCode?: string) => POST(new Request("http://localhost/api/chat", {
+  const send = (modelCode?: string, target?: { modelCode?: string; endpointCode?: string }) => POST(new Request("http://localhost/api/chat", {
     method: "POST",
     headers: { [CHAT_SCOPE_HEADER]: "development" },
-    body: JSON.stringify({ history: [{ role: "user", content: "Hello" }], modelCode }),
+    body: JSON.stringify({ history: [{ role: "user", content: "Hello" }], modelCode, target }),
   }));
 
   const catalog = await (await GET()).json();
   assert.deepEqual(catalog.models, [{ code: newRoute, label: newRoute, allowed: true, requiredTier: "pro" }]);
   assert.equal(catalog.defaultModelCode, newRoute);
+  assert.equal(catalog.atlasSource, "live");
+  assert.deepEqual(catalog.atlasDirectModels, [{ code: directCode, name: grantedModel.modelName, provider: grantedModel.provider }]);
   assert.equal((await send("chat/documents")).status, 403);
   assert.equal((await (await send()).json()).message.content, "Reply");
   assert.equal((await send(newRoute)).status, 200);
 
   process.env.MOCK_TIER = "starter";
-  assert.equal((await (await GET()).json()).defaultModelCode, null);
+  const starter = await (await GET()).json();
+  assert.equal(starter.defaultModelCode, null);
+  assert.deepEqual(starter.atlasDirectModels, []);
+  assert.equal(starter.atlasDirectRequiredTier, "pro");
   assert.equal((await send(newRoute)).status, 403);
   process.env.MOCK_TIER = "pro";
 
@@ -97,5 +122,28 @@ test("chat discovers a new Atlas route, rechecks it at send time, and fails clos
   const unavailable = await send();
   assert.equal(unavailable.status, 503);
   assert.equal((await unavailable.json()).code, "MODEL_CATALOG_UNAVAILABLE");
-  assert.deepEqual(chatCalls, [newRoute, newRoute]);
+  resetChatRate();
+  const directOnly = await (await GET()).json();
+  assert.equal(directOnly.atlasRouteCatalogAvailable, false);
+  assert.equal(directOnly.atlasDirectModels[0].code, directCode);
+  assert.equal((await send(undefined, { modelCode: directCode })).status, 200);
+  process.env.MOCK_TIER = "starter";
+  assert.equal((await send(undefined, { modelCode: directCode })).status, 403);
+  process.env.MOCK_TIER = "pro";
+  assert.equal((await send(undefined, { modelCode: "embedding-fixture" })).status, 403);
+  assert.equal((await send(undefined, { modelCode: directCode, endpointCode: newRoute })).status, 400);
+  directlyGranted = false;
+  assert.equal((await send(undefined, { modelCode: directCode })).status, 403);
+  assert.deepEqual(chatCalls, [{ endpointCode: newRoute }, { endpointCode: newRoute }, { modelCode: directCode }]);
+
+  directlyGranted = true;
+  inferenceUnavailable = true;
+  resetChatRate();
+  const failure = await send(undefined, { modelCode: directCode });
+  assert.equal(failure.status, 502);
+  const { evidence } = await failure.json();
+  assert.ok(failedTaskId);
+  assert.equal(evidence.taskId, failedTaskId);
+  assert.equal(evidence.atlasRequestId, "failed-receipt");
+  assert.equal(evidence.atlasErrorCode, "PROVIDER_UNAVAILABLE");
 });

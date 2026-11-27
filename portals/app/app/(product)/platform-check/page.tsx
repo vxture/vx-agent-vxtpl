@@ -32,7 +32,7 @@ const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[
 const actions: { probe: Probe; name: string; detail: string }[] = [
   { probe: "c3-replay", name: "计量入账与回放", detail: "同一 UTC 日最多计入 1 个单位，重复请求返回原回执。" },
   { probe: "atlas-inference", name: "Atlas · 按路由调用", detail: "从产品授权目录选取对话路由，按 endpointCode 提交样本。" },
-  { probe: "atlas-model-inference", name: "Atlas · 按模型调用", detail: "从 Atlas 目录选择模型，按 modelCode 提交同一份样本。Atlas 在调用时核验授权。" },
+  { probe: "atlas-model-inference", name: "Atlas · 按模型调用", detail: "从当前调用方的授权模型中选择，按 modelCode 提交同一份样本。" },
   { probe: "runos-invoke", name: "Runos 实际调用", detail: "将固定 HTML 样本转换为 Markdown，校验转换内容和结果回报后显示调用回执。" },
 ];
 

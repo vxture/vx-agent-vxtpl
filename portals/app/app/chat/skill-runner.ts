@@ -88,9 +88,17 @@ export async function runSkill(
   try {
     if (skillCode === DOCUMENT_CONVERSION_SKILL) {
       const conversion = await convertHtmlToMarkdown(cfg, userText, call);
-      const receipt = { ...base, capabilityId: DOCUMENT_CONVERTER, callId: conversion.callId };
+      const receipt = {
+        ...base,
+        capabilityId: DOCUMENT_CONVERTER,
+        callId: conversion.callId,
+        operation: conversion.operation,
+        version: conversion.version,
+        outcomeAcknowledged: conversion.outcomeAcknowledged,
+        errorCode: conversion.errorCode,
+      };
       return conversion.status === "converted"
-        ? { ...receipt, status: "ran", detail: conversion.markdown, outcomeAcknowledged: conversion.outcomeAcknowledged }
+        ? { ...receipt, status: "ran", detail: conversion.markdown, resultKind: "executed" }
         : { ...receipt, status: conversion.status, detail: "HTML conversion is unavailable." };
     }
     const found = await runosDiscover(cfg, spec.query, { ...call, limit: 10, category: spec.category });
@@ -113,6 +121,7 @@ export async function runSkill(
         capabilityId: capability.capability_id,
         status: "unavailable",
         detail: describeFailure(resolved.failure),
+        errorCode: resolved.failure.code,
       };
     }
     const operation = resolved.data.contract?.operations?.[0];
@@ -143,6 +152,10 @@ export async function runSkill(
               ? (invoked.text ?? "").slice(0, 4000)
               : summarize(invoked.data),
           callId: invoked.callId,
+          operation: operation.operation,
+          version: invoked.meta?.version_resolved,
+          resultKind: invoked.meta?.result_kind ?? "executed",
+          contentDigest: invoked.meta?.content_digest,
         }
       : {
           code: skillCode,
@@ -150,6 +163,8 @@ export async function runSkill(
           status: "failed",
           detail: describeFailure(invoked.failure),
           callId: invoked.failure.call_id,
+          operation: operation.operation,
+          errorCode: invoked.failure.code,
         };
 
     void runosReportOutcome(cfg, invoked.ok ? "success" : "failure", {

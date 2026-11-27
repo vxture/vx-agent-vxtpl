@@ -15,9 +15,17 @@ import {
 export const DOCUMENT_CONVERTER = "markitdown.document-to-markdown";
 const CONVERT_OPERATION = "convert_to_markdown";
 
-type Conversion =
+interface ConversionReceipt {
+  operation?: string;
+  version?: string;
+  outcomeAcknowledged?: boolean;
+  errorCode?: string;
+}
+
+type Conversion = ConversionReceipt & (
   | { status: "converted"; markdown: string; callId: string; outcomeAcknowledged: boolean }
-  | { status: "unavailable" | "failed"; callId?: string };
+  | { status: "unavailable" | "failed"; callId?: string }
+);
 
 export async function canDiscoverDocumentConverter(config: RunosClientConfig, call: CallToolOptions): Promise<boolean> {
   const result = await runosDiscover(config, DOCUMENT_CONVERTER, { ...call, category: "documents", limit: 10 });
@@ -53,9 +61,10 @@ export async function convertHtmlToMarkdown(
   const acknowledgement = await runosReportOutcome(config, callId && markdown ? "success" : "failure", {
     ...call, capabilitiesUsed: [DOCUMENT_CONVERTER],
   }).catch(() => undefined);
-  if (!callId || !markdown) return { status: "failed", callId };
-  return {
-    status: "converted", markdown, callId,
-    outcomeAcknowledged: acknowledgement?.ok === true && acknowledgement.data?.acknowledged === true,
-  };
+  const outcomeAcknowledged = acknowledgement?.ok === true && acknowledgement.data?.acknowledged === true;
+  const receipt = { operation: CONVERT_OPERATION, version: contract.version, outcomeAcknowledged };
+  if (!callId || !markdown) {
+    return { ...receipt, status: "failed", callId, errorCode: result.ok ? undefined : result.failure.code };
+  }
+  return { ...receipt, status: "converted", markdown, callId };
 }

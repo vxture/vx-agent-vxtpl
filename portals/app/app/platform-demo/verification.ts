@@ -21,10 +21,10 @@ import { webhookSecrets } from "../provisioning/lib/verify";
 import { makePlatformConsume } from "../usage/lib/flush";
 import { invalidateWorkspaceEntitlement } from "../entitlement/platform-resolver";
 import {
-  AtlasError, fetchChatCompletion, getAtlasClientConfig, listAtlasModels,
+  AtlasError, fetchChatCompletion, getAtlasClientConfig,
   type AtlasChatTarget, type AtlasClientConfig,
 } from "../chat/atlas-client";
-import { chooseChatModel, readAtlasChatModels } from "../chat/catalog";
+import { chooseChatModel, readAtlasChatModels, readGrantedAtlasChatModels } from "../chat/catalog";
 import type { MintOptions } from "../lib/s2s-token";
 import { getRunosClientConfig } from "../runos/client";
 import { checkRunosSample, runRunosSample } from "./runos-sample";
@@ -105,14 +105,6 @@ async function checkAtlas(session: SignedWorkspace, entitlement: Entitlement | n
     : { state: "blocked", detail: "当前工作空间没有可用的 Atlas 对话路由" };
 }
 
-async function readAtlasModelChoices(config: AtlasClientConfig, identity: MintOptions): Promise<AtlasModelChoice[] | null> {
-  const models = await listAtlasModels(config, identity);
-  if (models.length && models.every(({ modelType }) => !modelType?.trim())) return null;
-  return models
-    .filter(({ state, modelType }) => state === "active" && modelType === "chat")
-    .map(({ modelCode, modelName, provider }) => ({ code: modelCode, name: modelName, provider }));
-}
-
 async function checkAtlasModels(
   session: SignedWorkspace,
   entitlement: Entitlement | null,
@@ -124,11 +116,11 @@ async function checkAtlasModels(
   if (!hasProductAccess(entitlement)) {
     return { check: { state: "blocked", detail: "当前工作空间没有产品套餐权益" }, choices: [] };
   }
-  const choices = await readAtlasModelChoices(cfg, { subjectToken: session.accessToken });
+  const choices = await readGrantedAtlasChatModels(cfg, { subjectToken: session.accessToken }, entitlement);
   if (!choices) return { check: unavailable("Atlas 目录尚未提供模型类型"), choices: [] };
   const check = choices.length
-    ? verified(`目录中有 ${choices.length} 个启用对话模型，调用时由 Atlas 核验授权`)
-    : { state: "blocked" as const, detail: "Atlas 目录中没有启用对话模型" };
+    ? verified(`当前调用方有 ${choices.length} 个已授权的对话模型`)
+    : { state: "blocked" as const, detail: "当前调用方没有已授权的对话模型" };
   return { check, choices };
 }
 
@@ -295,7 +287,7 @@ export async function runPlatformProbe(session: SignedWorkspace, command: ProbeC
       }
       let target: AtlasChatTarget;
       if (command.probe === "atlas-model-inference") {
-        const choices = await readAtlasModelChoices(atlas, identity);
+        const choices = await readGrantedAtlasChatModels(atlas, identity, entitlement);
         if (!choices) {
           return { status: 503, result: { ok: false, detail: "Atlas 目录尚未提供模型类型" } };
         }

@@ -226,8 +226,6 @@
   gap: 12px;
   margin-block-start: 16px;
 }
-.product-framework-content .chat-intro { max-inline-size: none; }
-.chat-surface { margin-block-start: 24px; }
 .framework-catalogue { display: grid; gap: 16px; margin-block-start: 24px; }
 .framework-catalogue li { padding-block-end: 16px; border-block-end: 1px solid var(--border); }
 .framework-catalogue a { font-weight: 600; }
