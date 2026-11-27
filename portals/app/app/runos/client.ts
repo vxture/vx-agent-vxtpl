@@ -165,7 +165,8 @@ async function callTool<T>(
   // MCP's namespaced metadata slot - the capability's own keys live there too,
   // so read only `vxture` out of it and never assume the object is ours.
   const meta = structured?._meta?.vxture;
-  const text = result.content?.find((c) => c.type === "text")?.text;
+  const text = result.content?.filter((c) => c.type === "text" && typeof c.text === "string")
+    .map((c) => c.text).join("\n") || undefined;
   return { ok: true, data: structured as T, meta, text, callId: meta?.call_id };
 }
 

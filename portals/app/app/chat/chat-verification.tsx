@@ -8,21 +8,11 @@
  */
 
 import type { ReactNode, Ref } from "react";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, StatusBadge } from "../ds";
-import { DOCUMENT_CONVERSION_SKILL, type ChatFailureEvidence, type ChatReply, type ChatTarget, type SkillOutcome } from "./types";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, NativeSelect, SectionHeader, StatusBadge } from "../ds";
+import type { SavedTurn } from "./chat-history";
+import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type SkillOutcome, type TurnVerification } from "./types";
 
 // Evidence model
-
-interface TurnTarget {
-  atlasTarget: ChatTarget;
-  skillCode?: string;
-}
-
-export type TurnVerification = TurnTarget & (
-  | { state: "pending" }
-  | { state: "received"; reply: ChatReply }
-  | { state: "failed"; message?: string; conversionFailed: boolean; runosCallId?: string; evidence?: ChatFailureEvidence }
-);
 
 interface ServiceStatus {
   label: string;
@@ -31,7 +21,7 @@ interface ServiceStatus {
 
 function atlasStatus(turn: TurnVerification): ServiceStatus {
   if (turn.state === "pending") return { label: "\u7b49\u5f85\u56de\u6267", tone: "brand" };
-  if (turn.state === "failed") return turn.conversionFailed
+  if (turn.state === "failed") return turn.runosBlockedAtlas
     ? { label: "\u672a\u53d1\u8d77", tone: "neutral" }
     : { label: "\u672a\u53d6\u5f97\u56de\u6267", tone: "warning" };
   return turn.reply.mode === "atlas"
@@ -41,7 +31,6 @@ function atlasStatus(turn: TurnVerification): ServiceStatus {
 
 function runosStatus(turn: TurnVerification, skill: SkillOutcome | undefined): ServiceStatus {
   if (turn.state === "pending") return { label: "\u7b49\u5f85\u56de\u6267", tone: "brand" };
-  if (turn.state === "failed" && turn.conversionFailed) return { label: "\u8f6c\u6362\u672a\u5b8c\u6210", tone: "warning" };
   if (turn.state === "received" && turn.reply.mode === "mock") return { label: "\u79bb\u7ebf\u6a21\u62df", tone: "neutral" };
   switch (skill?.status) {
     case "ran":
@@ -93,21 +82,38 @@ interface ChatVerificationProps {
   turn: TurnVerification | null;
   turnNumber: number;
   panelRef: Ref<HTMLElement>;
-  onLatest?: () => void;
+  history: SavedTurn[];
+  storageFailed?: boolean;
+  selectedReceiptId: string | null;
+  onSelectReceipt: (id: string | null) => void;
 }
 
-export function ChatVerification({ turn, turnNumber, panelRef, onLatest }: ChatVerificationProps) {
+export function ChatVerification({ turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt }: ChatVerificationProps) {
   return (
     <aside id="chat-call-receipts" className="chat-verification" aria-labelledby="chat-verification-title" tabIndex={-1} ref={panelRef}>
       <header>
         <SectionHeader
           title={<span id="chat-verification-title">{"\u8c03\u7528\u56de\u6267"}</span>}
           divider={false}
-          action={onLatest && (
-            <Button type="button" size="sm" variant="ghost" onClick={onLatest}>{"\u56de\u5230\u6700\u65b0"}</Button>
+          action={selectedReceiptId && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => onSelectReceipt(null)}>{"\u56de\u5230\u6700\u65b0"}</Button>
           )}
         />
       </header>
+      {history.length > 0 && (
+        <label className="chat-receipt-history">
+          <span>{"\u5386\u53f2\u56de\u6267"}</span>
+          <NativeSelect value={selectedReceiptId ?? ""} onChange={(event) => onSelectReceipt(event.target.value || null)}>
+            <option value="">{"\u6700\u65b0\u4e00\u8f6e"}</option>
+            {history.map((saved, index) => (
+              <option key={saved.id} value={saved.id}>
+                {`\u7b2c ${index + 1} \u8f6e \u00b7 ${saved.prompt.replace(/\s+/g, " ").slice(0, 44)}`}
+              </option>
+            )).reverse()}
+          </NativeSelect>
+        </label>
+      )}
+      {storageFailed && <p className="chat-receipt-empty" role="status">{"\u6d4f\u89c8\u5668\u65e0\u6cd5\u4fdd\u5b58\u90e8\u5206\u56de\u6267\uff0c\u5237\u65b0\u540e\u53ef\u80fd\u4e22\u5931\u3002"}</p>}
       {turn ? <TurnReceipt key={turnNumber} turn={turn} turnNumber={turnNumber} /> : (
         <p className="chat-receipt-empty">{"\u53d1\u9001\u540e\u53ef\u67e5\u770b\u672c\u8f6e\u56de\u6267"}</p>
       )}
@@ -128,13 +134,15 @@ function TurnReceipt({ turn, turnNumber }: { turn: TurnVerification; turnNumber:
     (skill?.outcomeAcknowledged !== undefined && skill.status !== "ran");
   const usesRunos = Boolean(turn.skillCode);
   const convertsDocument = turn.skillCode === DOCUMENT_CONVERSION_SKILL;
+  const searchesWeb = turn.skillCode === WEB_SEARCH_SKILL;
   const direct = turn.atlasTarget.modelCode !== undefined;
   const atlasMode = direct ? "\u6a21\u578b\u76f4\u8c03" : "\u8def\u7531\u8c03\u7528";
   const atlas = atlasStatus(turn);
   const runos = usesRunos ? runosStatus(turn, skill) : undefined;
   const status = overallStatus(turn, runos);
   const flow = usesRunos
-    ? convertsDocument ? ["Runos \u6587\u6863\u8f6c\u6362", "Atlas \u6458\u8981"] : ["Runos \u80fd\u529b\u8c03\u7528", "Atlas \u56de\u590d"]
+    ? convertsDocument ? ["Runos \u6587\u6863\u8f6c\u6362", "Atlas \u6458\u8981"]
+      : searchesWeb ? ["Runos \u8054\u7f51\u641c\u7d22", "Atlas \u56de\u7b54"] : ["Runos \u80fd\u529b\u8c03\u7528", "Atlas \u56de\u590d"]
     : [`Atlas ${atlasMode}`];
   const runosCallId = skill?.callId ?? (turn.state === "failed" ? turn.runosCallId : undefined);
   const resultLabel = skill?.status === "ran"
@@ -165,7 +173,7 @@ function TurnReceipt({ turn, turnNumber }: { turn: TurnVerification; turnNumber:
             title={<span id="chat-runos-title">Runos</span>}
             level={3}
             icon="plugs-connected"
-            description={convertsDocument ? "\u6587\u6863\u8f6c Markdown" : "\u80fd\u529b\u8c03\u7528"}
+            description={convertsDocument ? "\u6587\u6863\u8f6c Markdown" : searchesWeb ? "\u8054\u7f51\u641c\u7d22" : "\u80fd\u529b\u8c03\u7528"}
             action={!offline && <StatusBadge tone={runos.tone} dot>{runos.label}</StatusBadge>}
           />
           {(skill?.capabilityId || runosCallId) && (
@@ -174,6 +182,15 @@ function TurnReceipt({ turn, turnNumber }: { turn: TurnVerification; turnNumber:
               {skill?.operation && <EvidenceField label={"\u64cd\u4f5c"}><code>{skill.operation}</code></EvidenceField>}
               {runosCallId && <EvidenceField label={"\u8c03\u7528 ID"}><code>{runosCallId}</code></EvidenceField>}
             </dl>
+          )}
+          {Boolean(skill?.sources?.length) && (
+            <ReceiptDisclosure label={"\u67e5\u770b\u641c\u7d22\u6765\u6e90"}>
+              <ol className="chat-search-sources">
+                {skill?.sources?.map((url) => (
+                  <li key={url}><a href={url} target="_blank" rel="noreferrer">{url}</a></li>
+                ))}
+              </ol>
+            </ReceiptDisclosure>
           )}
           {skill?.detail && (
             <ReceiptDisclosure label={skill.resultKind === "distributed" ? "\u67e5\u770b\u6280\u80fd\u5185\u5bb9" : resultLabel}>

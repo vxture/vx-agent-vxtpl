@@ -6,7 +6,7 @@ import { readWorkspaceEntitlement } from "../../entitlement/resolver";
 import { canUseFeature, minTierFor } from "../../entitlement/capability";
 import { AtlasError, getAtlasClientConfig } from "../../chat/atlas-client";
 import { ATLAS_GRANTED_FEATURE, chooseChatModel, findSkill, gatedMockModels, gatedSkills, readAtlasChatModels, readGrantedAtlasChatModels, type GatedOption } from "../../chat/catalog";
-import { ChatConversionError, ChatInferenceError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
+import { ChatConversionError, ChatInferenceError, ChatWebSearchError, getChatResolver, validateHistory, type ChatIdentity } from "../../chat/resolver";
 import { recordUsage } from "../../usage/lib/buffer";
 import { CHAT_SCOPE_HEADER, type ChatFailureEvidence, type ChatTarget } from "../../chat/types";
 import { hasProductAccess, type Entitlement } from "../../entitlement/types";
@@ -242,9 +242,9 @@ export async function POST(req: Request): Promise<Response> {
   try {
     reply = await getChatResolver().reply(messages, caller.identity, { target, skillCode });
   } catch (err) {
-    if (err instanceof ChatConversionError) {
+    if (err instanceof ChatConversionError || err instanceof ChatWebSearchError) {
       return NextResponse.json({
-        code: "DOCUMENT_CONVERSION_UNAVAILABLE",
+        code: err instanceof ChatWebSearchError ? "WEB_SEARCH_UNAVAILABLE" : "DOCUMENT_CONVERSION_UNAVAILABLE",
         error: err.message,
         callId: err.skill.callId,
         evidence: { taskId: err.taskId, skill: { ...err.skill, detail: "" } } satisfies ChatFailureEvidence,
