@@ -9,10 +9,10 @@
 
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button, Icon, ShellIconButton, Textarea } from "../ds";
 import { conversationTitle, type useAssistantConversations } from "./assistant-conversations";
-import { handleChatComposerKey, isChatEscapeKey } from "./chat-keyboard";
+import { handleChatComposerKey, isChatEscapeKey, useChatInputHistory } from "./chat-keyboard";
 import { MAX_MESSAGE_LENGTH } from "./types";
 import "./assistant-panel.css";
 
@@ -45,7 +45,9 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
   const id = useId();
   const [menu, setMenu] = useState<"history" | "actions" | null>(null);
   const { active } = chat;
-  const canSend = chat.canSend && !active.busy && Boolean(active.draft.trim());
+  const prompts = useMemo(() => active.messages.filter(({ role }) => role === "user").map(({ content }) => content), [active.messages]);
+  const { value: input, handleHistoryKey, resetHistory } = useChatInputHistory(prompts, active.draft);
+  const canSend = chat.canSend && !active.busy && Boolean(input.trim());
   useEffect(() => {
     if (messages.current) messages.current.scrollTop = messages.current.scrollHeight;
   }, [active.messages]);
@@ -65,6 +67,7 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
   }, [menu]);
 
   function focusComposer() {
+    resetHistory();
     setMenu(null);
     composer.current?.focus({ preventScroll: true });
   }
@@ -142,18 +145,19 @@ export function AssistantPanel({ chat, wide, onWidthChange, onClose }: Assistant
         event.preventDefault();
         if (!canSend) return;
         focusComposer();
-        void chat.send();
+        void chat.send(input);
       }}>
         {active.error && <p role="alert">{active.error}</p>}
         <div className="assistant-panel-composer-row">
           <Textarea ref={composer} aria-label="Message assistant" aria-describedby={id + "-shortcuts"}
-            value={active.draft} onChange={(event) => chat.setDraft(event.target.value)}
-            onKeyDown={(event) => handleChatComposerKey(event, canSend)}
+            aria-keyshortcuts="ArrowUp ArrowDown" value={input}
+            onChange={(event) => { resetHistory(); chat.setDraft(event.target.value); }}
+            onKeyDown={(event) => { if (!handleHistoryKey(event)) handleChatComposerKey(event, canSend); }}
             rows={2} maxLength={MAX_MESSAGE_LENGTH} readOnly={active.busy} />
           <Button type="submit" disabled={!canSend} aria-keyshortcuts="Enter Control+Enter Meta+Enter">Send</Button>
         </div>
         <div id={id + "-shortcuts"} className="assistant-panel-shortcuts">
-          <kbd>Enter</kbd> to send <span aria-hidden="true">&middot;</span> <kbd>Shift+Enter</kbd> for a new line
+          <kbd>Enter</kbd> to send <span aria-hidden="true">&middot;</span> <kbd>Shift+Enter</kbd> for a new line <span aria-hidden="true">&middot;</span> <kbd>{"\u2191/\u2193"}</kbd> for history
         </div>
       </form>
     </section>
