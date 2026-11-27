@@ -59,15 +59,15 @@
 }
 
 @container chat-workspace (min-width: 56rem) {
-  .chat-workspace-grid:not([data-assistant-open]) {
+  .chat-workspace-grid:not([data-assistant-open], [data-receipt-closed]) {
     grid-template-columns: minmax(0, 1fr) var(--vxtpl-region-right);
     gap: 0;
     padding: 0;
   }
 
-  .chat-workspace-grid:not([data-assistant-open]) > .chat-main { padding-inline: var(--vxtpl-page-inset); }
+  .chat-workspace-grid:not([data-assistant-open], [data-receipt-closed]) > .chat-main { padding-inline: var(--vxtpl-page-inset); }
 
-  .chat-workspace-grid:not([data-assistant-open]) > .chat-verification {
+  .chat-workspace-grid:not([data-assistant-open], [data-receipt-closed]) > .chat-verification {
     position: sticky;
     inset-block-start: 0;
     block-size: 100cqh;
@@ -258,10 +258,58 @@
   align-items: center;
   block-size: var(--space-control-3xl);
   padding-inline: var(--space-md);
-  border-block-end: 1px solid var(--border);
+  box-shadow: inset 0 -1px var(--border);
   border-start-start-radius: inherit;
   border-start-end-radius: inherit;
   background: var(--card);
+}
+
+.chat-receipt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.chat-receipt-edge {
+  --vxtpl-receipt-trigger-size: var(--space-control-md);
+  position: fixed;
+  inset-block-start: calc(var(--vxtpl-header-height) + (var(--space-control-3xl) - var(--vxtpl-receipt-trigger-size)) / 2);
+  inset-inline-end: 0;
+  z-index: 2;
+  inline-size: var(--vxtpl-receipt-trigger-size);
+  block-size: var(--vxtpl-receipt-trigger-size);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chat-receipt-edge .chat-receipt-edge-button {
+  position: absolute;
+  inset-inline-end: calc(var(--space-xs) - var(--vxtpl-receipt-trigger-size));
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--primary) 16%, var(--card));
+  color: var(--primary-text);
+  transition: inset-inline-end 140ms ease;
+}
+
+.chat-receipt-edge:is(:hover, :focus-within) .chat-receipt-edge-button { inset-inline-end: 0; }
+.chat-receipt-edge-button:focus-visible { outline-offset: -2px; }
+.chat-receipt-edge-button > svg { opacity: 0; }
+.chat-receipt-edge:is(:hover, :focus-within) .chat-receipt-edge-button > svg { opacity: 1; }
+
+.chat-receipt-actions .chat-receipt-close,
+.chat-receipt-edge .chat-receipt-edge-button {
+  inline-size: var(--space-control-md);
+  block-size: var(--space-control-md);
+}
+
+.chat-receipt-close > svg,
+.chat-receipt-edge-button > svg {
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-receipt-edge .chat-receipt-edge-button { transition: none; }
 }
 
 .chat-receipt-history {
