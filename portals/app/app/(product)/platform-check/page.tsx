@@ -158,7 +158,6 @@ export default function PlatformCheckPage() {
           icon="plugs-connected"
           description="用当前工作空间验证身份、准入、开通、计量和能力调用。"
           action={<Button onClick={refresh} disabled={busy !== null}>{busy === "report" ? "正在核验…" : "核验接入状态"}</Button>}
-          divider={false}
         />
 
         <section className="platform-demo__section" aria-labelledby="platform-checks">
