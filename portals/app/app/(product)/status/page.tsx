@@ -74,7 +74,7 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <ProductContent>
+    <ProductContent width="narrow">
       <div className="eyebrow">Verification surface</div>
       <Section
         level={1}
