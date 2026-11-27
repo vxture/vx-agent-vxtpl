@@ -228,7 +228,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
   return (
     <WorkspaceRegions
       className="chat-shell"
-      width="1920"
+      width="wide"
       renderHeader={(actions, control) => (
         <>
           <ProductHeader workspace actions={actions} assistant={control} sessionRevision={revision} />
@@ -255,7 +255,7 @@ function ChatWorkspace({ ctx, blocked, revision, onAccessFailure }: WorkspacePro
       <div className="chat-workspace">
         <div className="chat-workspace-grid" data-assistant-open={assistantOpen || undefined}
           data-receipt-closed={!receiptOpen || undefined}>
-          <div className="chat-main max-w-content-ultra-3xl">
+          <div className="chat-main">
             <ViewHeader
               icon="chat-circle"
               title={"\u5bf9\u8bdd\u5de5\u4f5c\u53f0"}
