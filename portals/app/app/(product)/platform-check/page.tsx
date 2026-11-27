@@ -10,11 +10,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button, NativeSelect, StatusBadge } from "../../ds";
+import { Button, Card, Icon, NativeSelect, SectionHeader, StatusBadge, ViewHeader } from "../../ds";
 import { ProductContent } from "../../framework/product-content";
 import { productGateHref } from "../../framework/product-experience";
 import { DAILY_PROBES, type Check, type PlatformReport, type Probe, type ProbeReceipt } from "../../platform-demo/types";
 import "./platform-check.css";
+
+const checkGroups = [
+  { code: "C1", title: "身份与会话", icon: "shield-check" },
+  { code: "C2", title: "准入与权益", icon: "list-checks" },
+  { code: "C3", title: "开通事件", icon: "clipboard" },
+  { code: "Atlas", title: "模型与路由", icon: "cpu" },
+  { code: "Runos", title: "能力授权", icon: "plugs-connected" },
+] as const;
 
 const rows: { id: keyof PlatformReport["checks"]; name: string; group: string }[] = [
   { id: "issuer", name: "Accounts 签发服务", group: "C1" },
@@ -144,54 +152,71 @@ export default function PlatformCheckPage() {
 
   return (
     <ProductContent>
-      <div className="platform-demo">
-        <header className="platform-demo__heading">
-          <div>
-            <h1>平台接入演示</h1>
-            <p>用当前工作空间验证身份、准入、开通、计量和能力调用。</p>
-          </div>
-          <Button onClick={refresh} disabled={busy !== null}>{busy === "report" ? "正在核验…" : "核验接入状态"}</Button>
-        </header>
+      <div className="platform-demo" lang="zh-CN">
+        <ViewHeader
+          title="平台接入演示"
+          icon="plugs-connected"
+          description="用当前工作空间验证身份、准入、开通、计量和能力调用。"
+          action={<Button onClick={refresh} disabled={busy !== null}>{busy === "report" ? "正在核验…" : "核验接入状态"}</Button>}
+          divider={false}
+        />
 
         <section className="platform-demo__section" aria-labelledby="platform-checks">
-          <div className="platform-demo__section-title">
-            <h2 id="platform-checks">接入预检</h2>
-            <div aria-live="polite" className="platform-demo__meta">
-              {report ? `${stages[report.stage]}环境 · ${count}/${rows.length} 项已核验 · ${new Date(report.checkedAt).toLocaleTimeString()}`
-                : "运行后显示当前会话对应的实测结果"}
-            </div>
-          </div>
-          {error && <p role="alert">{error}</p>}
+          <SectionHeader
+            icon="list-checks"
+            title={<span id="platform-checks">接入预检</span>}
+            description={report ? undefined : "核验后显示当前工作空间的逐项结果。"}
+          />
+          {report && <p className="platform-demo__detail" role="status">{`${stages[report.stage]}环境 · ${count}/${rows.length} 项已核验 · ${new Date(report.checkedAt).toLocaleTimeString()}`}</p>}
+          {error && <p className="platform-demo__notice" role="alert">{error}</p>}
           {report && !report.scopeKey && <p><a href={productGateHref("/platform-check")}>登录以核验工作空间</a></p>}
-          <ul className="platform-demo__rows">
-            {rows.map(({ id, name, group }) => (
-              <li className="platform-demo__row" key={id}>
-                <div className="platform-demo__item">
-                  <span className="platform-demo__group">{group}</span>
-                  <strong>{name}</strong>
-                </div>
-                <span className="platform-demo__detail">{report?.checks[id]?.detail ?? "等待核验"}</span>
-                <CheckBadge state={report?.checks[id]?.state ?? "waiting"} />
-              </li>
-            ))}
-          </ul>
+          <div className="platform-demo__checks">
+            {checkGroups.map(({ code, title, icon }) => {
+              const checks = rows.filter(({ group }) => group === code);
+              const verified = checks.filter(({ id }) => report?.checks[id]?.state === "verified").length;
+              return (
+                <Card className="platform-demo__card platform-demo__check-card" key={code}>
+                  <details>
+                    <summary className="platform-demo__summary">
+                      <Icon name={icon} size="md" aria-hidden="true" />
+                      <span className="platform-demo__group-title"><strong>{code}</strong><span>{title}</span></span>
+                      <span className="platform-demo__detail">{report ? `${verified}/${checks.length} 已核验` : `${checks.length} 项`}</span>
+                      <Icon name="chevron-down" size="sm" aria-hidden="true" />
+                    </summary>
+                    <ul className="platform-demo__check-list">
+                      {checks.map(({ id, name }) => {
+                        const result = report?.checks[id];
+                        return (
+                          <li className="platform-demo__check" key={id}>
+                            <strong>{name}</strong>
+                            <CheckBadge state={result?.state ?? "waiting"} />
+                            <p className="platform-demo__detail">{result?.detail ?? "等待核验"}</p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                </Card>
+              );
+            })}
+          </div>
         </section>
 
-        <section className="platform-demo__section" aria-labelledby="platform-actions">
-          <div className="platform-demo__section-title">
-            <h2 id="platform-actions">真实调用</h2>
-            <span className="platform-demo__meta">使用登记的验收账号与工作空间。两种 Atlas 调用各可在同一 UTC 日发起一次。</span>
-          </div>
-          <ul className="platform-demo__rows">
+        <section className="platform-demo__section" id="platform-actions" aria-labelledby="platform-actions-title">
+          <SectionHeader
+            icon="terminal"
+            title={<span id="platform-actions-title">真实调用</span>}
+            description="使用登记的验收账号与工作空间。两种 Atlas 调用各可在同一 UTC 日发起一次。"
+          />
+          <ul className="platform-demo__actions">
             {actions.map(({ probe, name, detail }) => {
               const outcome = outcomes[probe];
               const receipt = outcome?.receipt;
               const directModel = probe === "atlas-model-inference";
               return (
-                <li className="platform-demo__row platform-demo__row--action" key={probe}>
-                  <div>
-                    <strong>{name}</strong>
-                    <p className="platform-demo__detail">{detail}</p>
+                <li className="platform-demo__action" key={probe}>
+                  <Card className="platform-demo__card platform-demo__action-card">
+                    <SectionHeader title={name} level={3} divider={false} description={detail} />
                     <p className="platform-demo__detail">
                       {report?.actionDetails?.[probe] ?? "先运行接入预检"}
                     </p>
@@ -212,29 +237,34 @@ export default function PlatformCheckPage() {
                     <div role="status">
                       <CheckBadge state={receipt ? "verified" : outcome?.error ? "unavailable" : "waiting"} />
                       {receipt && (
-                        <>
-                          <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
-                          {receipt.evidence?.provider === "atlas" && (
-                            <p>
-                              {receipt.evidence.endpointCode
-                                ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
-                                : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
-                              {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
-                              {" · 任务 "}<code>{receipt.evidence.taskId}</code>
-                            </p>
-                          )}
-                          {receipt.responseText && <p>{receipt.responseText}</p>}
-                          {receipt.evidence?.provider === "runos" && (
-                            <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
-                          )}
-                        </>
+                        <details className="platform-demo__receipt">
+                          <summary className="platform-demo__summary">查看调用回执<Icon name="chevron-down" size="sm" aria-hidden="true" /></summary>
+                          <div className="platform-demo__receipt-detail">
+                            <p>{receipt.detail}{receipt.receipt && <> · 回执 <code>{receipt.receipt}</code></>}</p>
+                            {receipt.evidence?.provider === "atlas" && (
+                              <p>
+                                {receipt.evidence.endpointCode
+                                  ? <>路由 <code>{receipt.evidence.endpointCode}</code></>
+                                  : <>请求模型 <code>{receipt.evidence.requestedModelCode}</code></>}
+                                {" · 实际模型 "}<code>{receipt.evidence.modelCode}</code>
+                                {" · 任务 "}<code>{receipt.evidence.taskId}</code>
+                              </p>
+                            )}
+                            {receipt.responseText && <p>{receipt.responseText}</p>}
+                            {receipt.evidence?.provider === "runos" && (
+                              <p>能力 {receipt.evidence.capabilityId} · 结果回报已确认 · 任务 <code>{receipt.evidence.taskId}</code></p>
+                            )}
+                          </div>
+                        </details>
                       )}
                     </div>
                     {outcome?.error && <p role="alert">{outcome.error}</p>}
-                  </div>
-                  <Button variant="outline" onClick={() => run(probe)} disabled={busy !== null || !report?.actions[probe] || (directModel && !modelCode)}>
-                    {busy === probe ? "正在调用…" : "执行验证"}
-                  </Button>
+                    <div className="platform-demo__action-button">
+                      <Button variant="outline" onClick={() => run(probe)} disabled={busy !== null || !report?.actions[probe] || (directModel && !modelCode)}>
+                        {busy === probe ? "正在调用…" : "执行验证"}
+                      </Button>
+                    </div>
+                  </Card>
                 </li>
               );
             })}
@@ -242,13 +272,16 @@ export default function PlatformCheckPage() {
         </section>
 
         <section className="platform-demo__section" aria-labelledby="platform-logout">
-          <h2 id="platform-logout">人工联调</h2>
-          <ul>
-            <li>C1 跨产品退出。保持本页打开，从同一 Accounts 会话的另一产品退出，确认本页收到事件并返回门禁。</li>
-            <li>C2 准入与权益。用有席位和无席位的账号检查允许与拒绝；用相应订阅状态核对开通、续订和权益读取失败。</li>
-            <li>C3 开通与对账。核对平台投递及 ACK，验证一次重复投递和一次漏投后的对账补齐。</li>
-            <li>C3 计量与权益。核对真实入账、回放与额度更新，并保留平台事件 ID。</li>
-          </ul>
+          <SectionHeader icon="clipboard" title={<span id="platform-logout">人工联调</span>} />
+          <details className="platform-demo__manual">
+            <summary className="platform-demo__summary">查看联调清单<Icon name="chevron-down" size="sm" aria-hidden="true" /></summary>
+            <ul>
+              <li>C1 跨产品退出。保持本页打开，从同一 Accounts 会话的另一产品退出，确认本页收到事件并返回门禁。</li>
+              <li>C2 准入与权益。用有席位和无席位的账号检查允许与拒绝；用相应订阅状态核对开通、续订和权益读取失败。</li>
+              <li>C3 开通与对账。核对平台投递及 ACK，验证一次重复投递和一次漏投后的对账补齐。</li>
+              <li>C3 计量与权益。核对真实入账、回放与额度更新，并保留平台事件 ID。</li>
+            </ul>
+          </details>
         </section>
       </div>
     </ProductContent>
