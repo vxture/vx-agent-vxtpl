@@ -7,8 +7,8 @@
  * @date 2026-11-27
  */
 
-import { useRef, type ReactNode, type Ref } from "react";
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, NativeSelect, SectionHeader, StatusBadge } from "../ds";
+import { useRef, useState, type ReactNode, type Ref } from "react";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, SectionHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, StatusBadge } from "../ds";
 import type { SavedTurn } from "./chat-history";
 import { isChatEscapeKey } from "./chat-keyboard";
 import { DOCUMENT_CONVERSION_SKILL, WEB_SEARCH_SKILL, type SkillOutcome, type TurnVerification } from "./types";
@@ -80,6 +80,8 @@ function ReceiptDisclosure({ label, children }: { label: string; children: React
 }
 
 interface ChatVerificationProps {
+  open: boolean;
+  onClose: (restoreFocus: boolean) => void;
   turn: TurnVerification | null;
   turnNumber: number;
   panelRef: Ref<HTMLElement>;
@@ -91,14 +93,16 @@ interface ChatVerificationProps {
 }
 
 export function ChatVerification({
-  turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt, onReturnFocus,
+  open, onClose, turn, turnNumber, panelRef, history, storageFailed, selectedReceiptId, onSelectReceipt, onReturnFocus,
 }: ChatVerificationProps) {
-  const historySelect = useRef<HTMLSelectElement>(null);
+  const historySelect = useRef<HTMLButtonElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const latest = "latest";
   return (
-    <aside id="chat-call-receipts" className="chat-verification" aria-labelledby="chat-verification-title"
+    <aside id="chat-call-receipts" className="chat-verification" hidden={!open} aria-labelledby="chat-verification-title"
       aria-keyshortcuts={onReturnFocus ? "Escape" : undefined} tabIndex={-1} ref={panelRef}
       onKeyDown={(event) => {
-        if (!onReturnFocus || !isChatEscapeKey(event) || event.target instanceof HTMLSelectElement) return;
+        if (!onReturnFocus || historyOpen || !isChatEscapeKey(event) || !event.currentTarget.contains(event.target as Node)) return;
         event.preventDefault();
         onReturnFocus();
       }}>
@@ -106,23 +110,37 @@ export function ChatVerification({
         <SectionHeader
           title={<span id="chat-verification-title">{"\u8c03\u7528\u56de\u6267"}</span>}
           divider={false}
-          action={selectedReceiptId && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
+          action={(
+            <div className="chat-receipt-actions">
+              {selectedReceiptId && (
+                <Button type="button" size="sm" variant="ghost" onClick={() => { onSelectReceipt(null); historySelect.current?.focus(); }}>{"\u56de\u5230\u6700\u65b0"}</Button>
+              )}
+              <Button type="button" size="sm" variant="ghost" className="chat-receipt-close"
+                aria-label={"\u5173\u95ed\u8c03\u7528\u56de\u6267"} onClick={(event) => onClose(event.detail === 0)}>
+                <Icon name="x" size="md" aria-hidden="true" />
+              </Button>
+            </div>
           )}
         />
       </header>
       {history.length > 0 && (
-        <label className="chat-receipt-history">
-          <span>{"\u5386\u53f2\u56de\u6267"}</span>
-          <NativeSelect ref={historySelect} value={selectedReceiptId ?? ""} onChange={(event) => onSelectReceipt(event.target.value || null)}>
-            <option value="">{"\u6700\u65b0\u4e00\u8f6e"}</option>
-            {history.map((saved, index) => (
-              <option key={saved.id} value={saved.id}>
-                {`\u7b2c ${index + 1} \u8f6e \u00b7 ${saved.prompt.replace(/\s+/g, " ").slice(0, 44)}`}
-              </option>
-            )).reverse()}
-          </NativeSelect>
-        </label>
+        <div className="chat-receipt-history">
+          <span id="chat-receipt-history-label">{"\u5386\u53f2\u56de\u6267"}</span>
+          <Select open={historyOpen} onOpenChange={setHistoryOpen} value={selectedReceiptId ?? latest}
+            onValueChange={(value) => onSelectReceipt(value === latest ? null : value)}>
+            <SelectTrigger ref={historySelect} className="chat-receipt-history-trigger"
+              aria-labelledby="chat-receipt-history-label chat-receipt-history-value">
+              <SelectValue id="chat-receipt-history-value" />
+            </SelectTrigger>
+            <SelectContent className="chat-receipt-history-options" position="popper" align="start">
+              <SelectItem value={latest}>{"\u6700\u65b0\u4e00\u8f6e"}</SelectItem>
+              {history.map((saved, index) => {
+                const label = `\u7b2c ${index + 1} \u8f6e \u00b7 ${saved.prompt.replace(/\s+/g, " ")}`;
+                return <SelectItem key={saved.id} value={saved.id} title={label}>{label}</SelectItem>;
+              }).reverse()}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       {storageFailed && <p className="chat-receipt-empty" role="status">{"\u6d4f\u89c8\u5668\u65e0\u6cd5\u4fdd\u5b58\u90e8\u5206\u56de\u6267\uff0c\u5237\u65b0\u540e\u53ef\u80fd\u4e22\u5931\u3002"}</p>}
       {turn ? <TurnReceipt key={turnNumber} turn={turn} turnNumber={turnNumber} /> : (

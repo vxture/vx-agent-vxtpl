@@ -25,6 +25,8 @@
  * same thing by them, so it should be the one that says what they are.
  */
 
+.vxtpl-view-header { border-block-end: 1px dashed var(--border); }
+
 :root {
   --vxtpl-paper: #f6f7f9;
   --vxtpl-surface: #ffffff;
