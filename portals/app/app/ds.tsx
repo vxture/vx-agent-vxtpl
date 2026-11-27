@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { FullscreenProvider, ThemeProvider, themeBootstrapScript } from "@vxture/design-system";
+import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { FullscreenProvider, ThemeProvider, ViewHeader as DesignViewHeader, themeBootstrapScript } from "@vxture/design-system";
 
 // The single client boundary through which server components reach the design
 // system.
@@ -101,8 +101,14 @@ export {
   SegmentedControl,
   ShellSidebarFrame,
   Textarea,
-  ViewHeader,
 } from "@vxture/design-system";
+
+// Apply the shared title separator to every product ViewHeader.
+export const ViewHeader = forwardRef<HTMLElement, ComponentPropsWithoutRef<typeof DesignViewHeader>>(
+  function ViewHeader({ className, ...props }, ref) {
+    return <DesignViewHeader ref={ref} className={className ? "vxtpl-view-header " + className : "vxtpl-view-header"} {...props} />;
+  },
+);
 
 /**
  * Theme wiring: the pre-paint class-setter plus the provider.
