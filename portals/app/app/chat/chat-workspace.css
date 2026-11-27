@@ -286,12 +286,28 @@
 .chat-receipt-flow svg { flex: none; }
 
 .chat-receipt-flow,
-.chat-receipt-empty,
-.chat-receipt-task,
-.chat-evidence {
+.chat-receipt-empty {
   color: var(--muted-foreground);
   font-size: var(--body-sm-font-size);
+  line-height: var(--body-sm-line-height);
 }
+
+.chat-receipt-history select,
+.chat-receipt-task,
+.chat-evidence,
+.chat-search-sources,
+.chat-runos-result,
+.chat-verification .chat-result-toggle,
+.chat-verification > header button {
+  font-size: var(--body-md-font-size);
+  line-height: var(--body-md-line-height);
+}
+
+.chat-receipt-task,
+.chat-evidence { color: var(--muted-foreground); }
+
+.chat-verification .chat-result-toggle,
+.chat-verification > header button { font-weight: var(--body-md-font-weight); }
 
 .chat-evidence,
 .chat-receipt-disclosure {
@@ -315,18 +331,16 @@
 .chat-receipt-task dd {
   margin: 0;
   color: var(--foreground);
+  overflow-wrap: anywhere;
 }
 
 .chat-receipt-task { border-block-start: 1px solid var(--border); }
 
-.chat-verification code,
-.chat-runos-result {
-  color: var(--foreground);
-  font-size: var(--label-sm-font-size);
-  overflow-wrap: anywhere;
-}
+.chat-verification code { font-size: inherit; }
 
 .chat-runos-result {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
   margin-block-start: var(--space-xs);
   padding: var(--space-xs);
   max-block-size: 12rem;
@@ -342,7 +356,6 @@
   margin-block-start: var(--space-xs);
   padding-inline-start: var(--space-md);
   list-style: decimal;
-  font-size: var(--body-sm-font-size);
   overflow-wrap: anywhere;
 }
 
