@@ -57,12 +57,12 @@ export function useAssistantConversations(
     update(active.id, { ...emptyConversation(active.id), busy: false, error: undefined });
   }
 
-  async function send() {
-    const { id, draft, messages } = active;
+  async function send(draft = active.draft) {
+    const { id, messages } = active;
     const text = draft.trim();
     if (!text || !modelCode || !scopeKey || sending.current.has(id)) return;
     sending.current.add(id);
-    update(id, { busy: true, error: undefined });
+    update(id, { draft, busy: true, error: undefined });
     const history = [...messages, { role: "user" as const, content: text }];
     try {
       const reply = await requestChatTurn(history, scopeKey, { modelCode });
